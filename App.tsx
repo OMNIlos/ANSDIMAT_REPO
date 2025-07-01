@@ -1,20 +1,26 @@
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+// App.tsx
+import * as React from 'react';
+import { Provider as PaperProvider } from 'react-native-paper';
+import DrawerNavigator from './navigation/DrawerNavigator.js';
+import theme from './theme.js';
+import I18n from "./Localization.js";
+import LanguageContext from "./LanguageContext.js";
+
 
 export default function App() {
+  const [locale, setLocale] = React.useState('ru');
+
+  const toggleLanguage = () => {
+    const newLocale = locale === 'ru' ? 'en' : 'ru';
+    setLocale(newLocale);
+    I18n.locale = newLocale;
+  };
+
   return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <LanguageContext.Provider value={{ toggleLanguage, locale }}>
+      <PaperProvider theme={theme}>
+        <DrawerNavigator />
+      </PaperProvider>
+    </LanguageContext.Provider>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
