@@ -8,11 +8,15 @@ import {
   TextInput,
   FlatList,
   Alert,
+  Modal,
+  Platform,
+  ScrollView,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import I18n from "../../Localization";
 import LanguageContext from "../../LanguageContext";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
 const TEST_TYPES = [
   I18n.t("pumpingTest"),
@@ -31,9 +35,14 @@ export default function Wizard() {
   const [testType, setTestType] = useState(TEST_TYPES[0]);
   const [layerType, setLayerType] = useState(LAYER_TYPES[0]);
   const [boundary, setBoundary] = useState(BOUNDARY_TYPES[0]);
-  const [dataRows, setDataRows] = useState([{ t: "", s: "" }]);
+  const [dataRows, setDataRows] = useState([
+    { t: "", s: "", datetime: new Date().toISOString() },
+  ]);
   const [activeProject, setActiveProject] = useState(null);
   const { locale } = useContext(LanguageContext);
+  const [showDatePickerIdx, setShowDatePickerIdx] = useState(null);
+  const [pickerValue, setPickerValue] = useState(new Date());
+  const [pickerTempValue, setPickerTempValue] = useState(new Date());
 
   useFocusEffect(
     useCallback(() => {
@@ -145,11 +154,37 @@ export default function Wizard() {
       setDataRows(newRows);
     }
     function addRow() {
-      setDataRows([...dataRows, { t: "", s: "" }]);
+      setDataRows([
+        ...dataRows,
+        { t: "", s: "", datetime: new Date().toISOString() },
+      ]);
     }
     function removeRow(idx) {
       if (dataRows.length === 1) return;
       setDataRows(dataRows.filter((_, i) => i !== idx));
+    }
+    function openDatePicker(index) {
+      const row = dataRows[index];
+      const d = row.datetime ? new Date(row.datetime) : new Date();
+      setPickerValue(d);
+      setPickerTempValue(d);
+      setShowDatePickerIdx(index);
+    }
+    function onDateChange(event, selectedDate) {
+      if (selectedDate) {
+        setPickerTempValue(selectedDate);
+      }
+    }
+    function onDatePickerOk() {
+      if (showDatePickerIdx === null) return;
+      const idx = showDatePickerIdx;
+      const newRows = [...dataRows];
+      newRows[idx]["datetime"] = pickerTempValue.toISOString();
+      setDataRows(newRows);
+      setShowDatePickerIdx(null);
+    }
+    function onDatePickerCancel() {
+      setShowDatePickerIdx(null);
     }
     return (
       <View style={styles.stepContainer}>
@@ -179,6 +214,25 @@ export default function Wizard() {
                 onChangeText={(v) => updateRow(index, "s", v)}
                 keyboardType="numeric"
               />
+              <TouchableOpacity
+                style={{ marginLeft: 4, marginRight: 4, padding: 4 }}
+                onPress={() => openDatePicker(index)}
+              >
+                <Text style={{ color: "#800020", fontSize: 18 }}>🕒</Text>
+                <Text
+                  style={{ fontSize: 10, color: "#333", textAlign: "center" }}
+                >
+                  {item.datetime
+                    ? new Date(item.datetime).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                      }) +
+                      "\n" +
+                      new Date(item.datetime).toLocaleDateString()
+                    : ""}
+                </Text>
+              </TouchableOpacity>
               <TouchableOpacity onPress={() => removeRow(index)}>
                 <Text style={{ fontSize: 20, color: "#b22222", marginLeft: 8 }}>
                   🗑️
@@ -187,6 +241,77 @@ export default function Wizard() {
             </View>
           )}
         />
+        {/* Модальное окно для выбора даты и времени */}
+        <Modal
+          visible={showDatePickerIdx !== null}
+          transparent
+          animationType="fade"
+          onRequestClose={onDatePickerCancel}
+        >
+          <View
+            style={{
+              flex: 1,
+              justifyContent: "center",
+              alignItems: "center",
+              backgroundColor: "rgba(0,0,0,0.3)",
+            }}
+          >
+            <View
+              style={{
+                backgroundColor: "#fff",
+                borderRadius: 12,
+                padding: 20,
+                width: 300,
+                alignItems: "center",
+              }}
+            >
+              <DateTimePicker
+                value={pickerTempValue}
+                mode="datetime"
+                display="spinner"
+                onChange={onDateChange}
+                style={{ width: 260 }}
+              />
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  width: "100%",
+                  marginTop: 16,
+                }}
+              >
+                <TouchableOpacity
+                  onPress={onDatePickerCancel}
+                  style={{ flex: 1, alignItems: "center" }}
+                >
+                  <Text
+                    style={{
+                      color: "#b22222",
+                      fontWeight: "bold",
+                      fontSize: 16,
+                    }}
+                  >
+                    Отмена
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={onDatePickerOk}
+                  style={{ flex: 1, alignItems: "center" }}
+                >
+                  <Text
+                    style={{
+                      color: "#800020",
+                      fontWeight: "bold",
+                      fontSize: 16,
+                    }}
+                  >
+                    OK
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
         <TouchableOpacity style={styles.addBtn} onPress={addRow}>
           <Text style={{ color: "#800020", fontSize: 16 }}>
             + {I18n.t("addRow")}
@@ -228,7 +353,7 @@ export default function Wizard() {
     await AsyncStorage.setItem("pumping_projects", JSON.stringify(projects));
     Alert.alert(I18n.t("success"), I18n.t("journalSaved"));
     setStep(0);
-    setDataRows([{ t: "", s: "" }]);
+    setDataRows([{ t: "", s: "", datetime: new Date().toISOString() }]);
     loadActiveProject();
   }
 

@@ -193,6 +193,16 @@ const i18n = new I18n({
     deleteJournalConfirm: "Удалить журнал '{name}'?",
     journalDeleted: "Журнал удален",
     noJournals: "Нет сохранённых журналов в проекте",
+    function: "Функция",
+    units: "Единицы измерения",
+    time: "Время",
+    distance: "Расстояние",
+    scale: "Масштаб",
+    dragLine: "или перетащите прямую",
+    slopeUp: "Наклон +",
+    slopeDown: "Наклон -",
+    shiftUp: "Сдвиг +",
+    shiftDown: "Сдвиг -",
 
     // Export
     export: "Экспорт",
@@ -419,6 +429,16 @@ const i18n = new I18n({
     deleteJournalConfirm: "Delete journal '{name}'?",
     journalDeleted: "Journal deleted",
     noJournals: "No saved journals in project",
+    function: "Function",
+    units: "Units",
+    time: "Time",
+    distance: "Distance",
+    scale: "Scale",
+    dragLine: "or drag the line",
+    slopeUp: "Slope +",
+    slopeDown: "Slope -",
+    shiftUp: "Shift +",
+    shiftDown: "Shift -",
 
     // Export
     export: "Export",
