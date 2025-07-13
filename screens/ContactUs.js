@@ -15,7 +15,7 @@ export default function ContactUsScreen() {
 
   const handlePress = (url) => {
     Linking.openURL(url).catch((err) =>
-      console.error("Ошибка при открытии ссылки", err)
+      console.error(I18n.t("linkOpenError"), err)
     );
   };
   return (
@@ -32,12 +32,14 @@ export default function ContactUsScreen() {
             )
           }
         >
-          Анастасия Боронина
+          {I18n.t("anastasiaBoronina")}
         </Text>
-        <Text style={styles.text}>Нева Грунтовые Воды Консалтинг</Text>
-        <Text style={styles.text}>Номер телефона: +61 478 633 429</Text>
+        <Text style={styles.text}>{I18n.t("nevaGroundwaterConsulting")}</Text>
         <Text style={styles.text}>
-          Email:{" "}
+          {I18n.t("phoneNumber")}: +61 478 633 429
+        </Text>
+        <Text style={styles.text}>
+          {I18n.t("email")}:{" "}
           <Text
             style={styles.link}
             onPress={() => Linking.openURL("mailto:support@ansdimat.com")}
@@ -57,14 +59,14 @@ export default function ContactUsScreen() {
             )
           }
         >
-          Антон Никулинов
+          {I18n.t("antonNikulenkov")}
         </Text>
-        <Text style={styles.text}>Институт геоэкологии, Академия Наук.</Text>
+        <Text style={styles.text}>{I18n.t("instituteOfGeoecology")}</Text>
         <Text style={styles.text}>
-          Адрес: 199004, Россия, Санкт-Петербург, средний проспект V.O., 41
+          {I18n.t("address")}: {I18n.t("russiaAddress")}
         </Text>
         <Text style={styles.text}>
-          Email:{" "}
+          {I18n.t("email")}:{" "}
           <Text
             style={styles.link}
             onPress={() =>
@@ -79,7 +81,7 @@ export default function ContactUsScreen() {
       <View style={styles.section}>
         <Text style={styles.heading}>{I18n.t("websiteSupport")}</Text>
         <Text style={styles.text}>
-          Email:{" "}
+          {I18n.t("email")}:{" "}
           <Text
             style={styles.link}
             onPress={() => Linking.openURL("mailto:info@ansdimat.com")}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useRef } from "react";
+import React, { useState, useEffect, useContext, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -26,23 +26,16 @@ const CHART_PADDING = 60;
 
 // Функции преобразования координат
 const FUNCTIONS = {
-  "s-lg(t)": {
-    name: "s-log(t)",
-    xTransform: (t) => Math.log10(t),
-    yTransform: (s) => s,
-    xLabel: "lg(t)",
-    yLabel: "s",
-    xUnit: "",
-    yUnit: "м",
-  },
+  // s-t
   "s-t": {
     name: "s-t",
     xTransform: (t) => t,
     yTransform: (s) => s,
     xLabel: "t",
     yLabel: "s",
-    xUnit: "мин",
-    yUnit: "м",
+    xUnit: I18n.t("unitMinutes"),
+    yUnit: I18n.t("unitMeters"),
+    type: "s-t",
   },
   "s-√t": {
     name: "s-√t",
@@ -50,17 +43,9 @@ const FUNCTIONS = {
     yTransform: (s) => s,
     xLabel: "√t",
     yLabel: "s",
-    xUnit: "мин¹/²",
-    yUnit: "м",
-  },
-  "1/s-t": {
-    name: "1/s-t",
-    xTransform: (t) => t,
-    yTransform: (s) => 1 / s,
-    xLabel: "t",
-    yLabel: "1/s",
-    xUnit: "мин",
-    yUnit: "1/м",
+    xUnit: I18n.t("unitMinutesSqrt"),
+    yUnit: I18n.t("unitMeters"),
+    type: "s-t",
   },
   "lg(s)-lg(t)": {
     name: "lg(s)-lg(t)",
@@ -68,8 +53,29 @@ const FUNCTIONS = {
     yTransform: (s) => Math.log10(s),
     xLabel: "lg(t)",
     yLabel: "lg(s)",
-    xUnit: "lg(мин)",
-    yUnit: "lg(м)",
+    xUnit: I18n.t("unitLogMinutes"),
+    yUnit: I18n.t("unitLogMeters"),
+    type: "s-t",
+  },
+  "s-lg(t)": {
+    name: "s-log(t)",
+    xTransform: (t) => Math.log10(t),
+    yTransform: (s) => s,
+    xLabel: "lg(t)",
+    yLabel: "s",
+    xUnit: "",
+    yUnit: I18n.t("unitMeters"),
+    type: "s-t",
+  },
+  "1/s-t": {
+    name: "1/s-t",
+    xTransform: (t) => t,
+    yTransform: (s) => 1 / s,
+    xLabel: "t",
+    yLabel: "1/s",
+    xUnit: I18n.t("unitMinutes"),
+    yUnit: I18n.t("unitPerMeter"),
+    type: "s-t",
   },
   "s-t^n": {
     name: "s-t^n",
@@ -77,8 +83,10 @@ const FUNCTIONS = {
     yTransform: (s) => s,
     xLabel: "t",
     yLabel: "s",
-    xUnit: "мин^n",
-    yUnit: "м",
+    xUnit: I18n.t("unitMinutesPowerN"),
+    yUnit: I18n.t("unitMeters"),
+    type: "s-t",
+    needsN: true,
   },
   "s-lg(t/r^2)": {
     name: "s-lg(t/r^2)",
@@ -86,30 +94,93 @@ const FUNCTIONS = {
     yTransform: (s) => s,
     xLabel: "lg(t/r^2)",
     yLabel: "s",
-    xUnit: "lg(мин/м^2)",
-    yUnit: "м",
+    xUnit: I18n.t("unitLogMinutesPerMeterSquared"),
+    yUnit: I18n.t("unitMeters"),
+    type: "s-t",
+    needsR: true,
+  },
+  // s1,s2-t
+  "(s1/s2)-t": {
+    name: "(s1/s2)-t",
+    xTransform: (t) => t,
+    yTransform: (s1, s2) => (s2 !== 0 ? s1 / s2 : null),
+    xLabel: "t",
+    yLabel: "s1/s2",
+    xUnit: I18n.t("unitMinutes"),
+    yUnit: I18n.t("unitDimensionless"),
+    type: "s1s2-t",
+  },
+  "(s1-s2)-t": {
+    name: "(s1-s2)-t",
+    xTransform: (t) => t,
+    yTransform: (s1, s2) => s1 - s2,
+    xLabel: "t",
+    yLabel: "s1-s2",
+    xUnit: I18n.t("unitMinutes"),
+    yUnit: I18n.t("unitMeters"),
+    type: "s1s2-t",
+  },
+  // s-r
+  "lg(s)-lg(r)": {
+    name: "lg(s)-lg(r)",
+    xTransform: (r) => Math.log10(r),
+    yTransform: (s) => Math.log10(s),
+    xLabel: "lg(r)",
+    yLabel: "lg(s)",
+    xUnit: I18n.t("unitLogMeters"),
+    yUnit: I18n.t("unitLogMeters"),
+    type: "s-r",
+  },
+  "s-√r": {
+    name: "s-√r",
+    xTransform: (r) => Math.sqrt(r),
+    yTransform: (s) => s,
+    xLabel: "√r",
+    yLabel: "s",
+    xUnit: I18n.t("unitMetersSqrt"),
+    yUnit: I18n.t("unitMeters"),
+    type: "s-r",
+  },
+  "1/s-r": {
+    name: "1/s-r",
+    xTransform: (r) => r,
+    yTransform: (s) => 1 / s,
+    xLabel: "r",
+    yLabel: "1/s",
+    xUnit: I18n.t("unitMeters"),
+    yUnit: I18n.t("unitPerMeter"),
+    type: "s-r",
+  },
+  "s-r^n": {
+    name: "s-r^n",
+    xTransform: (r, n) => Math.pow(r, n),
+    yTransform: (s) => s,
+    xLabel: "r^n",
+    yLabel: "s",
+    xUnit: I18n.t("unitMetersPowerN"),
+    yUnit: I18n.t("unitMeters"),
+    type: "s-r",
+    needsN: true,
   },
 };
 
 // Единицы измерения
 const UNITS = {
-  time: ["мин", "сек", "час"],
-  distance: ["м", "см", "мм"],
+  time: [I18n.t("minutes"), I18n.t("seconds"), I18n.t("hours")],
+  distance: [I18n.t("meters"), I18n.t("centimeters"), I18n.t("millimeters")],
 };
 
 // Добавим функции пересчета единиц
 const TIME_FACTORS = {
-  мин: 1,
-  сек: 1 / 60,
-  час: 60,
+  [I18n.t("minutes")]: 1,
+  [I18n.t("seconds")]: 1 / 60,
+  [I18n.t("hours")]: 60,
 };
 const DIST_FACTORS = {
-  м: 1,
-  см: 0.01,
-  мм: 0.001,
+  [I18n.t("meters")]: 1,
+  [I18n.t("centimeters")]: 0.01,
+  [I18n.t("millimeters")]: 0.001,
 };
-
-const FUNCTION_KEYS = Object.keys(FUNCTIONS);
 
 export default function DataProcessing() {
   // Все хуки только здесь, до любого return и вычислений!
@@ -117,8 +188,11 @@ export default function DataProcessing() {
   const [journals, setJournals] = useState([]);
   const [selectedJournalIdx, setSelectedJournalIdx] = useState(0);
   const [selectedPoints, setSelectedPoints] = useState([]);
-  const [selectedFunction, setSelectedFunction] = useState(FUNCTION_KEYS[0]);
-  const [units, setUnits] = useState({ time: "мин", distance: "м" });
+  const [selectedFunction, setSelectedFunction] = useState("s-t");
+  const [units, setUnits] = useState({
+    time: I18n.t("minutes"),
+    distance: I18n.t("meters"),
+  });
   const [zoom, setZoom] = useState({ x: 1, y: 1 });
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [lineParams, setLineParams] = useState({ k: 0, b: 0 });
@@ -127,6 +201,175 @@ export default function DataProcessing() {
   const [r, setR] = useState(1);
   const { locale } = useContext(LanguageContext);
   const chartRef = useRef();
+
+  // Мемоизируем вычисления, которые зависят от состояния
+  const journal = useMemo(
+    () => journals[selectedJournalIdx],
+    [journals, selectedJournalIdx]
+  );
+  const dataType = useMemo(() => journal?.dataType || "s-t", [journal]);
+  const FUNCTION_KEYS = useMemo(
+    () =>
+      Object.keys(FUNCTIONS).filter((key) => FUNCTIONS[key].type === dataType),
+    [dataType]
+  );
+  const func = useMemo(
+    () =>
+      FUNCTIONS[selectedFunction] ||
+      FUNCTIONS[FUNCTION_KEYS[0]] ||
+      FUNCTIONS["s-t"],
+    [selectedFunction, FUNCTION_KEYS]
+  );
+
+  // Мемоизируем обработку точек для предотвращения пересчетов
+  const points = useMemo(() => {
+    let processedPoints = [];
+
+    if (dataType === "s-t") {
+      processedPoints = (journal?.dataRows || [])
+        .filter((row) => row.t && row.s && !isNaN(row.t) && !isNaN(row.s))
+        .map((row) => {
+          const t = parseFloat(row.t);
+          const s = parseFloat(row.s);
+          let x, y;
+          if (selectedFunction === "s-t^n") {
+            x = func.xTransform(t, n);
+            y = func.yTransform(s);
+          } else if (selectedFunction === "s-lg(t/r^2)") {
+            x = func.xTransform(t, r);
+            y = func.yTransform(s);
+          } else if (selectedFunction === "lg(s)-lg(t)") {
+            if (t <= 0 || s <= 0) return null;
+            x = func.xTransform(t);
+            y = func.yTransform(s);
+          } else {
+            x = func.xTransform(t);
+            y = func.yTransform(s);
+          }
+          return { t, s, x, y };
+        })
+        .filter(
+          (row) => row && row.t > 0 && isFinite(row.x) && isFinite(row.y)
+        );
+    } else if (dataType === "s1s2-t") {
+      processedPoints = (journal?.dataRows || [])
+        .filter(
+          (row) =>
+            row.t &&
+            row.s1 &&
+            row.s2 &&
+            !isNaN(row.t) &&
+            !isNaN(row.s1) &&
+            !isNaN(row.s2)
+        )
+        .map((row) => {
+          const t = parseFloat(row.t);
+          const s1 = parseFloat(row.s1);
+          const s2 = parseFloat(row.s2);
+          let x, y;
+          if (selectedFunction === "(s1/s2)-t") {
+            if (s2 === 0) return null;
+            x = func.xTransform(t);
+            y = func.yTransform(s1, s2);
+          } else if (selectedFunction === "(s1-s2)-t") {
+            x = func.xTransform(t);
+            y = func.yTransform(s1, s2);
+          } else {
+            return null;
+          }
+          return { t, s1, s2, x, y };
+        })
+        .filter((row) => row && isFinite(row.x) && isFinite(row.y));
+    } else if (dataType === "s-r") {
+      processedPoints = (journal?.dataRows || [])
+        .filter((row) => row.s && row.r && !isNaN(row.s) && !isNaN(row.r))
+        .map((row) => {
+          const s = parseFloat(row.s);
+          const rVal = parseFloat(row.r);
+          let x, y;
+          if (selectedFunction === "s-r^n") {
+            x = func.xTransform(rVal, n);
+            y = func.yTransform(s);
+          } else if (selectedFunction === "lg(s)-lg(r)") {
+            if (s <= 0 || rVal <= 0) return null;
+            x = func.xTransform(rVal);
+            y = func.yTransform(s);
+          } else {
+            x = func.xTransform(rVal);
+            y = func.yTransform(s);
+          }
+          return { s, r: rVal, x, y };
+        })
+        .filter((row) => row && isFinite(row.x) && isFinite(row.y));
+    }
+
+    // Ограничиваем количество точек для предотвращения переполнения памяти
+    const MAX_POINTS = 1000;
+    if (processedPoints.length > MAX_POINTS) {
+      processedPoints = processedPoints.slice(0, MAX_POINTS);
+    }
+
+    return processedPoints;
+  }, [journal?.dataRows, dataType, selectedFunction, func, n, r]);
+
+  // Мемоизируем вычисления границ графика
+  const chartBounds = useMemo(() => {
+    if (points.length === 0) return null;
+
+    const minX = Math.min(...points.map((p) => p.x));
+    const maxX = Math.max(...points.map((p) => p.x));
+    const minY = Math.min(...points.map((p) => p.y));
+    const maxY = Math.max(...points.map((p) => p.y));
+
+    const xRange = maxX - minX;
+    const yRange = maxY - minY;
+
+    const chartMinX = minX - xRange * 0.1 + pan.x;
+    const chartMaxX = maxX + xRange * 0.1 + pan.x;
+    const chartMinY = minY - yRange * 0.1 + pan.y;
+    const chartMaxY = maxY + yRange * 0.1 + pan.y;
+
+    // Применяем зум
+    const zoomedMinX = chartMinX + ((chartMaxX - chartMinX) * (1 - zoom.x)) / 2;
+    const zoomedMaxX = chartMaxX - ((chartMaxX - chartMinX) * (1 - zoom.x)) / 2;
+    const zoomedMinY = chartMinY + ((chartMaxY - chartMinY) * (1 - zoom.y)) / 2;
+    const zoomedMaxY = chartMaxY - ((chartMaxY - chartMinY) * (1 - zoom.y)) / 2;
+
+    return {
+      zoomedMinX,
+      zoomedMaxX,
+      zoomedMinY,
+      zoomedMaxY,
+    };
+  }, [points, pan.x, pan.y, zoom.x, zoom.y]);
+
+  // Мемоизируем функцию для преобразования координат в пиксели
+  const getXY = useMemo(() => {
+    return (x, y) => {
+      if (!chartBounds) return { x: 0, y: 0 };
+      const pixelX =
+        ((x - chartBounds.zoomedMinX) /
+          (chartBounds.zoomedMaxX - chartBounds.zoomedMinX)) *
+          (CHART_WIDTH - 2 * CHART_PADDING) +
+        CHART_PADDING;
+      const pixelY =
+        CHART_HEIGHT -
+        CHART_PADDING -
+        ((y - chartBounds.zoomedMinY) /
+          (chartBounds.zoomedMaxY - chartBounds.zoomedMinY)) *
+          (CHART_HEIGHT - 2 * CHART_PADDING);
+      return { x: pixelX, y: pixelY };
+    };
+  }, [chartBounds]);
+
+  // --- вычисления, которые должны быть внутри компонента ---
+  React.useEffect(() => {
+    if (!FUNCTION_KEYS.includes(selectedFunction)) {
+      setSelectedFunction(FUNCTION_KEYS[0] || "s-t");
+    }
+    // eslint-disable-next-line
+  }, [dataType, FUNCTION_KEYS, selectedFunction]);
+  // --- конец вычислений ---
 
   useFocusEffect(
     React.useCallback(() => {
@@ -169,20 +412,26 @@ export default function DataProcessing() {
   }, [selectedFunction]);
 
   async function loadActiveProject() {
-    const id = await AsyncStorage.getItem("pumping_active_project_id");
-    if (!id) {
+    try {
+      const id = await AsyncStorage.getItem("pumping_active_project_id");
+      if (!id) {
+        setActiveProject(null);
+        setJournals([]);
+        return;
+      }
+      const projectsRaw = await AsyncStorage.getItem("pumping_projects");
+      if (!projectsRaw) return;
+      const projects = JSON.parse(projectsRaw);
+      const project = projects.find((p) => p.id === id);
+      setActiveProject(project || null);
+      setJournals(project && project.journals ? project.journals : []);
+      setSelectedJournalIdx(0);
+      setSelectedPoints([]);
+    } catch (error) {
+      console.error("Error loading active project:", error);
       setActiveProject(null);
       setJournals([]);
-      return;
     }
-    const projectsRaw = await AsyncStorage.getItem("pumping_projects");
-    if (!projectsRaw) return;
-    const projects = JSON.parse(projectsRaw);
-    const project = projects.find((p) => p.id === id);
-    setActiveProject(project || null);
-    setJournals(project && project.journals ? project.journals : []);
-    setSelectedJournalIdx(0);
-    setSelectedPoints([]);
   }
 
   async function deleteJournal(journalIndex) {
@@ -235,88 +484,93 @@ export default function DataProcessing() {
     );
   }
 
-  // Все вычисления только после хуков!
-  const journal = journals[selectedJournalIdx];
-  const func = FUNCTIONS[selectedFunction];
-  if (!func) {
+  // Проверка на наличие активного проекта
+  if (!activeProject) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <Text style={{ color: "#b22222" }}>
-          Ошибка: выбранная функция не найдена.
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          padding: 20,
+        }}
+      >
+        <Text
+          style={{
+            color: "#b22222",
+            fontSize: 16,
+            textAlign: "center",
+            marginBottom: 10,
+          }}
+        >
+          {I18n.t("noActiveProject")}
+        </Text>
+        <Text style={{ color: "#666", textAlign: "center" }}>
+          {I18n.t("selectProjectFirst")}
         </Text>
       </View>
     );
   }
-  const timeFactor =
-    TIME_FACTORS[journal?.units?.time || "мин"] / TIME_FACTORS[units.time];
-  const distFactor =
-    DIST_FACTORS[journal?.units?.distance || "м"] /
-    DIST_FACTORS[units.distance];
-  const points = (journal?.dataRows || [])
-    .filter((row) => row.t && row.s && !isNaN(row.t) && !isNaN(row.s))
-    .map((row) => {
-      const t = parseFloat(row.t) * timeFactor;
-      const s = parseFloat(row.s) * distFactor;
-      let x, y;
-      if (selectedFunction === "s-t^n") {
-        x = FUNCTIONS[selectedFunction].xTransform(t, n);
-        y = FUNCTIONS[selectedFunction].yTransform(s);
-      } else if (selectedFunction === "s-lg(t/r^2)") {
-        x = FUNCTIONS[selectedFunction].xTransform(t, r);
-        y = FUNCTIONS[selectedFunction].yTransform(s);
-      } else if (selectedFunction === "lg(s)-lg(t)") {
-        if (t <= 0 || s <= 0) return null;
-        x = FUNCTIONS[selectedFunction].xTransform(t);
-        y = FUNCTIONS[selectedFunction].yTransform(s);
-      } else {
-        x = FUNCTIONS[selectedFunction].xTransform(t);
-        y = FUNCTIONS[selectedFunction].yTransform(s);
-      }
-      return { t, s, x, y };
-    })
-    .filter((row) => row && row.t > 0 && isFinite(row.x) && isFinite(row.y));
 
-  if (points.length === 0) {
+  // Проверка на наличие журналов
+  if (!journals || journals.length === 0) {
     return (
-      <View style={styles.center}>
-        <Text>Нет валидных данных для построения графика</Text>
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          padding: 20,
+        }}
+      >
+        <Text
+          style={{
+            color: "#b22222",
+            fontSize: 16,
+            textAlign: "center",
+            marginBottom: 10,
+          }}
+        >
+          {I18n.t("noJournals")}
+        </Text>
+        <Text style={{ color: "#666", textAlign: "center" }}>
+          {I18n.t("createJournalInWizard")}
+        </Text>
       </View>
     );
   }
 
-  // Границы графика с учетом зума и пана
-  const minX = Math.min(...points.map((p) => p.x));
-  const maxX = Math.max(...points.map((p) => p.x));
-  const minY = Math.min(...points.map((p) => p.y));
-  const maxY = Math.max(...points.map((p) => p.y));
-
-  const xRange = maxX - minX;
-  const yRange = maxY - minY;
-
-  const chartMinX = minX - xRange * 0.1 + pan.x;
-  const chartMaxX = maxX + xRange * 0.1 + pan.x;
-  const chartMinY = minY - yRange * 0.1 + pan.y;
-  const chartMaxY = maxY + yRange * 0.1 + pan.y;
-
-  // Применяем зум
-  const zoomedMinX = chartMinX + ((chartMaxX - chartMinX) * (1 - zoom.x)) / 2;
-  const zoomedMaxX = chartMaxX - ((chartMaxX - chartMinX) * (1 - zoom.x)) / 2;
-  const zoomedMinY = chartMinY + ((chartMaxY - chartMinY) * (1 - zoom.y)) / 2;
-  const zoomedMaxY = chartMaxY - ((chartMaxY - chartMinY) * (1 - zoom.y)) / 2;
-
-  // Функция для преобразования координат в пиксели
-  function getXY(x, y) {
-    const pixelX =
-      ((x - zoomedMinX) / (zoomedMaxX - zoomedMinX)) *
-        (CHART_WIDTH - 2 * CHART_PADDING) +
-      CHART_PADDING;
-    const pixelY =
-      CHART_HEIGHT -
-      CHART_PADDING -
-      ((y - zoomedMinY) / (zoomedMaxY - zoomedMinY)) *
-        (CHART_HEIGHT - 2 * CHART_PADDING);
-    return { x: pixelX, y: pixelY };
+  if (!func) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <Text style={{ color: "#b22222" }}>{I18n.t("functionNotFound")}</Text>
+      </View>
+    );
   }
+  const timeFactor =
+    TIME_FACTORS[journal?.units?.time || I18n.t("minutes")] /
+    TIME_FACTORS[units.time];
+  const distFactor =
+    DIST_FACTORS[journal?.units?.distance || I18n.t("meters")] /
+    DIST_FACTORS[units.distance];
+
+  if (points.length === 0) {
+    return (
+      <View style={styles.center}>
+        <Text>{I18n.t("noValidDataForChart")}</Text>
+      </View>
+    );
+  }
+
+  if (!chartBounds) {
+    return (
+      <View style={styles.center}>
+        <Text>{I18n.t("noValidDataForChart")}</Text>
+      </View>
+    );
+  }
+
+  const { zoomedMinX, zoomedMaxX, zoomedMinY, zoomedMaxY } = chartBounds;
 
   // Обработка перетаскивания линии
   const handleLineDrag = (event) => {
@@ -403,14 +657,14 @@ export default function DataProcessing() {
       });
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Ошибка", "Нет доступа к галерее");
+        Alert.alert(I18n.t("error"), I18n.t("noGalleryAccess"));
         return;
       }
       const asset = await MediaLibrary.createAssetAsync(uri);
       await MediaLibrary.createAlbumAsync("Ansdimat", asset, false);
-      Alert.alert("Успех", "График сохранён в галерею!");
+      Alert.alert(I18n.t("success"), I18n.t("chartSavedSuccess"));
     } catch (e) {
-      Alert.alert("Ошибка", "Не удалось сохранить график");
+      Alert.alert(I18n.t("error"), I18n.t("chartSaveError"));
     }
   }
 
@@ -575,7 +829,7 @@ export default function DataProcessing() {
         />
       </View>
 
-      {selectedFunction === "s-t^n" && (
+      {func.needsN && (
         <View
           style={{
             flexDirection: "row",
@@ -612,6 +866,49 @@ export default function DataProcessing() {
           <TouchableOpacity
             style={styles.unitBtn}
             onPress={() => setN(n + 0.1)}
+          >
+            <Text>+</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {func.needsR && (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            marginBottom: 8,
+          }}
+        >
+          <Text style={{ marginRight: 8 }}>r:</Text>
+          <TouchableOpacity
+            style={styles.unitBtn}
+            onPress={() => setR(Math.max(0.01, r - 0.1))}
+          >
+            <Text>-</Text>
+          </TouchableOpacity>
+          <TextInput
+            value={r.toString()}
+            onChangeText={(v) => {
+              let val = parseFloat(v.replace(",", "."));
+              if (isNaN(val) || val <= 0) val = 0.01;
+              setR(val);
+            }}
+            keyboardType="numeric"
+            style={{
+              width: 50,
+              height: 32,
+              marginHorizontal: 8,
+              backgroundColor: "#fff",
+              textAlign: "center",
+              paddingVertical: 0,
+            }}
+            dense
+            mode="outlined"
+          />
+          <TouchableOpacity
+            style={styles.unitBtn}
+            onPress={() => setR(r + 0.1)}
           >
             <Text>+</Text>
           </TouchableOpacity>
@@ -714,49 +1011,6 @@ export default function DataProcessing() {
           />
         </View>
       </View>
-
-      {selectedFunction === "s-lg(t/r^2)" && (
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            marginBottom: 8,
-          }}
-        >
-          <Text style={{ marginRight: 8 }}>r:</Text>
-          <TouchableOpacity
-            style={styles.unitBtn}
-            onPress={() => setR(Math.max(0.01, r - 0.1))}
-          >
-            <Text>-</Text>
-          </TouchableOpacity>
-          <TextInput
-            value={r.toString()}
-            onChangeText={(v) => {
-              let val = parseFloat(v.replace(",", "."));
-              if (isNaN(val) || val <= 0) val = 0.01;
-              setR(val);
-            }}
-            keyboardType="numeric"
-            style={{
-              width: 50,
-              height: 32,
-              marginHorizontal: 8,
-              backgroundColor: "#fff",
-              textAlign: "center",
-              paddingVertical: 0,
-            }}
-            dense
-            mode="outlined"
-          />
-          <TouchableOpacity
-            style={styles.unitBtn}
-            onPress={() => setR(r + 0.1)}
-          >
-            <Text>+</Text>
-          </TouchableOpacity>
-        </View>
-      )}
 
       <View style={{ alignItems: "center", marginVertical: 16 }}>
         <View ref={chartRef} collapsable={false}>
@@ -928,6 +1182,20 @@ export default function DataProcessing() {
             />
           </Svg>
         </View>
+        {(selectedPoints.length === 2 || isDraggingLine) && (
+          <View style={styles.resultBox}>
+            <Text style={{ fontWeight: "bold", color: "#800020" }}>
+              {I18n.t("results")}:
+            </Text>
+            <Text>
+              {I18n.t("slope")}: {lineParams.k.toFixed(4)}
+            </Text>
+            <Text>
+              {I18n.t("intercept")}: {lineParams.b.toFixed(4)}
+            </Text>
+            <Text>{FORMULAS[selectedFunction]}</Text>
+          </View>
+        )}
         <TouchableOpacity
           style={{
             marginTop: 12,
@@ -939,29 +1207,26 @@ export default function DataProcessing() {
           onPress={saveChartToGallery}
         >
           <Text style={{ color: "#fff", fontWeight: "bold" }}>
-            Сохранить график (PNG)
+            {I18n.t("saveChartToGallery")}
           </Text>
         </TouchableOpacity>
+        <View
+          style={{
+            flexDirection: "column",
+            gap: 8,
+            marginVertical: 20,
+            marginHorizontal: 20,
+          }}
+        >
+          <Text style={{ color: "#800020", fontWeight: "bold" }}>
+            {I18n.t("attentionNote")}
+          </Text>
+        </View>
       </View>
 
-      <Text style={{ textAlign: "center", color: "#888", marginBottom: 8 }}>
+      <Text style={{ textAlign: "center", color: "#888", marginBottom: 100 }}>
         {I18n.t("selectTwoPoints")} {I18n.t("dragLine")}
       </Text>
-
-      {(selectedPoints.length === 2 || isDraggingLine) && (
-        <View style={styles.resultBox}>
-          <Text style={{ fontWeight: "bold", color: "#800020" }}>
-            {I18n.t("results")}:
-          </Text>
-          <Text>
-            {I18n.t("slope")}: {lineParams.k.toFixed(4)}
-          </Text>
-          <Text>
-            {I18n.t("intercept")}: {lineParams.b.toFixed(4)}
-          </Text>
-          <Text>{FORMULAS[selectedFunction]}</Text>
-        </View>
-      )}
     </ScrollView>
   );
 }
@@ -1087,6 +1352,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     marginTop: 12,
+    marginBottom: 15,
     alignItems: "center",
   },
 });

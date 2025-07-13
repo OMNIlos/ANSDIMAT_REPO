@@ -23,7 +23,6 @@ function generatePoints() {
 }
 
 export default function AnimatedNetworkBackground() {
-  console.log("AnimatedNetworkBackground rendered");
   const points = useRef(generatePoints()).current;
   const [time, setTime] = useState(0);
 

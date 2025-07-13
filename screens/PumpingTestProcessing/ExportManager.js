@@ -13,18 +13,29 @@ import I18n from "../../Localization";
 import LanguageContext from "../../LanguageContext";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
+import * as MediaLibrary from "expo-media-library";
+import { captureRef } from "react-native-view-shot";
+import SubscriptionManager from "../../utils/SubscriptionManager";
+import PremiumBanner from "../../components/PremiumBanner";
 
 export default function ExportManager() {
   const [activeProject, setActiveProject] = useState(null);
   const [journals, setJournals] = useState([]);
+  const [hasPremiumAccess, setHasPremiumAccess] = useState(false);
   const { locale } = useContext(LanguageContext);
 
   // Перезагружаем данные при фокусе на экране
   useFocusEffect(
     React.useCallback(() => {
       loadActiveProject();
+      checkPremiumAccess();
     }, [])
   );
+
+  async function checkPremiumAccess() {
+    const hasAccess = await SubscriptionManager.hasPremiumAccess();
+    setHasPremiumAccess(hasAccess);
+  }
 
   async function loadActiveProject() {
     const id = await AsyncStorage.getItem("pumping_active_project_id");
@@ -60,6 +71,23 @@ export default function ExportManager() {
   }
 
   async function exportJournalToCSV() {
+    if (!hasPremiumAccess) {
+      Alert.alert(I18n.t("premiumFeature"), I18n.t("premiumFeatureCSV"), [
+        { text: I18n.t("cancel"), style: "cancel" },
+        {
+          text: I18n.t("goToPremium"),
+          onPress: () => {
+            // Здесь можно добавить навигацию к экрану подписки
+            Alert.alert(
+              I18n.t("subscription"),
+              I18n.t("subscriptionNavigation")
+            );
+          },
+        },
+      ]);
+      return;
+    }
+
     if (!activeProject || !journals.length) {
       Alert.alert(I18n.t("error"), I18n.t("noDataToExport"));
       return;
@@ -95,13 +123,24 @@ export default function ExportManager() {
     }
   }
 
-  async function exportChartAsImage() {
-    Alert.alert(I18n.t("exportChartPng"), I18n.t("exportChartPngDesc"), [
-      { text: I18n.t("ok") },
-    ]);
-  }
-
   async function exportAnalysisToPDF() {
+    if (!hasPremiumAccess) {
+      Alert.alert(I18n.t("premiumFeature"), I18n.t("premiumFeaturePDF"), [
+        { text: I18n.t("cancel"), style: "cancel" },
+        {
+          text: I18n.t("goToPremium"),
+          onPress: () => {
+            // Здесь можно добавить навигацию к экрану подписки
+            Alert.alert(
+              I18n.t("subscription"),
+              I18n.t("subscriptionNavigation")
+            );
+          },
+        },
+      ]);
+      return;
+    }
+
     if (!activeProject || !journals.length) {
       Alert.alert(I18n.t("error"), I18n.t("noDataToExport"));
       return;
@@ -157,43 +196,49 @@ export default function ExportManager() {
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.exportButton}
-          onPress={exportJournalToCSV}
-        >
-          <Text style={styles.buttonText}>
-            📊 {I18n.t("exportJournalsCsv")}
-          </Text>
-          <Text style={styles.buttonDescription}>
-            {I18n.t("exportJournalsCsvDesc")}
-          </Text>
-        </TouchableOpacity>
+        {hasPremiumAccess ? (
+          <TouchableOpacity
+            style={styles.exportButton}
+            onPress={exportJournalToCSV}
+          >
+            <Text style={styles.buttonText}>
+              📊 {I18n.t("exportJournalsCsv")}
+            </Text>
+            <Text style={styles.buttonDescription}>
+              {I18n.t("exportJournalsCsvDesc")}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <PremiumBanner
+            title={I18n.t("exportJournalsCsv")}
+            description={I18n.t("premiumOnly")}
+            style={styles.premiumBanner}
+          />
+        )}
       </View>
 
       <View style={styles.exportSection}>
         <Text style={styles.sectionTitle}>{I18n.t("export")}</Text>
 
-        <TouchableOpacity
-          style={styles.exportButton}
-          onPress={exportChartAsImage}
-        >
-          <Text style={styles.buttonText}>📈 {I18n.t("exportChartPng")}</Text>
-          <Text style={styles.buttonDescription}>
-            {I18n.t("exportChartPngDesc")}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.exportButton}
-          onPress={exportAnalysisToPDF}
-        >
-          <Text style={styles.buttonText}>
-            📄 {I18n.t("exportAnalysisPdf")}
-          </Text>
-          <Text style={styles.buttonDescription}>
-            {I18n.t("exportAnalysisPdfDesc")}
-          </Text>
-        </TouchableOpacity>
+        {hasPremiumAccess ? (
+          <TouchableOpacity
+            style={styles.exportButton}
+            onPress={exportAnalysisToPDF}
+          >
+            <Text style={styles.buttonText}>
+              📄 {I18n.t("exportAnalysisPdf")}
+            </Text>
+            <Text style={styles.buttonDescription}>
+              {I18n.t("exportAnalysisPdfDesc")}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <PremiumBanner
+            title={I18n.t("exportAnalysisPdf")}
+            description={I18n.t("premiumOnly")}
+            style={styles.premiumBanner}
+          />
+        )}
       </View>
 
       <View style={styles.infoBox}>
@@ -276,6 +321,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginTop: 20,
+    marginBottom: 100,
   },
   infoTitle: {
     fontSize: 16,
@@ -287,5 +333,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#333",
     lineHeight: 20,
+  },
+  premiumBanner: {
+    marginBottom: 12,
   },
 });

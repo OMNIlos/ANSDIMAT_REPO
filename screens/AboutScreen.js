@@ -1,5 +1,6 @@
 import React, { useContext } from "react";
-import { View, StyleSheet, ScrollView, Image } from "react-native";
+import { View, StyleSheet, ScrollView } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Text } from "react-native-paper";
 import I18n from "../Localization";
 import LanguageContext from "../LanguageContext";
@@ -8,8 +9,12 @@ export default function AboutScreen() {
   const { locale } = useContext(LanguageContext);
 
   return (
-    <View style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={styles.container}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        style={{ flex: 1 }}
+        showsVerticalScrollIndicator={false}
+      >
         <Text style={styles.h1}>{I18n.t("aboutStory")}</Text>
         <Text style={styles.p1}>{I18n.t("aboutDevelopment")}</Text>
 
@@ -45,26 +50,22 @@ export default function AboutScreen() {
         </View>
 
         <View style={{ marginTop: 40 }}>
-          <Image
-            source={require("../assets/client_geography.png")} // путь к карте
-            style={{
-              width: "100%",
-              height: 200,
-              resizeMode: "contain",
-              marginBottom: 32,
-            }}
-          />
+          <View style={styles.mapPlaceholder}>
+            <Text style={styles.placeholderText}>🗺️</Text>
+            <Text style={styles.placeholderSubtext}>Карта клиентов</Text>
+          </View>
           <Text style={styles.h1}>{I18n.t("geographyTitle")}</Text>
           <Text style={styles.p1}>{I18n.t("geographyDescription")}</Text>
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     padding: 20,
+    paddingTop: 10,
   },
   h1: {
     fontSize: 20,
@@ -74,5 +75,24 @@ const styles = StyleSheet.create({
   p1: {
     fontSize: 16,
     marginBottom: 10,
+  },
+  mapPlaceholder: {
+    width: "100%",
+    height: 200,
+    backgroundColor: "#f0f0f0",
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 8,
+    marginBottom: 32,
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  placeholderText: {
+    fontSize: 48,
+    marginBottom: 8,
+  },
+  placeholderSubtext: {
+    fontSize: 16,
+    color: "#666",
   },
 });

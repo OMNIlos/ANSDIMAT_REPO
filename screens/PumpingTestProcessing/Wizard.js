@@ -18,19 +18,33 @@ import I18n from "../../Localization";
 import LanguageContext from "../../LanguageContext";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
-const TEST_TYPES = [
-  I18n.t("pumpingTest"),
-  I18n.t("slugTest"),
-  I18n.t("packerTest"),
-];
-const LAYER_TYPES = [I18n.t("confined"), I18n.t("unconfined"), I18n.t("leaky")];
-const BOUNDARY_TYPES = [
-  I18n.t("infinite"),
-  I18n.t("constantHead"),
-  I18n.t("noFlow"),
+// Добавляем типы зависимостей
+const DATA_TYPES = [
+  { key: "s-t", label: "s-t" },
+  { key: "s1s2-t", label: "s1, s2-t" },
+  { key: "s-r", label: "s-r" },
 ];
 
 export default function Wizard() {
+  const { locale } = useContext(LanguageContext);
+
+  // Перемещаем массивы внутрь компонента для обновления при смене языка
+  const TEST_TYPES = [
+    I18n.t("pumpingTest"),
+    I18n.t("slugTest"),
+    I18n.t("packerTest"),
+  ];
+  const LAYER_TYPES = [
+    I18n.t("confined"),
+    I18n.t("unconfined"),
+    I18n.t("leaky"),
+  ];
+  const BOUNDARY_TYPES = [
+    I18n.t("infinite"),
+    I18n.t("constantHead"),
+    I18n.t("noFlow"),
+  ];
+
   const [step, setStep] = useState(0);
   const [testType, setTestType] = useState(TEST_TYPES[0]);
   const [layerType, setLayerType] = useState(LAYER_TYPES[0]);
@@ -39,10 +53,17 @@ export default function Wizard() {
     { t: "", s: "", datetime: new Date().toISOString() },
   ]);
   const [activeProject, setActiveProject] = useState(null);
-  const { locale } = useContext(LanguageContext);
   const [showDatePickerIdx, setShowDatePickerIdx] = useState(null);
   const [pickerValue, setPickerValue] = useState(new Date());
   const [pickerTempValue, setPickerTempValue] = useState(new Date());
+  const [dataType, setDataType] = useState("s-t");
+
+  // Обновляем состояния при смене языка
+  useEffect(() => {
+    setTestType(TEST_TYPES[0]);
+    setLayerType(LAYER_TYPES[0]);
+    setBoundary(BOUNDARY_TYPES[0]);
+  }, [locale]);
 
   useFocusEffect(
     useCallback(() => {
@@ -154,10 +175,15 @@ export default function Wizard() {
       setDataRows(newRows);
     }
     function addRow() {
-      setDataRows([
-        ...dataRows,
-        { t: "", s: "", datetime: new Date().toISOString() },
-      ]);
+      let row;
+      if (dataType === "s-t") {
+        row = { t: "", s: "", datetime: new Date().toISOString() };
+      } else if (dataType === "s1s2-t") {
+        row = { t: "", s1: "", s2: "", datetime: new Date().toISOString() };
+      } else if (dataType === "s-r") {
+        row = { s: "", r: "", datetime: new Date().toISOString() };
+      }
+      setDataRows([...dataRows, row]);
     }
     function removeRow(idx) {
       if (dataRows.length === 1) return;
@@ -189,55 +215,187 @@ export default function Wizard() {
     return (
       <View style={styles.stepContainer}>
         <Text style={styles.stepTitle}>{I18n.t("step4")}</Text>
+        {/* Выбор типа данных */}
+        <View style={{ flexDirection: "row", marginBottom: 10 }}>
+          {DATA_TYPES.map((type) => (
+            <TouchableOpacity
+              key={type.key}
+              style={{
+                padding: 8,
+                borderWidth: 1,
+                borderColor: dataType === type.key ? "#800020" : "#ccc",
+                borderRadius: 8,
+                marginRight: 8,
+                backgroundColor: dataType === type.key ? "#800020" : "#fff",
+              }}
+              onPress={() => {
+                setDataType(type.key);
+                // Сбросить строки под новый тип
+                if (type.key === "s-t") {
+                  setDataRows([
+                    { t: "", s: "", datetime: new Date().toISOString() },
+                  ]);
+                } else if (type.key === "s1s2-t") {
+                  setDataRows([
+                    {
+                      t: "",
+                      s1: "",
+                      s2: "",
+                      datetime: new Date().toISOString(),
+                    },
+                  ]);
+                } else if (type.key === "s-r") {
+                  setDataRows([
+                    { s: "", r: "", datetime: new Date().toISOString() },
+                  ]);
+                }
+              }}
+            >
+              <Text
+                style={{ color: dataType === type.key ? "#fff" : "#800020" }}
+              >
+                {type.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
         <FlatList
           data={dataRows}
           keyExtractor={(_, idx) => idx.toString()}
           renderItem={({ item, index }) => (
             <View
               style={{
-                flexDirection: "row",
-                alignItems: "center",
-                marginBottom: 6,
+                flexDirection: "column",
+                marginBottom: 12,
+                padding: 8,
+                backgroundColor: "#f9f9f9",
+                borderRadius: 8,
               }}
             >
-              <TextInput
-                style={styles.input}
-                placeholder={I18n.t("time")}
-                value={item.t}
-                onChangeText={(v) => updateRow(index, "t", v)}
-                keyboardType="numeric"
-              />
-              <TextInput
-                style={styles.input}
-                placeholder={I18n.t("drawdown")}
-                value={item.s}
-                onChangeText={(v) => updateRow(index, "s", v)}
-                keyboardType="numeric"
-              />
-              <TouchableOpacity
-                style={{ marginLeft: 4, marginRight: 4, padding: 4 }}
-                onPress={() => openDatePicker(index)}
+              {/* Для каждого типа — свои поля */}
+              <View
+                style={{
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  marginBottom: 8,
+                }}
               >
-                <Text style={{ color: "#800020", fontSize: 18 }}>🕒</Text>
-                <Text
-                  style={{ fontSize: 10, color: "#333", textAlign: "center" }}
+                {dataType === "s-t" && (
+                  <>
+                    <TextInput
+                      style={styles.input}
+                      placeholder={I18n.t("time")}
+                      value={item.t}
+                      onChangeText={(v) => updateRow(index, "t", v)}
+                      keyboardType="numeric"
+                    />
+                    <TextInput
+                      style={styles.input}
+                      placeholder={I18n.t("drawdown")}
+                      value={item.s}
+                      onChangeText={(v) => updateRow(index, "s", v)}
+                      keyboardType="numeric"
+                    />
+                  </>
+                )}
+                {dataType === "s1s2-t" && (
+                  <>
+                    <TextInput
+                      style={styles.input}
+                      placeholder={I18n.t("time")}
+                      value={item.t}
+                      onChangeText={(v) => updateRow(index, "t", v)}
+                      keyboardType="numeric"
+                    />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="s1"
+                      value={item.s1}
+                      onChangeText={(v) => updateRow(index, "s1", v)}
+                      keyboardType="numeric"
+                    />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="s2"
+                      value={item.s2}
+                      onChangeText={(v) => updateRow(index, "s2", v)}
+                      keyboardType="numeric"
+                    />
+                  </>
+                )}
+                {dataType === "s-r" && (
+                  <>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="s"
+                      value={item.s}
+                      onChangeText={(v) => updateRow(index, "s", v)}
+                      keyboardType="numeric"
+                    />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="r"
+                      value={item.r}
+                      onChangeText={(v) => updateRow(index, "r", v)}
+                      keyboardType="numeric"
+                    />
+                  </>
+                )}
+              </View>
+
+              {/* Вторая строка с датой и кнопкой удаления */}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <TouchableOpacity
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    padding: 8,
+                    backgroundColor: "#fff",
+                    borderRadius: 6,
+                    borderWidth: 1,
+                    borderColor: "#ddd",
+                  }}
+                  onPress={() => openDatePicker(index)}
                 >
-                  {item.datetime
-                    ? new Date(item.datetime).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        second: "2-digit",
-                      }) +
-                      "\n" +
-                      new Date(item.datetime).toLocaleDateString()
-                    : ""}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => removeRow(index)}>
-                <Text style={{ fontSize: 20, color: "#b22222", marginLeft: 8 }}>
-                  🗑️
-                </Text>
-              </TouchableOpacity>
+                  <Text
+                    style={{ color: "#800020", fontSize: 18, marginRight: 8 }}
+                  >
+                    🕒
+                  </Text>
+                  <Text style={{ fontSize: 12, color: "#333" }}>
+                    {item.datetime
+                      ? new Date(item.datetime).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                          hour12: false,
+                        }) +
+                        " " +
+                        new Date(item.datetime).toLocaleDateString()
+                      : I18n.t("selectDateTime")}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => removeRow(index)}
+                  style={{
+                    backgroundColor: "#ffebee",
+                    borderRadius: 20,
+                    width: 40,
+                    height: 40,
+                    justifyContent: "center",
+                    alignItems: "center",
+                  }}
+                >
+                  <Text style={{ fontSize: 18, color: "#b22222" }}>🗑️</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           )}
         />
@@ -341,6 +499,7 @@ export default function Wizard() {
       boundary,
       dataRows,
       date: Date.now(),
+      dataType, // сохраняем тип данных
     };
     // Обновляем проект
     const projectsRaw = await AsyncStorage.getItem("pumping_projects");
@@ -440,9 +599,11 @@ const styles = StyleSheet.create({
     borderColor: "#ccc",
     borderRadius: 6,
     padding: 8,
-    width: 70,
+    width: 80,
     marginRight: 8,
+    marginBottom: 4,
     backgroundColor: "#fff",
+    minWidth: 80,
   },
   addBtn: {
     alignSelf: "center",

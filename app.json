@@ -4,26 +4,49 @@
     "slug": "Ansdimat",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/Снимок экрана 2025-06-29 в 11.20.33.png",
+    "icon": "./assets/main.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.omnion.Ansdimat"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.omnion.Ansdimat"
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos to save charts.",
+          "savePhotosPermission": "Allow $(PRODUCT_NAME) to save charts to your photo library.",
+          "isAccessMediaLocationEnabled": true
+        }
+      ],
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Production"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "ccd8e4bf-0524-44c2-b5f4-f3cd1aa817bf"
+      }
+    },
+    "owner": "omnion"
   }
 }

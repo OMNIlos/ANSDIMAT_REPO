@@ -1,5 +1,5 @@
 import React, { useState, useContext } from "react";
-import { View, ScrollView, StyleSheet, Alert } from "react-native";
+import { View, ScrollView, StyleSheet, Alert, Linking } from "react-native";
 import {
   TextInput,
   Button,
@@ -26,12 +26,54 @@ export default function OrderScreen() {
     setForm({ ...form, [field]: value });
   };
 
-  const handleSubmit = () => {
-    // Тут можно будет реализовать отправку на сервер
-    Alert.alert(
-      I18n.t("orderSent"),
-      I18n.t("orderThanks", { name: form.name })
+  const handleSubmit = async () => {
+    // Валидация
+    if (!form.name.trim() || !form.email.trim() || !form.licenseType) {
+      Alert.alert(
+        I18n.t("error"),
+        I18n.t("fullName") +
+          ", " +
+          I18n.t("email") +
+          ", " +
+          I18n.t("licenseType") +
+          " - " +
+          I18n.t("noData")
+      );
+      return;
+    }
+    // Определяем email получателя
+    const to =
+      locale === "ru" ? "support-russia@ansdimat.com" : "support@ansdimat.com";
+    // Формируем тему и тело письма
+    const subject = encodeURIComponent(I18n.t("orderTitle"));
+    const body = encodeURIComponent(
+      `${I18n.t("fullName")}: ${form.name}\n` +
+        `${I18n.t("organization")}: ${form.company}\n` +
+        `${I18n.t("email")}: ${form.email}\n` +
+        `${I18n.t("phone")}: ${form.phone}\n` +
+        `${I18n.t("address")}: ${form.address}\n` +
+        `${I18n.t("licenseType")}: ${
+          form.licenseType === "single"
+            ? I18n.t("singleLicense")
+            : I18n.t("multiLicense")
+        }\n` +
+        `${I18n.t("comment")}: ${form.comment}`
     );
+    const mailto = `mailto:${to}?subject=${subject}&body=${body}`;
+    try {
+      const canOpen = await Linking.canOpenURL(mailto);
+      if (canOpen) {
+        await Linking.openURL(mailto);
+        Alert.alert(
+          I18n.t("orderSent"),
+          I18n.t("orderThanks", { name: form.name })
+        );
+      } else {
+        Alert.alert(I18n.t("error"), I18n.t("mailClientError"));
+      }
+    } catch (e) {
+      Alert.alert(I18n.t("error"), I18n.t("mailSendError"));
+    }
   };
 
   return (

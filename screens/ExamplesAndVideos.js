@@ -1,5 +1,5 @@
 import React, { useContext } from "react";
-import { View, StyleSheet, ScrollView, Linking, Image } from "react-native";
+import { View, StyleSheet, ScrollView, Linking } from "react-native";
 import { Text, Button, Card } from "react-native-paper";
 import I18n from "../Localization";
 import LanguageContext from "../LanguageContext";
@@ -53,10 +53,9 @@ export default function ExamplesAndVideosScreen() {
 
       <Card style={styles.card}>
         <Card.Content>
-          <Image
-            source={require("../assets/HelpVideos/IMG_6786.png")}
-            style={{ alignSelf: "center" }}
-          />
+          <View style={styles.videoPlaceholder}>
+            <Text style={styles.placeholderText}>📹</Text>
+          </View>
           <Text style={styles.cardTitle}>{I18n.t("video1Title")}</Text>
           <Button
             mode="contained"
@@ -74,10 +73,9 @@ export default function ExamplesAndVideosScreen() {
 
       <Card style={styles.card}>
         <Card.Content>
-          <Image
-            source={require("../assets/HelpVideos/IMG_6788.png")}
-            style={{ alignSelf: "center" }}
-          />
+          <View style={styles.videoPlaceholder}>
+            <Text style={styles.placeholderText}>📹</Text>
+          </View>
           <Text style={styles.cardTitle}>{I18n.t("video2Title")}</Text>
           <Button
             mode="contained"
@@ -95,10 +93,9 @@ export default function ExamplesAndVideosScreen() {
 
       <Card style={styles.card}>
         <Card.Content>
-          <Image
-            source={require("../assets/HelpVideos/IMG_6789.png")}
-            style={{ alignSelf: "center" }}
-          />
+          <View style={styles.videoPlaceholder}>
+            <Text style={styles.placeholderText}>📹</Text>
+          </View>
           <Text style={styles.cardTitle}>{I18n.t("video3Title")}</Text>
           <Button
             mode="contained"
@@ -116,10 +113,9 @@ export default function ExamplesAndVideosScreen() {
 
       <Card style={styles.card}>
         <Card.Content>
-          <Image
-            source={require("../assets/HelpVideos/IMG_6790.png")}
-            style={{ alignSelf: "center" }}
-          />
+          <View style={styles.videoPlaceholder}>
+            <Text style={styles.placeholderText}>📹</Text>
+          </View>
           <Text style={styles.cardTitle}>{I18n.t("video4Title")}</Text>
           <Button
             mode="contained"
@@ -137,10 +133,9 @@ export default function ExamplesAndVideosScreen() {
 
       <Card style={styles.card}>
         <Card.Content>
-          <Image
-            source={require("../assets/HelpVideos/IMG_6791.png")}
-            style={{ alignSelf: "center" }}
-          />
+          <View style={styles.videoPlaceholder}>
+            <Text style={styles.placeholderText}>📹</Text>
+          </View>
           <Text style={styles.cardTitle}>{I18n.t("video5Title")}</Text>
           <Button
             mode="contained"
@@ -158,10 +153,9 @@ export default function ExamplesAndVideosScreen() {
 
       <Card style={styles.card}>
         <Card.Content>
-          <Image
-            source={require("../assets/HelpVideos/IMG_6793.png")}
-            style={{ alignSelf: "center" }}
-          />
+          <View style={styles.videoPlaceholder}>
+            <Text style={styles.placeholderText}>📹</Text>
+          </View>
           <Text style={styles.cardTitle}>{I18n.t("video6Title")}</Text>
           <Button
             mode="contained"
@@ -179,10 +173,9 @@ export default function ExamplesAndVideosScreen() {
 
       <Card style={styles.card}>
         <Card.Content>
-          <Image
-            source={require("../assets/HelpVideos/IMG_6792.png")}
-            style={{ alignSelf: "center" }}
-          />
+          <View style={styles.videoPlaceholder}>
+            <Text style={styles.placeholderText}>📹</Text>
+          </View>
           <Text style={styles.cardTitle}>{I18n.t("video7Title")}</Text>
           <Button
             mode="contained"
@@ -237,5 +230,19 @@ const styles = StyleSheet.create({
   watchButton: {
     backgroundColor: "#800000",
     marginTop: 5,
+  },
+  videoPlaceholder: {
+    width: 120,
+    height: 80,
+    backgroundColor: "#e0e0e0",
+    justifyContent: "center",
+    alignItems: "center",
+    alignSelf: "center",
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  placeholderText: {
+    fontSize: 32,
+    color: "#666",
   },
 });
