@@ -15,8 +15,9 @@ import * as Sharing from "expo-sharing";
 import * as FileSystem from "expo-file-system";
 import Svg, { Rect, Text as SvgText, Polyline } from "react-native-svg";
 import I18n from "../Localization";
-import SubscriptionManager from "../utils/SubscriptionManager";
+import { SubscriptionManager } from "../utils/SubscriptionManager";
 import PremiumBanner from "../components/PremiumBanner";
+import { useTheme } from "react-native-paper";
 
 const Tab = createMaterialTopTabNavigator();
 
@@ -121,14 +122,14 @@ function UnitConverterScreen() {
     label: u.label(),
     value: (base * u.factor).toPrecision(8).replace(/\.0+$/, ""),
   }));
+  const theme = useTheme();
   return (
-    <ScrollView style={{ flex: 1, padding: 16 }}>
-      <Text style={styles.title}>{I18n.t("filtrationCoeff")}</Text>
+    <View style={{ flex: 1, padding: 16, backgroundColor: theme.colors.background }}>
       <View
         style={{ flexDirection: "row", alignItems: "center", marginBottom: 16 }}
       >
         <TextInput
-          style={styles.input}
+          style={{...styles.input, borderColor: theme.colors.border}}
           value={inputValue}
           onChangeText={setInputValue}
           keyboardType="numeric"
@@ -148,7 +149,7 @@ function UnitConverterScreen() {
               ]}
               onPress={() => setInputUnit(u.key)}
             >
-              <Text style={{ color: inputUnit === u.key ? "#fff" : "#800020" }}>
+              <Text style={{ color: inputUnit === u.key ? theme.colors.text : theme.colors.reverse }}>
                 {u.label()}
               </Text>
             </TouchableOpacity>
@@ -158,8 +159,8 @@ function UnitConverterScreen() {
       <ScrollView style={{ maxHeight: 400 }}>
         {results.map((r) => (
           <View key={r.key} style={styles.resultRow}>
-            <Text style={styles.resultValue}>{r.value}</Text>
-            <Text style={styles.resultUnit}>{r.label}</Text>
+            <Text style={{...styles.resultValue, color: theme.colors.reverse}}>{r.value}</Text>
+            <Text style={{...styles.resultUnit, color: theme.colors.text}}>{r.label}</Text>
           </View>
         ))}
       </ScrollView>
@@ -211,7 +212,7 @@ function UnitConverterScreen() {
           </Svg>
         </TouchableOpacity>
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -223,7 +224,7 @@ function ParameterEstimationScreen() {
   const [m, setM] = useState("20");
   const [aquifer, setAquifer] = useState("unconfined");
   const [imperfect, setImperfect] = useState(false);
-
+  const theme = useTheme();
   // Формулы
   let k = 0;
   let formula = "";
@@ -261,27 +262,22 @@ function ParameterEstimationScreen() {
 
   return (
     <ScrollView style={{ flex: 1, padding: 16 }}>
-      <Text style={styles.title}>
-        {I18n.t("parameterEstimationTab", {
-          defaultValue: "Оценка параметров",
-        })}
-      </Text>
       <View style={{ marginBottom: 12 }}>
-        <Text>Q, м³/сут:</Text>
+        <Text style={{color: theme.colors.text}}>Q, м³/сут:</Text>
         <TextInput
           style={styles.input}
           value={Q}
           onChangeText={setQ}
           keyboardType="numeric"
         />
-        <Text>s, м:</Text>
+        <Text style={{color: theme.colors.text}}>s, м:</Text>
         <TextInput
           style={styles.input}
           value={s}
           onChangeText={setS}
           keyboardType="numeric"
         />
-        <Text>m, м:</Text>
+        <Text style={{color: theme.colors.text}}>m, м:</Text>
         <TextInput
           style={styles.input}
           value={m}
@@ -422,7 +418,7 @@ function DrawdownForecastScreen() {
   const [T, setTval] = useState("50");
   const [S, setS] = useState("0.0001");
   const [Ss, setSs] = useState("0.000004");
-
+  const theme = useTheme();
   const Qn = parseFloat(Q.replace(",", "."));
   const tn = parseFloat(t.replace(",", "."));
   const rn = parseFloat(r.replace(",", "."));
@@ -439,38 +435,35 @@ function DrawdownForecastScreen() {
 
   return (
     <ScrollView style={{ flex: 1, padding: 16 }}>
-      <Text style={styles.title}>
-        {I18n.t("drawdownForecastTab", { defaultValue: "Прогноз понижений" })}
-      </Text>
-      <Text>Q, м³/сут:</Text>
+      <Text style={{color: theme.colors.text}}>Q, м³/сут:</Text>
       <TextInput
         style={styles.input}
         value={Q}
         onChangeText={setQ}
         keyboardType="numeric"
       />
-      <Text>t, сут:</Text>
+      <Text style={{color: theme.colors.text}}>t, сут:</Text>
       <TextInput
         style={styles.input}
         value={t}
         onChangeText={setT}
         keyboardType="numeric"
       />
-      <Text>r, м:</Text>
+      <Text style={{color: theme.colors.text}}>r, м:</Text>
       <TextInput
         style={styles.input}
         value={r}
         onChangeText={setR}
         keyboardType="numeric"
       />
-      <Text>T, м²/сут:</Text>
+      <Text style={{color: theme.colors.text}}>T, м²/сут:</Text>
       <TextInput
         style={styles.input}
         value={T}
         onChangeText={setTval}
         keyboardType="numeric"
       />
-      <Text>S, - :</Text>
+      <Text style={{color: theme.colors.text}}>S, - :</Text>
       <TextInput
         style={styles.input}
         value={S}
@@ -521,6 +514,7 @@ function DrawdownForecastScreen() {
 
 function PitInflowScreen() {
   const chartRef = useRef();
+  const theme = useTheme();
   const [k, setK] = useState("5");
   const [m, setM] = useState("20");
   const [ro, setRo] = useState("118.3");
@@ -551,8 +545,6 @@ function PitInflowScreen() {
 
   return (
     <ScrollView style={{ flex: 1, padding: 16 }}>
-      <Text style={styles.title}>{I18n.t("pitInflowTab")}</Text>
-
       {!hasPremiumAccess && (
         <PremiumBanner
           title={I18n.t("pitInflowTab")}
@@ -563,35 +555,35 @@ function PitInflowScreen() {
 
       {hasPremiumAccess ? (
         <>
-          <Text>k, м/сут:</Text>
+          <Text style={{color: theme.colors.text}}>k, м/сут:</Text>
           <TextInput
             style={styles.input}
             value={k}
             onChangeText={setK}
             keyboardType="numeric"
           />
-          <Text>m, м:</Text>
+          <Text style={{color: theme.colors.text}}>m, м:</Text>
           <TextInput
             style={styles.input}
             value={m}
             onChangeText={setM}
             keyboardType="numeric"
           />
-          <Text>ro, м:</Text>
+          <Text style={{color: theme.colors.text}}>ro, м:</Text>
           <TextInput
             style={styles.input}
             value={ro}
             onChangeText={setRo}
             keyboardType="numeric"
           />
-          <Text>R, м:</Text>
+          <Text style={{color: theme.colors.text}}>R, м:</Text>
           <TextInput
             style={styles.input}
             value={R}
             onChangeText={setR}
             keyboardType="numeric"
           />
-          <Text>s0, м:</Text>
+          <Text style={{color: theme.colors.text}}>s0, м:</Text>
           <TextInput
             style={styles.input}
             value={s0}
@@ -644,6 +636,7 @@ function PitInflowScreen() {
 
 function BarrageScreen() {
   const chartRef = useRef();
+  const theme = useTheme();
   const [k, setK] = useState("0.1");
   const [q, setQ] = useState("0.4");
   const [m, setM] = useState("20");
@@ -658,22 +651,21 @@ function BarrageScreen() {
 
   return (
     <ScrollView style={{ flex: 1, padding: 16 }}>
-      <Text style={styles.title}>{I18n.t("barrageTab")}</Text>
-      <Text>k, м/сут:</Text>
+      <Text style={{color: theme.colors.text}}>k, м/сут:</Text>
       <TextInput
         style={styles.input}
         value={k}
         onChangeText={setK}
         keyboardType="numeric"
       />
-      <Text>q, м²/сут:</Text>
+      <Text style={{color: theme.colors.text}}>q, м²/сут:</Text>
       <TextInput
         style={styles.input}
         value={q}
         onChangeText={setQ}
         keyboardType="numeric"
       />
-      <Text>m, м:</Text>
+      <Text style={{color: theme.colors.text}}>m, м:</Text>
       <TextInput
         style={styles.input}
         value={m}
@@ -724,6 +716,7 @@ function BarrageScreen() {
 
 function InfiltrationLeakageScreen() {
   const chartRef = useRef();
+  const theme = useTheme();
   const [e, setE] = useState("0.1"); // ε (м/сут)
   const [percentInfiltration, setPercentInfiltration] = useState("10"); // Процент инфильтрации
   const [Sy, setSy] = useState("0.2"); // Sy
@@ -819,9 +812,7 @@ function InfiltrationLeakageScreen() {
   };
 
   return (
-    <ScrollView style={{ flex: 1, padding: 16 }}>
-      <Text style={styles.title}>{I18n.t("infiltrationLeakageTab")}</Text>
-
+    <ScrollView style={{ flex: 1, padding: 16, marginBottom: 100 }}>
       {!hasPremiumAccess && (
         <PremiumBanner
           title={I18n.t("infiltrationLeakageTab")}
@@ -833,56 +824,56 @@ function InfiltrationLeakageScreen() {
       {hasPremiumAccess ? (
         <>
           <View style={{ marginBottom: 12 }}>
-            <Text>ε (м/сут):</Text>
+            <Text style={{color: theme.colors.text}}>ε (м/сут):</Text>
             <TextInput
               style={styles.input}
               value={e}
               onChangeText={setE}
               keyboardType="numeric"
             />
-            <Text>Процент инфильтрации (%):</Text>
+            <Text style={{color: theme.colors.text}}>Процент инфильтрации (%):</Text>
             <TextInput
               style={styles.input}
               value={percentInfiltration}
               onChangeText={setPercentInfiltration}
               keyboardType="numeric"
             />
-            <Text>Sy, - :</Text>
+            <Text style={{color: theme.colors.text}}>Sy, - :</Text>
             <TextInput
               style={styles.input}
               value={Sy}
               onChangeText={setSy}
               keyboardType="numeric"
             />
-            <Text>A, м (полуширина области):</Text>
+            <Text style={{color: theme.colors.text}}>A, м (полуширина области):</Text>
             <TextInput
               style={styles.input}
               value={A}
               onChangeText={setA}
               keyboardType="numeric"
             />
-            <Text>k, м/сут:</Text>
+            <Text style={{color: theme.colors.text}}>k, м/сут:</Text>
             <TextInput
               style={styles.input}
               value={k}
               onChangeText={setK}
               keyboardType="numeric"
             />
-            <Text>m, м:</Text>
+            <Text style={{color: theme.colors.text}}>m, м:</Text>
             <TextInput
               style={styles.input}
               value={m}
               onChangeText={setM}
               keyboardType="numeric"
             />
-            <Text>t, сут:</Text>
+            <Text style={{color: theme.colors.text}}>t, сут:</Text>
             <TextInput
               style={styles.input}
               value={t}
               onChangeText={setT}
               keyboardType="numeric"
             />
-            <Text>x, м:</Text>
+            <Text style={{color: theme.colors.text}}>x, м:</Text>
             <TextInput
               style={styles.input}
               value={x}
@@ -915,41 +906,41 @@ function InfiltrationLeakageScreen() {
             </View>
           </View>
           <Text
-            style={{ marginBottom: 8, color: "#800020", fontWeight: "bold" }}
+            style={{ marginBottom: 8, color: theme.colors.text, fontWeight: "bold" }}
           >
             Результаты:
           </Text>
           <View style={styles.resultRow}>
-            <Text style={styles.resultValue}>
+            <Text style={{...styles.resultValue, color: theme.colors.text}}>
               {I18n.t("e_mm_year", { defaultValue: "ε (мм/год)" })}:
             </Text>
-            <Text style={styles.resultValue}>{e_mm_year.toPrecision(5)}</Text>
-            <Text style={styles.resultUnit}>мм/год</Text>
+            <Text style={{...styles.resultValue, color: theme.colors.reverse}}>{e_mm_year.toPrecision(5)}</Text>
+            <Text style={{...styles.resultUnit, color: theme.colors.text}}>мм/год</Text>
           </View>
           <View style={styles.resultRow}>
-            <Text style={styles.resultValue}>
+            <Text style={{...styles.resultValue, color: theme.colors.text}}>
               {I18n.t("P_mm_year", { defaultValue: "P (мм/год)" })}:
             </Text>
-            <Text style={styles.resultValue}>{P_mm_year.toPrecision(5)}</Text>
-            <Text style={styles.resultUnit}>мм/год</Text>
+            <Text style={{...styles.resultValue, color: theme.colors.reverse}}>{P_mm_year.toPrecision(5)}</Text>
+            <Text style={{...styles.resultUnit, color: theme.colors.text}}>мм/год</Text>
           </View>
           <View style={styles.resultRow}>
-            <Text style={styles.resultValue}>
+            <Text style={{...styles.resultValue, color: theme.colors.text}}>
               {I18n.t("sMaxSteady", { defaultValue: "s_max (steady)" })}:
             </Text>
-            <Text style={styles.resultValue}>
+            <Text style={{...styles.resultValue, color: theme.colors.reverse}}>
               {s_max_steady.toPrecision(5)}
             </Text>
-            <Text style={styles.resultUnit}>м</Text>
+            <Text style={{...styles.resultUnit, color: theme.colors.text}}>м</Text>
           </View>
           <View style={styles.resultRow}>
-            <Text style={styles.resultValue}>
+            <Text style={{...styles.resultValue, color: theme.colors.text}}>
               {I18n.t("sMaxTransient", { defaultValue: "s_max (transient)" })}:
             </Text>
-            <Text style={styles.resultValue}>
+            <Text style={{...styles.resultValue, color: theme.colors.reverse}}>
               {s_max_transient.toPrecision(5)}
             </Text>
-            <Text style={styles.resultUnit}>м</Text>
+            <Text style={{...styles.resultUnit, color: theme.colors.text}}>м</Text>
           </View>
           <View
             ref={chartRef}
@@ -1007,12 +998,13 @@ function InfiltrationLeakageScreen() {
 }
 
 export default function CalculatorScreen() {
+  const theme = useTheme();
   return (
     <Tab.Navigator
       screenOptions={{
-        tabBarStyle: { backgroundColor: "#fff" },
-        tabBarActiveTintColor: "#800020",
-        tabBarIndicatorStyle: { backgroundColor: "#800020", height: 3 },
+        tabBarStyle: { backgroundColor: theme.colors.background },
+        tabBarActiveTintColor: theme.colors.primary,
+        tabBarIndicatorStyle: { backgroundColor: theme.colors.primary, height: 3 },
         tabBarLabelStyle: {
           fontSize: 12,
           fontWeight: "600",
@@ -1076,7 +1068,6 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ccc",
     borderRadius: 8,
     padding: 10,
     width: 120,

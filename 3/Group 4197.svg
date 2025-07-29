@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="511.01" height="89.781" viewBox="0 0 511.01 89.781">
+  <g id="Group_4197" data-name="Group 4197" transform="translate(-5702.691 -879.28)">
+    <line id="Line_204" data-name="Line 204" x1="506" transform="translate(5707.701 968.561)" fill="none" stroke="#707070" stroke-width="1"/>
+    <g id="garbage" transform="translate(6163.965 896.114)">
+      <g id="Group_24" data-name="Group 24">
+        <path id="Path_28" data-name="Path 28" d="M50.151,3.883H44.537V2.968A2.971,2.971,0,0,0,41.569,0H36.231a2.971,2.971,0,0,0-2.968,2.968v.915H27.649a.749.749,0,0,0,0,1.5H29v17.6a4.011,4.011,0,0,0,4.006,4.006H44.792A4.011,4.011,0,0,0,48.8,22.979V5.381h1.354a.749.749,0,0,0,0-1.5Zm-15.39-.915a1.473,1.473,0,0,1,1.47-1.47h5.337a1.473,1.473,0,0,1,1.47,1.47v.915H34.761ZM47.3,22.979a2.512,2.512,0,0,1-2.508,2.508H33.008A2.512,2.512,0,0,1,30.5,22.979V5.381H47.3v17.6Z" transform="translate(-26.9)" fill="#72002f"/>
+        <path id="Path_29" data-name="Path 29" d="M230.588,162.864a.884.884,0,0,0,.888-.888V146.288a.888.888,0,1,0-1.775,0V161.97A.89.89,0,0,0,230.588,162.864Z" transform="translate(-218.588 -139.13)" fill="#72002f"/>
+        <path id="Path_30" data-name="Path 30" d="M142.488,175.711a.884.884,0,0,0,.888-.888V161.088a.888.888,0,1,0-1.775,0v13.736A.888.888,0,0,0,142.488,175.711Z" transform="translate(-135.315 -152.862)" fill="#72002f"/>
+        <path id="Path_31" data-name="Path 31" d="M318.688,175.711a.884.884,0,0,0,.888-.888V161.088a.888.888,0,1,0-1.775,0v13.736A.884.884,0,0,0,318.688,175.711Z" transform="translate(-301.86 -152.862)" fill="#72002f"/>
+      </g>
+    </g>
+    <g id="calendar-4" transform="translate(5883.128 890.605)">
+      <path id="Path_5036" data-name="Path 5036" d="M0,168.287H23.373V159.4H0Zm17.329-7.595h2.418v1.372H17.329Zm0,2.333h2.418V164.4H17.329Zm0,2.333h2.418v1.372H17.329Zm-4.568-4.667h2.418v1.372H12.761Zm0,2.333h2.418V164.4H12.761Zm0,2.333h2.418v1.372H12.761Zm-4.568-4.667h2.418v1.372H8.194Zm0,2.333h2.418V164.4H8.194Zm0,2.333h2.418v1.372H8.194Zm-4.568-4.667H6.044v1.372H3.626Zm0,2.333H6.044V164.4H3.626Zm2.418,2.333v1.372H3.626v-1.372Z" transform="translate(0 -136.384)" fill="#72002f"/>
+      <path id="Path_5037" data-name="Path 5037" d="M23.373,39.391H19.262v5.45h-1.37v-5.45H5.481v5.45H4.111v-5.45H0v8.175H23.373Z" transform="translate(0 -27.278)" fill="#72002f"/>
+      <rect id="Rectangle_2204" data-name="Rectangle 2204" width="2.922" height="2.922" transform="translate(3.588 9.537)" fill="#72002f"/>
+      <rect id="Rectangle_2205" data-name="Rectangle 2205" width="2.725" height="2.725" transform="translate(16.79 9.388)" fill="#72002f"/>
+    </g>
+    <text id="Select_country" data-name="Select country" transform="translate(5702.691 920.107)" fill="#021784" font-size="26" font-family="SegoeUI, Segoe UI"><tspan x="0" y="0">3</tspan></text>
+    <g id="Inactive" transform="translate(5744.822 879.78)">
+      <g id="White_Fond">
+        <g id="Small-Radius">
+          <rect id="Base_Small-Radius" data-name="Base / Small-Radius" width="119.679" height="62.94" rx="5" fill="#e6e6e6" stroke="#72002f" stroke-width="1"/>
+        </g>
+        <rect id="Rectangle" width="119.679" height="62.94" fill="#fff" stroke="#72002f" stroke-width="1"/>
+      </g>
+      <g id="VerySmall-Radius">
+        <g id="Rectangle-2" data-name="Rectangle" fill="none" stroke="#72002f" stroke-miterlimit="10" stroke-width="1">
+          <rect width="119.679" height="62.94" rx="3" stroke="none"/>
+          <rect x="0.5" y="0.5" width="118.679" height="61.94" rx="2.5" fill="none"/>
+        </g>
+      </g>
+    </g>
+    <g id="Inactive-2" data-name="Inactive" transform="translate(5941.001 879.78)">
+      <g id="White_Fond-2" data-name="White_Fond">
+        <g id="Small-Radius-2" data-name="Small-Radius">
+          <rect id="Base_Small-Radius-2" data-name="Base / Small-Radius" width="193.2" height="62.94" rx="5" fill="#e6e6e6" stroke="#72002f" stroke-width="1"/>
+        </g>
+        <rect id="Rectangle-3" data-name="Rectangle" width="193.2" height="62.94" fill="#fff" stroke="#72002f" stroke-width="1"/>
+      </g>
+      <g id="VerySmall-Radius-2" data-name="VerySmall-Radius">
+        <g id="Rectangle-4" data-name="Rectangle" fill="none" stroke="#72002f" stroke-miterlimit="10" stroke-width="1">
+          <rect width="193.2" height="62.94" rx="3" stroke="none"/>
+          <rect x="0.5" y="0.5" width="192.2" height="61.94" rx="2.5" fill="none"/>
+        </g>
+      </g>
+    </g>
+    <text id="Select_country-2" data-name="Select country" transform="translate(5761.322 918.882)" fill="rgba(64,64,64,0.74)" font-size="26" font-family="SegoeUI, Segoe UI"><tspan x="0" y="0">время</tspan></text>
+    <text id="Select_country-3" data-name="Select country" transform="translate(5958.501 920.107)" fill="rgba(64,64,64,0.74)" font-size="26" font-family="SegoeUI, Segoe UI"><tspan x="0" y="0">понижение, м</tspan></text>
+  </g>
+</svg>

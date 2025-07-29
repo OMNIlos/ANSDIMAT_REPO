@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useContext } from "react";
+import React, { useState, useEffect, useCallback, useContext, memo } from "react";
 import {
   View,
   Text,
@@ -15,7 +15,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import I18n from "../../Localization";
-import LanguageContext from "../../LanguageContext";
+import { LanguageContext } from "../../LanguageContext";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
 // Добавляем типы зависимостей
@@ -24,6 +24,11 @@ const DATA_TYPES = [
   { key: "s1s2-t", label: "s1, s2-t" },
   { key: "s-r", label: "s-r" },
 ];
+
+// Функции преобразования координат
+function generateRowId() {
+  return Date.now().toString() + Math.random().toString(36).slice(2);
+}
 
 export default function Wizard() {
   const { locale } = useContext(LanguageContext);
@@ -50,7 +55,7 @@ export default function Wizard() {
   const [layerType, setLayerType] = useState(LAYER_TYPES[0]);
   const [boundary, setBoundary] = useState(BOUNDARY_TYPES[0]);
   const [dataRows, setDataRows] = useState([
-    { t: "", s: "", datetime: new Date().toISOString() },
+    { id: generateRowId(), t: "", s: "", datetime: new Date().toISOString() },
   ]);
   const [activeProject, setActiveProject] = useState(null);
   const [showDatePickerIdx, setShowDatePickerIdx] = useState(null);
@@ -169,33 +174,40 @@ export default function Wizard() {
 
   // Шаг 4: ввод данных (таблица)
   function Step4() {
-    function updateRow(idx, field, value) {
-      const newRows = [...dataRows];
-      newRows[idx][field] = value;
-      setDataRows(newRows);
-    }
-    function addRow() {
+    const updateRow = useCallback((idx, field, value) => {
+      setDataRows((prevRows) =>
+        prevRows.map((row, i) =>
+          i === idx ? { ...row, [field]: value } : row
+        )
+      );
+    }, []);
+    
+    const addRow = useCallback(() => {
       let row;
       if (dataType === "s-t") {
-        row = { t: "", s: "", datetime: new Date().toISOString() };
+        row = { id: generateRowId(), t: "", s: "", datetime: new Date().toISOString() };
       } else if (dataType === "s1s2-t") {
-        row = { t: "", s1: "", s2: "", datetime: new Date().toISOString() };
+        row = { id: generateRowId(), t: "", s1: "", s2: "", datetime: new Date().toISOString() };
       } else if (dataType === "s-r") {
-        row = { s: "", r: "", datetime: new Date().toISOString() };
+        row = { id: generateRowId(), s: "", r: "", datetime: new Date().toISOString() };
       }
-      setDataRows([...dataRows, row]);
-    }
-    function removeRow(idx) {
-      if (dataRows.length === 1) return;
-      setDataRows(dataRows.filter((_, i) => i !== idx));
-    }
-    function openDatePicker(index) {
+      setDataRows((prevRows) => [...prevRows, row]);
+    }, [dataType]);
+    
+    const removeRow = useCallback((idx) => {
+      setDataRows((prevRows) => {
+        if (prevRows.length === 1) return prevRows;
+        return prevRows.filter((_, i) => i !== idx);
+      });
+    }, []);
+    
+    const openDatePicker = useCallback((index) => {
       const row = dataRows[index];
       const d = row.datetime ? new Date(row.datetime) : new Date();
       setPickerValue(d);
       setPickerTempValue(d);
       setShowDatePickerIdx(index);
-    }
+    }, [dataRows]);
     function onDateChange(event, selectedDate) {
       if (selectedDate) {
         setPickerTempValue(selectedDate);
@@ -204,9 +216,11 @@ export default function Wizard() {
     function onDatePickerOk() {
       if (showDatePickerIdx === null) return;
       const idx = showDatePickerIdx;
-      const newRows = [...dataRows];
-      newRows[idx]["datetime"] = pickerTempValue.toISOString();
-      setDataRows(newRows);
+      setDataRows((prevRows) => {
+        const newRows = [...prevRows];
+        newRows[idx]["datetime"] = pickerTempValue.toISOString();
+        return newRows;
+      });
       setShowDatePickerIdx(null);
     }
     function onDatePickerCancel() {
@@ -233,11 +247,12 @@ export default function Wizard() {
                 // Сбросить строки под новый тип
                 if (type.key === "s-t") {
                   setDataRows([
-                    { t: "", s: "", datetime: new Date().toISOString() },
+                    { id: generateRowId(), t: "", s: "", datetime: new Date().toISOString() },
                   ]);
                 } else if (type.key === "s1s2-t") {
                   setDataRows([
                     {
+                      id: generateRowId(),
                       t: "",
                       s1: "",
                       s2: "",
@@ -246,7 +261,7 @@ export default function Wizard() {
                   ]);
                 } else if (type.key === "s-r") {
                   setDataRows([
-                    { s: "", r: "", datetime: new Date().toISOString() },
+                    { id: generateRowId(), s: "", r: "", datetime: new Date().toISOString() },
                   ]);
                 }
               }}
@@ -261,7 +276,14 @@ export default function Wizard() {
         </View>
         <FlatList
           data={dataRows}
-          keyExtractor={(_, idx) => idx.toString()}
+          keyExtractor={(item) => item.id}
+          extraData={dataRows}
+          removeClippedSubviews={false}
+          windowSize={10}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          updateCellsBatchingPeriod={100}
+          keyboardShouldPersistTaps="handled"
           renderItem={({ item, index }) => (
             <View
               style={{
@@ -400,76 +422,97 @@ export default function Wizard() {
           )}
         />
         {/* Модальное окно для выбора даты и времени */}
-        <Modal
-          visible={showDatePickerIdx !== null}
-          transparent
-          animationType="fade"
-          onRequestClose={onDatePickerCancel}
-        >
-          <View
-            style={{
-              flex: 1,
-              justifyContent: "center",
-              alignItems: "center",
-              backgroundColor: "rgba(0,0,0,0.3)",
-            }}
+        {Platform.OS === "android" ? (
+          showDatePickerIdx !== null && (
+            <DateTimePicker
+              value={pickerTempValue}
+              mode="datetime"
+              display="default"
+              onChange={(event, selectedDate) => {
+                if (event.type === "set" && selectedDate) {
+                  const idx = showDatePickerIdx;
+                  setDataRows((prevRows) => {
+                    const newRows = [...prevRows];
+                    newRows[idx]["datetime"] = selectedDate.toISOString();
+                    return newRows;
+                  });
+                }
+                setShowDatePickerIdx(null);
+              }}
+            />
+          )
+        ) : (
+          <Modal
+            visible={showDatePickerIdx !== null}
+            transparent
+            animationType="fade"
+            onRequestClose={onDatePickerCancel}
           >
             <View
               style={{
-                backgroundColor: "#fff",
-                borderRadius: 12,
-                padding: 20,
-                width: 300,
+                flex: 1,
+                justifyContent: "center",
                 alignItems: "center",
+                backgroundColor: "rgba(0,0,0,0.3)",
               }}
             >
-              <DateTimePicker
-                value={pickerTempValue}
-                mode="datetime"
-                display="spinner"
-                onChange={onDateChange}
-                style={{ width: 260 }}
-              />
               <View
                 style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  width: "100%",
-                  marginTop: 16,
+                  backgroundColor: "#fff",
+                  borderRadius: 12,
+                  padding: 20,
+                  width: 300,
+                  alignItems: "center",
                 }}
               >
-                <TouchableOpacity
-                  onPress={onDatePickerCancel}
-                  style={{ flex: 1, alignItems: "center" }}
+                <DateTimePicker
+                  value={pickerTempValue}
+                  mode="datetime"
+                  display="spinner"
+                  onChange={onDateChange}
+                  style={{ width: 260 }}
+                />
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    width: "100%",
+                    marginTop: 16,
+                  }}
                 >
-                  <Text
-                    style={{
-                      color: "#b22222",
-                      fontWeight: "bold",
-                      fontSize: 16,
-                    }}
+                  <TouchableOpacity
+                    onPress={onDatePickerCancel}
+                    style={{ flex: 1, alignItems: "center" }}
                   >
-                    Отмена
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={onDatePickerOk}
-                  style={{ flex: 1, alignItems: "center" }}
-                >
-                  <Text
-                    style={{
-                      color: "#800020",
-                      fontWeight: "bold",
-                      fontSize: 16,
-                    }}
+                    <Text
+                      style={{
+                        color: "#b22222",
+                        fontWeight: "bold",
+                        fontSize: 16,
+                      }}
+                    >
+                      Отмена
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={onDatePickerOk}
+                    style={{ flex: 1, alignItems: "center" }}
                   >
-                    OK
-                  </Text>
-                </TouchableOpacity>
+                    <Text
+                      style={{
+                        color: "#800020",
+                        fontWeight: "bold",
+                        fontSize: 16,
+                      }}
+                    >
+                      OK
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
-          </View>
-        </Modal>
+          </Modal>
+        )}
         <TouchableOpacity style={styles.addBtn} onPress={addRow}>
           <Text style={{ color: "#800020", fontSize: 16 }}>
             + {I18n.t("addRow")}
@@ -512,7 +555,7 @@ export default function Wizard() {
     await AsyncStorage.setItem("pumping_projects", JSON.stringify(projects));
     Alert.alert(I18n.t("success"), I18n.t("journalSaved"));
     setStep(0);
-    setDataRows([{ t: "", s: "", datetime: new Date().toISOString() }]);
+    setDataRows([{ id: generateRowId(), t: "", s: "", datetime: new Date().toISOString() }]);
     loadActiveProject();
   }
 

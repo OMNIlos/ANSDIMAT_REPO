@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="262" height="148" viewBox="0 0 262 148">
+  <g id="Group_4194" data-name="Group 4194" transform="translate(-4925 -831)">
+    <g id="Rectangle_2240" data-name="Rectangle 2240" transform="translate(4925 831)" fill="#969997" stroke="#707070" stroke-width="1">
+      <rect width="262" height="69" rx="34.5" stroke="none"/>
+      <rect x="0.5" y="0.5" width="261" height="68" rx="34" fill="none"/>
+    </g>
+    <g id="Rectangle_2241" data-name="Rectangle 2241" transform="translate(4925 910)" fill="#969997" stroke="#707070" stroke-width="1">
+      <rect width="262" height="69" rx="34.5" stroke="none"/>
+      <rect x="0.5" y="0.5" width="261" height="68" rx="34" fill="none"/>
+    </g>
+    <text id="Select_country" data-name="Select country" transform="translate(4949.501 873.145)" fill="#fff" font-size="26" font-family="SegoeUI, Segoe UI"><tspan x="0" y="0">откачка / налив</tspan></text>
+    <text id="Select_country-2" data-name="Select country" transform="translate(4949.501 952.145)" fill="#fff" font-size="26" font-family="SegoeUI, Segoe UI"><tspan x="0" y="0">восстановление</tspan></text>
+    <text id="Select_country-3" data-name="Select country" transform="translate(5149.402 873.145)" fill="#fff" font-size="26" font-family="SegoeUI, Segoe UI"><tspan x="0" y="0">+</tspan></text>
+    <text id="Select_country-4" data-name="Select country" transform="translate(5149.001 953)" fill="#fff" font-size="26" font-family="SegoeUI, Segoe UI"><tspan x="0" y="0">+</tspan></text>
+  </g>
+</svg>

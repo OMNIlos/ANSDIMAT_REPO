@@ -2,7 +2,7 @@
 import React from "react";
 import I18n from "./Localization.js";
 
-const LanguageContext = React.createContext({
+export const LanguageContext = React.createContext({
   locale: "ru",
   toggleLanguage: () => {},
 });
@@ -22,5 +22,3 @@ export const LanguageProvider = ({ children }) => {
     </LanguageContext.Provider>
   );
 };
-
-export default LanguageContext;

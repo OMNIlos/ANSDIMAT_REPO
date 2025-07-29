@@ -3,6 +3,8 @@ import { I18n } from "i18n-js";
 
 const i18n = new I18n({
   ru: {
+    // Защита авторских прав
+    copyright: "© АНСДИМАТ. Все права защищены. 1993 – 2025",
     // Навигация
     home: "Главная",
     about: "О нас",
@@ -16,9 +18,43 @@ const i18n = new I18n({
     util2: "Обработка откачек",
     toggleLang: "Переключить язык",
     homeTitle: "АНСДИМАТ",
-    // Главная страница
+    
+    // Экран загрузки
+    appSubtitle: "Анализ и обработка гидрогеологических данных",
+    
+    // Главная страница (рабочий стол)
+    welcome: "Добро пожаловать",
+    desktop: "Рабочий стол",
     search: "Поиск",
     searchButton: "Искать",
+    
+    // Описания карточек главного экрана
+    calculatorDesc: "Гидрогеологические расчеты",
+    pumpingTestDesc: "Анализ опытных откачек",
+    examplesDesc: "Обучающие материалы",
+    subscriptionDesc: "Управление подпиской",
+    settingsDesc: "Настройки приложения",
+    aboutDesc: "Информация о приложении",
+    contactDesc: "Связь с разработчиками",
+    appDescription: "Программный комплекс для анализа и обработки гидрогеологических данных",
+    
+    // Статус подписки
+    subscriptionStatus: "Статус подписки",
+    active: "Активна",
+    inactive: "Неактивна",
+    
+    // Настройки
+    settings: "Настройки",
+    settingsDescription: "Настройка внешнего вида и поведения приложения",
+    appearance: "Внешний вид",
+    theme: "Тема",
+    language: "Язык",
+    appLanguage: "Язык приложения",
+    version: "Версия",
+    developer: "Разработчик",
+    website: "Сайт",
+    change: "Изменить",
+    settingsInfo: "Изменения настроек применяются немедленно и сохраняются автоматически.",
 
     // О нас
     aboutTitle: "История АНСДИМАТ",
@@ -131,6 +167,8 @@ const i18n = new I18n({
     importProject: "Импорт проекта",
     favoriteProject: "В избранное",
     unfavoriteProject: "Убрать из избранного",
+    addToFavorites: "Добавить в избранное",
+    removeFromFavorites: "Удалить из избранного",
 
     // Wizard
     wizard: "Ввод",
@@ -147,7 +185,7 @@ const i18n = new I18n({
 
     // Test Types
     testType: "Тип теста",
-    pumpingTest: "Насосный тест",
+    pumpingTest: "Обработка откачек",
     slugTest: "Slug тест",
     packerTest: "Пакерный тест",
 
@@ -396,6 +434,8 @@ const i18n = new I18n({
     infiltrationLeakageTab: "Инфильтрационные утечки",
   },
   en: {
+    // Защита авторских прав
+    copyright: "© ANSDIMAT. All rights reserved. 1993 – 2025",
     // Navigation
     home: "Home",
     about: "About",
@@ -524,6 +564,8 @@ const i18n = new I18n({
     importProject: "Import Project",
     favoriteProject: "Add to Favorites",
     unfavoriteProject: "Remove from Favorites",
+    addToFavorites: "Add to Favorites",
+    removeFromFavorites: "Remove from Favorites",
 
     // Wizard
     wizard: "Data Entry",

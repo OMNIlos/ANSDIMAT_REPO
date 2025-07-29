@@ -1,20 +1,29 @@
 // App.tsx
-import * as React from 'react';
-import { Provider as PaperProvider } from 'react-native-paper';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { LanguageProvider } from './LanguageContext.js';
+import { ThemeProvider } from './ThemeContext.js';
 import DrawerNavigator from './navigation/DrawerNavigator.js';
-import theme from './theme.js';
-import I18n from "./Localization.js";
-import { LanguageProvider } from "./LanguageContext.js";
+import SplashScreen from './components/SplashScreen.js';
 
 export default function App() {
+  const [isLoading, setIsLoading] = React.useState(true);
+
+  const handleSplashFinish = () => {
+    setIsLoading(false);
+  };
+
   return (
-    <SafeAreaProvider>
       <LanguageProvider>
-        <PaperProvider theme={theme}>
+        <ThemeProvider>
+        <NavigationContainer>
+          {isLoading ? (
+            <SplashScreen onFinish={handleSplashFinish} />
+          ) : (
           <DrawerNavigator />
-        </PaperProvider>
+          )}
+        </NavigationContainer>
+        </ThemeProvider>
       </LanguageProvider>
-    </SafeAreaProvider>
   );
 }

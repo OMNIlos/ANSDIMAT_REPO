@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from "react";
+import React, { useState, useEffect, useContext, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -10,100 +10,278 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import I18n from "../../Localization";
-import LanguageContext from "../../LanguageContext";
+import { LanguageContext } from "../../LanguageContext";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import * as MediaLibrary from "expo-media-library";
 import { captureRef } from "react-native-view-shot";
-import SubscriptionManager from "../../utils/SubscriptionManager";
+import { SubscriptionManager } from "../../utils/SubscriptionManager";
 import PremiumBanner from "../../components/PremiumBanner";
+import { 
+  useTheme, 
+  Card, 
+  Surface, 
+  Button,
+  IconButton,
+  Divider,
+  ProgressBar
+} from "react-native-paper";
+import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 
+// Компонент карточки экспорта (мемоизированный)
+const ExportCard = React.memo(({ 
+  title, 
+  description, 
+  icon, 
+  iconColor, 
+  onPress, 
+  isPremium = false, 
+  hasPremiumAccess = false,
+  theme 
+}) => {
+  if (isPremium && !hasPremiumAccess) {
+    return (
+      <Card style={[styles.exportCard, { backgroundColor: theme.colors.surfaceVariant }]}>
+        <Card.Content>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardIconContainer}>
+              <MaterialCommunityIcons 
+                name={icon} 
+                size={24} 
+                color={theme.colors.outline} 
+              />
+            </View>
+            <View style={styles.cardTextContainer}>
+              <Text style={[styles.cardTitle, { color: theme.colors.onSurfaceVariant }]}>
+                {title}
+              </Text>
+              <Text style={[styles.cardDescription, { color: theme.colors.onSurfaceVariant }]}>
+                {description}
+              </Text>
+            </View>
+            <MaterialIcons name="lock" size={20} color={theme.colors.outline} />
+          </View>
+          
+          <Divider style={{ marginVertical: 12 }} />
+          
+          <View style={styles.premiumContainer}>
+            <MaterialIcons name="star" size={16} color="#FFD700" />
+            <Text style={[styles.premiumText, { color: theme.colors.onSurfaceVariant }]}>
+              Премиум функция
+            </Text>
+          </View>
+        </Card.Content>
+      </Card>
+    );
+  }
+
+  return (
+    <Card style={[styles.exportCard, { backgroundColor: theme.colors.surface }]}>
+      <Card.Content>
+        <TouchableOpacity 
+          style={styles.cardTouchable} 
+          onPress={onPress}
+          activeOpacity={0.7}
+        >
+          <View style={styles.cardHeader}>
+            <View style={[styles.cardIconContainer, { backgroundColor: iconColor + '20' }]}>
+              <MaterialCommunityIcons 
+                name={icon} 
+                size={24} 
+                color={iconColor} 
+              />
+            </View>
+            <View style={styles.cardTextContainer}>
+              <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
+                {title}
+              </Text>
+              <Text style={[styles.cardDescription, { color: theme.colors.onSurfaceVariant }]}>
+                {description}
+              </Text>
+            </View>
+            <MaterialIcons name="chevron-right" size={24} color={theme.colors.primary} />
+          </View>
+        </TouchableOpacity>
+      </Card.Content>
+    </Card>
+  );
+});
+
+// Компонент статистики проекта
+const ProjectStats = React.memo(({ project, journals, theme }) => {
+  const formatFileSize = useCallback((bytes) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }, []);
+
+  const estimatedSize = useMemo(() => {
+    const dataSize = JSON.stringify(project).length;
+    return formatFileSize(dataSize);
+  }, [project, formatFileSize]);
+
+  const totalMeasurements = useMemo(() => {
+    return journals.reduce((total, journal) => {
+      return total + (journal.dataRows?.length || 0);
+    }, 0);
+  }, [journals]);
+
+  return (
+    <Card style={[styles.statsCard, { backgroundColor: theme.colors.primaryContainer }]}>
+      <Card.Content>
+        <View style={styles.statsHeader}>
+          <MaterialCommunityIcons 
+            name="chart-box" 
+            size={28} 
+            color={theme.colors.primary} 
+          />
+          <Text style={[styles.statsTitle, { color: theme.colors.primary }]}>
+            Статистика проекта
+          </Text>
+        </View>
+
+        <View style={styles.statsGrid}>
+          <View style={styles.statItem}>
+            <Text style={[styles.statValue, { color: theme.colors.onPrimaryContainer }]}>
+              {journals.length}
+            </Text>
+            <Text style={[styles.statLabel, { color: theme.colors.onPrimaryContainer }]}>
+              Журналов
+            </Text>
+          </View>
+          
+          <View style={styles.statItem}>
+            <Text style={[styles.statValue, { color: theme.colors.onPrimaryContainer }]}>
+              {totalMeasurements}
+            </Text>
+            <Text style={[styles.statLabel, { color: theme.colors.onPrimaryContainer }]}>
+              Измерений
+            </Text>
+          </View>
+          
+          <View style={styles.statItem}>
+            <Text style={[styles.statValue, { color: theme.colors.onPrimaryContainer }]}>
+              {estimatedSize}
+            </Text>
+            <Text style={[styles.statLabel, { color: theme.colors.onPrimaryContainer }]}>
+              Размер данных
+            </Text>
+          </View>
+        </View>
+      </Card.Content>
+    </Card>
+  );
+});
+
+// Основной компонент
 export default function ExportManager() {
+  const theme = useTheme();
+  const { locale } = useContext(LanguageContext);
+  
+  // Состояние
   const [activeProject, setActiveProject] = useState(null);
   const [journals, setJournals] = useState([]);
   const [hasPremiumAccess, setHasPremiumAccess] = useState(false);
-  const { locale } = useContext(LanguageContext);
+  const [isExporting, setIsExporting] = useState(false);
 
-  // Перезагружаем данные при фокусе на экране
+  // Загрузка данных при фокусе
   useFocusEffect(
     React.useCallback(() => {
-      loadActiveProject();
-      checkPremiumAccess();
+      async function fetchData() {
+        await loadActiveProject();
+        await checkPremiumAccess();
+      }
+      fetchData();
     }, [])
   );
 
-  async function checkPremiumAccess() {
+  const checkPremiumAccess = useCallback(async () => {
     const hasAccess = await SubscriptionManager.hasPremiumAccess();
     setHasPremiumAccess(hasAccess);
-  }
+  }, []);
 
-  async function loadActiveProject() {
+  const loadActiveProject = useCallback(async () => {
+    try {
     const id = await AsyncStorage.getItem("pumping_active_project_id");
     if (!id) {
       setActiveProject(null);
       setJournals([]);
       return;
     }
+      
     const projectsRaw = await AsyncStorage.getItem("pumping_projects");
     if (!projectsRaw) return;
+      
     const projects = JSON.parse(projectsRaw);
-    const project = projects.find((p) => p.id === id);
+      const project = projects.find((p) => p.id.toString() === id.toString());
+      
     setActiveProject(project || null);
-    setJournals(project && project.journals ? project.journals : []);
+      setJournals(project?.journals || []);
+    } catch (error) {
+      console.error("Error loading active project:", error);
+      setActiveProject(null);
+      setJournals([]);
   }
+  }, []);
 
-  async function exportProjectToJSON() {
+  const exportProjectToJSON = useCallback(async () => {
     if (!activeProject) {
-      Alert.alert(I18n.t("error"), I18n.t("noActiveProject"));
+      Alert.alert("Ошибка", "Нет активного проекта");
       return;
     }
+    
+    setIsExporting(true);
     try {
       const projectData = JSON.stringify(activeProject, null, 2);
-      const fileUri =
-        FileSystem.cacheDirectory + `${activeProject.name || "project"}.json`;
+      const fileName = `${activeProject.name.replace(/[^a-zA-Z0-9]/g, "_")}_${Date.now()}.json`;
+      const fileUri = FileSystem.cacheDirectory + fileName;
+      
       await FileSystem.writeAsStringAsync(fileUri, projectData, {
         encoding: FileSystem.EncodingType.UTF8,
       });
-      await Sharing.shareAsync(fileUri, { mimeType: "application/json" });
+      
+      await Sharing.shareAsync(fileUri, { 
+        mimeType: "application/json",
+        dialogTitle: `Экспорт проекта: ${activeProject.name}`
+      });
+      
+      Alert.alert("Успех", "Проект экспортирован!");
     } catch (error) {
-      Alert.alert(I18n.t("error"), I18n.t("exportError"));
+      console.error("Export error:", error);
+      Alert.alert("Ошибка", "Не удалось экспортировать проект");
+    } finally {
+      setIsExporting(false);
     }
-  }
+  }, [activeProject]);
 
-  async function exportJournalToCSV() {
+  const exportJournalToCSV = useCallback(async () => {
     if (!hasPremiumAccess) {
-      Alert.alert(I18n.t("premiumFeature"), I18n.t("premiumFeatureCSV"), [
-        { text: I18n.t("cancel"), style: "cancel" },
+      Alert.alert("Премиум функция", "Экспорт в CSV доступен только в премиум версии", [
+        { text: "Отмена", style: "cancel" },
         {
-          text: I18n.t("goToPremium"),
-          onPress: () => {
-            // Здесь можно добавить навигацию к экрану подписки
-            Alert.alert(
-              I18n.t("subscription"),
-              I18n.t("subscriptionNavigation")
-            );
-          },
+          text: "Получить премиум",
+          onPress: () => Alert.alert("Подписка", "Переход к экрану подписки"),
         },
       ]);
       return;
     }
 
     if (!activeProject || !journals.length) {
-      Alert.alert(I18n.t("error"), I18n.t("noDataToExport"));
+      Alert.alert("Ошибка", "Нет данных для экспорта");
       return;
     }
+    
+    setIsExporting(true);
     try {
-      let csvContent = `${I18n.t("journal")},${I18n.t("created")},${I18n.t(
-        "testType"
-      )},${I18n.t("boundaryConditions")}\n`;
+      let csvContent = "Журнал,Дата создания,Тип испытания,Граничные условия\n";
+      
       journals.forEach((journal, idx) => {
-        csvContent += `Journal ${idx + 1},${new Date(
-          journal.date
-        ).toLocaleDateString()},${journal.testType},${
-          journal.boundaryConditions
-        }\n`;
-        if (journal.dataRows && journal.dataRows.length) {
-          csvContent += `${I18n.t("time")},${I18n.t("drawdown")}\n`;
+        csvContent += `Журнал ${idx + 1},${new Date(journal.date).toLocaleDateString()},${journal.testType},${journal.boundary}\n`;
+        
+        if (journal.dataRows?.length) {
+          csvContent += "Время,Понижение\n";
           journal.dataRows.forEach((row) => {
             if (row.t && row.s) {
               csvContent += `${row.t},${row.s}\n`;
@@ -112,139 +290,171 @@ export default function ExportManager() {
         }
         csvContent += "\n";
       });
-      const fileUri =
-        FileSystem.cacheDirectory + `${activeProject.name || "journals"}.csv`;
+      
+      const fileName = `${activeProject.name.replace(/[^a-zA-Z0-9]/g, "_")}_journals_${Date.now()}.csv`;
+      const fileUri = FileSystem.cacheDirectory + fileName;
+      
       await FileSystem.writeAsStringAsync(fileUri, csvContent, {
         encoding: FileSystem.EncodingType.UTF8,
       });
-      await Sharing.shareAsync(fileUri, { mimeType: "text/csv" });
+      
+      await Sharing.shareAsync(fileUri, { 
+        mimeType: "text/csv",
+        dialogTitle: `Экспорт журналов: ${activeProject.name}`
+      });
+      
+      Alert.alert("Успех", "Журналы экспортированы в CSV!");
     } catch (error) {
-      Alert.alert(I18n.t("error"), I18n.t("exportError"));
+      console.error("CSV export error:", error);
+      Alert.alert("Ошибка", "Не удалось экспортировать журналы");
+    } finally {
+      setIsExporting(false);
     }
-  }
+  }, [activeProject, journals, hasPremiumAccess]);
 
-  async function exportAnalysisToPDF() {
+  const exportAnalysisToPDF = useCallback(async () => {
     if (!hasPremiumAccess) {
-      Alert.alert(I18n.t("premiumFeature"), I18n.t("premiumFeaturePDF"), [
-        { text: I18n.t("cancel"), style: "cancel" },
+      Alert.alert("Премиум функция", "Экспорт анализа в PDF доступен только в премиум версии", [
+        { text: "Отмена", style: "cancel" },
         {
-          text: I18n.t("goToPremium"),
-          onPress: () => {
-            // Здесь можно добавить навигацию к экрану подписки
-            Alert.alert(
-              I18n.t("subscription"),
-              I18n.t("subscriptionNavigation")
-            );
-          },
+          text: "Получить премиум", 
+          onPress: () => Alert.alert("Подписка", "Переход к экрану подписки"),
         },
       ]);
       return;
     }
 
     if (!activeProject || !journals.length) {
-      Alert.alert(I18n.t("error"), I18n.t("noDataToExport"));
+      Alert.alert("Ошибка", "Нет данных для экспорта");
       return;
     }
 
-    Alert.alert(I18n.t("exportAnalysisPdf"), I18n.t("exportAnalysisPdfDesc"), [
-      { text: I18n.t("ok") },
+    Alert.alert("В разработке", "Функция экспорта анализа в PDF находится в разработке и будет доступна в ближайших обновлениях.", [
+      { text: "Понятно" }
     ]);
-  }
+  }, [activeProject, journals, hasPremiumAccess]);
 
+  // Проверка состояний
   if (!activeProject) {
     return (
-      <View style={styles.center}>
-        <Text style={{ color: "#b22222", fontSize: 16 }}>
-          {I18n.t("noActiveProject")}
+      <View style={styles.centerContainer}>
+        <MaterialCommunityIcons name="folder-open" size={64} color={theme.colors.outline} />
+        <Text style={[styles.emptyTitle, { color: theme.colors.onSurface }]}>
+          Нет активного проекта
         </Text>
-        <Text style={{ marginTop: 8, textAlign: "center" }}>
-          {I18n.t("selectProjectFirst")}
+        <Text style={[styles.emptySubtitle, { color: theme.colors.onSurfaceVariant }]}>
+          Выберите проект в разделе "Управление проектами"
         </Text>
       </View>
     );
   }
-
+  
   return (
-    <ScrollView key={locale} style={styles.container}>
-      <Text style={styles.title}>{I18n.t("exportData")}</Text>
+    <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      {/* Заголовок */}
+      <Surface style={[styles.headerCard, { backgroundColor: theme.colors.tertiaryContainer }]}>
+        <View style={styles.headerContent}>
+          <MaterialCommunityIcons name="export" size={32} color={theme.colors.tertiary} />
+          <View style={styles.headerText}>
+            <Text style={[styles.headerTitle, { color: theme.colors.tertiary }]}>
+              Экспорт результатов
+        </Text>
+            <Text style={[styles.headerSubtitle, { color: theme.colors.onTertiaryContainer }]}>
+              Проект: {activeProject.name}
+        </Text>
+          </View>
+        </View>
+      </Surface>
 
-      <View style={styles.projectInfo}>
-        <Text style={styles.projectName}>
-          {I18n.t("project")}: {activeProject.name}
-        </Text>
-        <Text style={styles.projectDate}>
-          {I18n.t("created")}:{" "}
-          {new Date(activeProject.createdAt).toLocaleDateString()}
-        </Text>
-        <Text style={styles.journalCount}>
-          {I18n.t("journalsCount")}: {journals.length}
+      {/* Статистика проекта */}
+      <ProjectStats 
+        project={activeProject} 
+        journals={journals} 
+        theme={theme} 
+      />
+
+      {/* Прогресс бар при экспорте */}
+      {isExporting && (
+        <Card style={[styles.progressCard, { backgroundColor: theme.colors.surface }]}>
+          <Card.Content>
+            <View style={styles.progressContainer}>
+              <MaterialCommunityIcons 
+                name="loading" 
+                size={20} 
+                color={theme.colors.primary} 
+              />
+              <Text style={[styles.progressText, { color: theme.colors.onSurface }]}>
+                Экспортирование...
         </Text>
       </View>
+            <ProgressBar 
+              indeterminate 
+              color={theme.colors.primary} 
+              style={{ marginTop: 8 }}
+            />
+          </Card.Content>
+        </Card>
+      )}
 
+      {/* Карточки экспорта */}
       <View style={styles.exportSection}>
-        <Text style={styles.sectionTitle}>{I18n.t("exportProjectJson")}</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
+          Доступные форматы экспорта
+        </Text>
 
-        <TouchableOpacity
-          style={styles.exportButton}
+        <ExportCard
+          title="Экспорт проекта (JSON)"
+          description="Полный экспорт проекта со всеми журналами и данными"
+          icon="code-json"
+          iconColor={theme.colors.primary}
           onPress={exportProjectToJSON}
-        >
-          <Text style={styles.buttonText}>
-            📁 {I18n.t("exportProjectJson")}
-          </Text>
-          <Text style={styles.buttonDescription}>
-            {I18n.t("exportProjectJsonDesc")}
-          </Text>
-        </TouchableOpacity>
+          theme={theme}
+        />
 
-        {hasPremiumAccess ? (
-          <TouchableOpacity
-            style={styles.exportButton}
+        <ExportCard
+          title="Экспорт журналов (CSV)"
+          description="Экспорт всех журналов в формате CSV для анализа в Excel"
+          icon="file-delimited"
+          iconColor={theme.colors.secondary}
             onPress={exportJournalToCSV}
-          >
-            <Text style={styles.buttonText}>
-              📊 {I18n.t("exportJournalsCsv")}
-            </Text>
-            <Text style={styles.buttonDescription}>
-              {I18n.t("exportJournalsCsvDesc")}
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <PremiumBanner
-            title={I18n.t("exportJournalsCsv")}
-            description={I18n.t("premiumOnly")}
-            style={styles.premiumBanner}
+          isPremium={true}
+          hasPremiumAccess={hasPremiumAccess}
+          theme={theme}
+        />
+
+        <ExportCard
+          title="Экспорт анализа (PDF)"
+          description="Подробный отчет с графиками и результатами анализа"
+          icon="file-pdf-box"
+          iconColor={theme.colors.tertiary}
+          onPress={exportAnalysisToPDF}
+          isPremium={true}
+          hasPremiumAccess={hasPremiumAccess}
+          theme={theme}
           />
-        )}
       </View>
 
-      <View style={styles.exportSection}>
-        <Text style={styles.sectionTitle}>{I18n.t("export")}</Text>
-
-        {hasPremiumAccess ? (
-          <TouchableOpacity
-            style={styles.exportButton}
-            onPress={exportAnalysisToPDF}
-          >
-            <Text style={styles.buttonText}>
-              📄 {I18n.t("exportAnalysisPdf")}
+      {/* Информационная карточка */}
+      <Card style={[styles.infoCard, { backgroundColor: theme.colors.surfaceVariant }]}>
+        <Card.Content>
+          <View style={styles.infoHeader}>
+            <MaterialIcons name="info" size={24} color={theme.colors.primary} />
+            <Text style={[styles.infoTitle, { color: theme.colors.primary }]}>
+              Информация об экспорте
             </Text>
-            <Text style={styles.buttonDescription}>
-              {I18n.t("exportAnalysisPdfDesc")}
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <PremiumBanner
-            title={I18n.t("exportAnalysisPdf")}
-            description={I18n.t("premiumOnly")}
-            style={styles.premiumBanner}
-          />
-        )}
       </View>
 
-      <View style={styles.infoBox}>
-        <Text style={styles.infoTitle}>ℹ️ {I18n.t("information")}</Text>
-        <Text style={styles.infoText}>{I18n.t("infoText")}</Text>
-      </View>
+          <Text style={[styles.infoText, { color: theme.colors.onSurfaceVariant }]}>
+            • JSON формат сохраняет полную структуру данных{'\n'}
+            • CSV формат подходит для анализа в электронных таблицах{'\n'}
+            • PDF отчеты содержат графики и детальный анализ{'\n'}
+            • Все экспортированные файлы можно импортировать обратно
+          </Text>
+        </Card.Content>
+      </Card>
+
+      {/* Отступ снизу */}
+      <View style={{ height: 100 }} />
     </ScrollView>
   );
 }
@@ -253,41 +463,76 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-    backgroundColor: "#fff",
   },
-  center: {
+  centerContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
   },
-  title: {
-    fontSize: 24,
+  emptyTitle: {
+    fontSize: 20,
     fontWeight: "bold",
-    color: "#800020",
+    marginTop: 10,
+  },
+  emptySubtitle: {
+    fontSize: 14,
     textAlign: "center",
-    marginBottom: 20,
+    marginTop: 5,
   },
-  projectInfo: {
-    backgroundColor: "#f9f9f9",
-    padding: 16,
+  headerCard: {
     borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  headerContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  headerText: {
+    marginLeft: 10,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    marginTop: 2,
+  },
+  statsCard: {
+    borderRadius: 12,
+    padding: 16,
     marginBottom: 20,
   },
-  projectName: {
+  statsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  statsTitle: {
     fontSize: 18,
     fontWeight: "bold",
-    color: "#800020",
-    marginBottom: 4,
+    marginLeft: 8,
   },
-  projectDate: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 2,
+  statsGrid: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    flexWrap: "wrap",
   },
-  journalCount: {
-    fontSize: 14,
-    color: "#666",
+  statItem: {
+    alignItems: "center",
+    marginHorizontal: 10,
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: "bold",
+  },
+  statLabel: {
+    fontSize: 12,
+    marginTop: 4,
   },
   exportSection: {
     marginBottom: 24,
@@ -295,46 +540,83 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#800020",
     marginBottom: 12,
   },
-  exportButton: {
-    backgroundColor: "#fff",
-    borderWidth: 2,
-    borderColor: "#800020",
+  exportCard: {
     borderRadius: 12,
-    padding: 16,
     marginBottom: 12,
+    overflow: "hidden",
   },
-  buttonText: {
+  cardTouchable: {
+    padding: 0,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  cardIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  cardTextContainer: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  cardTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#800020",
-    marginBottom: 4,
   },
-  buttonDescription: {
+  cardDescription: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  premiumContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+  },
+  premiumText: {
+    fontSize: 12,
+    marginLeft: 5,
+  },
+  progressCard: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+  },
+  progressContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  progressText: {
     fontSize: 14,
-    color: "#666",
+    fontWeight: "600",
+    marginLeft: 8,
   },
-  infoBox: {
-    backgroundColor: "#f3eaea",
+  infoCard: {
     borderRadius: 12,
     padding: 16,
     marginTop: 20,
     marginBottom: 100,
   },
+  infoHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
   infoTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#800020",
-    marginBottom: 8,
+    marginLeft: 8,
   },
   infoText: {
     fontSize: 14,
-    color: "#333",
     lineHeight: 20,
-  },
-  premiumBanner: {
-    marginBottom: 12,
   },
 });

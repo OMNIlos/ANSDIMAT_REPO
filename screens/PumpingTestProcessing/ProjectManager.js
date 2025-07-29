@@ -10,13 +10,15 @@ import {
   TextInput,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { MaterialIcons } from '@expo/vector-icons';
+import { useTheme } from "react-native-paper";
 import I18n from "../../Localization";
-import LanguageContext from "../../LanguageContext";
+import { LanguageContext } from "../../LanguageContext";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import Svg, { Path } from "react-native-svg";
-import SubscriptionManager from "../../utils/SubscriptionManager";
+import { SubscriptionManager } from "../../utils/SubscriptionManager";
+import { useFocusEffect } from '@react-navigation/native';
 
 function formatDate(date) {
   const d = new Date(date);
@@ -28,19 +30,33 @@ function formatDate(date) {
   return `${day}.${month}.${year} ${hours}:${minutes}`;
 }
 
-export default function ProjectManager() {
+export default function ProjectManager({ route }) {
   const [projects, setProjects] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [hasPremiumAccess, setHasPremiumAccess] = useState(false);
+  const [showMenuForProject, setShowMenuForProject] = useState(null);
   const { locale } = useContext(LanguageContext);
+  const theme = useTheme();
 
   useEffect(() => {
     loadProjects();
     loadActive();
     checkPremiumAccess();
+    
+    // Автоматически открываем модальное окно создания проекта, если передан параметр
+    if (route?.params?.showCreateModal) {
+      setShowCreateModal(true);
+    }
   }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadProjects();
+      loadActive();
+    }, [])
+  );
 
   async function checkPremiumAccess() {
     const hasAccess = await SubscriptionManager.hasPremiumAccess();
@@ -60,7 +76,8 @@ export default function ProjectManager() {
   async function loadActive() {
     try {
       const id = await AsyncStorage.getItem("pumping_active_project_id");
-      setActiveId(id);
+      // Приводим к строке для корректного сравнения
+      setActiveId(id ? id.toString() : null);
     } catch (error) {
       console.error("Error loading active project:", error);
       setActiveId(null);
@@ -95,18 +112,34 @@ export default function ProjectManager() {
   }
 
   async function handleCreateProject() {
-    if (!newProjectName.trim()) return;
-    const newProject = {
-      id: Date.now().toString(),
-      name: newProjectName.trim(),
-      created: Date.now(),
-      favorite: false,
-      journals: [],
-    };
-    const newProjects = [newProject, ...projects];
-    await saveProjects(newProjects);
-    setNewProjectName("");
-    setShowCreateModal(false);
+    if (!newProjectName.trim()) {
+      Alert.alert(I18n.t("error"), "Введите название проекта");
+      return;
+    }
+
+    try {
+      const newProject = {
+        id: Date.now(),
+        name: newProjectName.trim(),
+        createdAt: new Date().toISOString(),
+        lastAccessDate: new Date().toISOString(),
+        journals: [],
+        favorite: false,
+      };
+
+      const updatedProjects = [...projects, newProject];
+      await saveProjects(updatedProjects);
+      await AsyncStorage.setItem("pumping_active_project_id", newProject.id.toString());
+      
+      setActiveId(newProject.id.toString());
+      setNewProjectName("");
+      setShowCreateModal(false);
+      
+      Alert.alert(I18n.t("success"), I18n.t("projectCreated"));
+    } catch (error) {
+      console.error("Error creating project:", error);
+      Alert.alert(I18n.t("error"), "Не удалось создать проект");
+    }
   }
 
   function deleteProject(id) {
@@ -126,6 +159,7 @@ export default function ProjectManager() {
               await AsyncStorage.removeItem("pumping_active_project_id");
               setActiveId(null);
             }
+            setShowMenuForProject(null);
           },
         },
       ]
@@ -137,6 +171,7 @@ export default function ProjectManager() {
       p.id === id ? { ...p, favorite: !p.favorite } : p
     );
     saveProjects(newProjects);
+    setShowMenuForProject(null);
   }
 
   async function exportProject(id) {
@@ -168,6 +203,7 @@ export default function ProjectManager() {
         mimeType: "application/json",
         dialogTitle: `${I18n.t("exportProject")}: ${project.name}`,
       });
+      setShowMenuForProject(null);
     } catch (error) {
       console.error("Error exporting project:", error);
       Alert.alert(I18n.t("error"), I18n.t("exportError"));
@@ -211,269 +247,236 @@ export default function ProjectManager() {
   }
 
   async function selectProject(id) {
-    setActiveId(id);
-    await AsyncStorage.setItem("pumping_active_project_id", id);
+    try {
+      if (!id) {
+        console.warn('selectProject: missing project id');
+        return;
+      }
+      
+      // Приводим ID к строке для корректного сравнения
+      const searchId = id.toString();
+      
+      // Проверяем, что проект существует
+      const project = projects.find(p => p.id.toString() === searchId);
+      if (!project) {
+        console.warn('selectProject: project not found with id:', searchId);
+        Alert.alert("Ошибка", "Проект не найден");
+        return;
+      }
+      
+      console.log('Selecting project:', project.name, 'with ID:', searchId);
+      
+      // Обновляем состояние интерфейса сразу
+      setActiveId(searchId);
+      
+      // Сохраняем в AsyncStorage
+      await AsyncStorage.setItem("pumping_active_project_id", searchId);
+      
+      // Обновляем lastAccessDate для проекта
+      const updatedProjects = projects.map(p => 
+        p.id.toString() === searchId 
+          ? { ...p, lastAccessDate: new Date().toISOString() }
+          : p
+      );
+      await saveProjects(updatedProjects);
+      
+      console.log('Project selected successfully:', project.name);
+      Alert.alert("Успех", `Проект "${project.name}" выбран`);
+    } catch (error) {
+      console.error('Error selecting project:', error);
+      Alert.alert("Ошибка", "Ошибка при выборе проекта");
+    }
   }
 
-  return (
-    <View key={locale} style={{ flex: 1, padding: 16 }}>
-      <View
-        style={{
-          flexDirection: "column",
-          marginBottom: 12,
-          gap: 8,
-        }}
+  const MenuModal = ({ projectId, visible, onClose }) => {
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return null;
+
+    return (
+      <Modal
+        visible={visible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={onClose}
       >
-        <TouchableOpacity style={styles.button} onPress={createProject}>
-          <Text style={styles.buttonText}>{I18n.t("createProject")}</Text>
+        <TouchableOpacity 
+          style={styles.modalOverlay} 
+          activeOpacity={1} 
+          onPressOut={onClose}
+        >
+          <View style={[styles.menuContainer, { backgroundColor: theme.colors.surface }]}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => toggleFavorite(projectId)}
+            >
+              <MaterialIcons 
+                name={project.favorite ? "star" : "star-border"} 
+                size={20} 
+                color={project.favorite ? "#FFD700" : theme.colors.text} 
+              />
+              <Text style={[styles.menuText, { color: theme.colors.text }]}>
+                {project.favorite ? I18n.t("removeFromFavorites") : I18n.t("addToFavorites")}
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => exportProject(projectId)}
+            >
+              <MaterialIcons name="file-download" size={20} color={theme.colors.text} />
+              <Text style={[styles.menuText, { color: theme.colors.text }]}>
+                {I18n.t("exportProject")}
+              </Text>
+            </TouchableOpacity>
+            
+            <View style={[styles.menuDivider, { backgroundColor: theme.colors.border }]} />
+            
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => deleteProject(projectId)}
+            >
+              <MaterialIcons name="delete" size={20} color="#FF4444" />
+              <Text style={[styles.menuText, { color: "#FF4444" }]}>
+                {I18n.t("deleteProject")}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.button} onPress={importProject}>
-          <Text style={styles.buttonText}>{I18n.t("importProject")}</Text>
+      </Modal>
+    );
+  };
+
+  return (
+    <View key={locale} style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <View style={styles.buttonsContainer}>
+        <TouchableOpacity 
+          style={[styles.actionButton, { backgroundColor: theme.colors.primary }]} 
+          onPress={createProject}
+        >
+          <MaterialIcons name="add" size={20} color={theme.colors.white} />
+          <Text style={[styles.buttonText, { color: theme.colors.white }]}>
+            {I18n.t("createProject")}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.actionButton, { backgroundColor: theme.colors.secondary }]} 
+          onPress={importProject}
+        >
+          <MaterialIcons name="file-upload" size={20} color={theme.colors.white} />
+          <Text style={[styles.buttonText, { color: theme.colors.white }]}>
+            {I18n.t("importProject")}
+          </Text>
         </TouchableOpacity>
       </View>
+
       <FlatList
         data={projects}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.id.toString()}
         ListEmptyComponent={
-          <Text style={{ textAlign: "center", marginTop: 40 }}>
-            {I18n.t("noProjects")}
-          </Text>
+          <View style={styles.emptyContainer}>
+            <MaterialIcons name="folder-open" size={64} color={theme.colors.textSecondary} />
+            <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
+              {I18n.t("noProjects")}
+            </Text>
+          </View>
         }
         renderItem={({ item }) => (
-          <View
-            style={[
-              styles.projectItem,
-              item.id === activeId && styles.activeProject,
-            ]}
-          >
-            {/* Первая строка: название проекта */}
-            <View style={{ marginBottom: 8 }}>
-              <Text style={{ color: "#666", fontSize: 12, marginBottom: 2 }}>
-                {I18n.t("projectName")}:
-              </Text>
-              <Text
-                style={{
-                  fontWeight: "bold",
-                  fontSize: 16,
-                  flexWrap: "nowrap",
-                }}
-                numberOfLines={1}
-              >
-                {item.name}
-              </Text>
-            </View>
-
-            {/* Вторая строка: кнопки и информация */}
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              {/* Левая часть: кнопки */}
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                }}
-              >
-                <TouchableOpacity
-                  onPress={() => toggleFavorite(item.id)}
-                  style={{ padding: 4 }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 20,
-                      color: item.favorite ? "#b22222" : "#aaa",
-                    }}
-                  >
-                    ★
+          <View style={[
+            styles.projectCard,
+            { backgroundColor: theme.colors.surface },
+            item.id.toString() === activeId && { borderColor: theme.colors.primary, borderWidth: 2 }
+          ]}>
+            {/* Заголовок проекта */}
+            <View style={styles.projectHeader}>
+              <View style={styles.projectInfo}>
+                <View style={styles.projectNameRow}>
+                  {item.favorite && (
+                    <MaterialIcons name="star" size={16} color="#FFD700" style={styles.favoriteIcon} />
+                  )}
+                  <Text style={[styles.projectName, { color: theme.colors.text }]} numberOfLines={1}>
+                    {item.name}
                   </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => exportProject(item.id)}
-                  style={{ padding: 4, marginLeft: 4 }}
-                >
-                  <Svg
-                    width="30"
-                    height="30"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <Path
-                      fillRule="evenodd"
-                      clipRule="evenodd"
-                      d="M3.89999 12.9845C3.07157 12.9845 2.39999 12.3129 2.39999 11.4845L2.39999 8.03632C2.39999 7.20789 3.07157 6.53632 3.89999 6.53632L4.67499 6.53632C4.95114 6.53632 5.17499 6.76017 5.17499 7.03632C5.17499 7.31246 4.95114 7.53632 4.67499 7.53632L3.89999 7.53632C3.62385 7.53632 3.39999 7.76017 3.39999 8.03632L3.39999 11.4845C3.39999 11.7606 3.62385 11.9845 3.89999 11.9845L10.1 11.9845C10.3761 11.9845 10.6 11.7606 10.6 11.4845L10.6 8.03632C10.6 7.76017 10.3761 7.53632 10.1 7.53632L9.32499 7.53632C9.04885 7.53632 8.82499 7.31246 8.82499 7.03632C8.82499 6.76017 9.04885 6.53632 9.32499 6.53632L10.1 6.53632C10.9284 6.53632 11.6 7.20789 11.6 8.03632L11.6 11.4845C11.6 12.3129 10.9284 12.9845 10.1 12.9845L3.89999 12.9845Z"
-                      fill="black"
-                    />
-                    <Path
-                      fillRule="evenodd"
-                      clipRule="evenodd"
-                      d="M6.99999 9.01553C7.27613 9.01553 7.49999 8.79167 7.49999 8.51553L7.49998 2.58317L9.99445 4.85117C10.1988 5.03693 10.515 5.0219 10.7008 4.81758C10.8865 4.61326 10.8715 4.29704 10.6672 4.11127L7.46632 1.20102C7.19346 0.952933 6.77646 0.953808 6.50464 1.20303L3.33127 4.11268C3.12773 4.2993 3.11402 4.61559 3.30064 4.81912C3.48726 5.02266 3.80355 5.03637 4.00709 4.84975L6.49998 2.56403L6.49999 8.51553C6.49999 8.79168 6.72385 9.01553 6.99999 9.01553Z"
-                      fill="black"
-                    />
-                  </Svg>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => deleteProject(item.id)}
-                  style={{ padding: 4, marginLeft: 4 }}
-                >
-                  <Svg
-                    width="22"
-                    height="22"
-                    viewBox="0 0 100 100"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <Path
-                      d="m87.281 27.238-5.1328 59.711c-0.51563 5.9805-5.4961 10.551-11.48 10.551h-41.336c-5.9844 0-10.969-4.5703-11.48-10.551l-5.1328-59.711h-7.4258c-1.543 0-2.793-1.25-2.793-2.793 0-1.543 1.25-2.793 2.793-2.793h21.938l1.4062-9.3398c0.42578-2.8281 1.8359-5.2812 3.8672-7.0312 2.0273-1.7461 4.6641-2.7773 7.5273-2.7773h19.934c5.7344 0 10.543 4.1523 11.395 9.8125l1.4062 9.3398h21.938c1.543 0 2.7969 1.25 2.7969 2.793s-1.2539 2.793-2.7969 2.793h-7.4258zm-48.805 15.426v33.82c0 1.543 1.25 2.793 2.793 2.793s2.793-1.25 2.793-2.793v-33.82c0-1.543-1.25-2.7969-2.793-2.7969s-2.793 1.2539-2.793 2.7969zm17.457 0v33.82c0 1.543 1.25 2.793 2.793 2.793 1.543 0 2.793-1.25 2.793-2.793v-33.82c0-1.543-1.25-2.7969-2.793-2.7969-1.543 0-2.793 1.2539-2.793 2.7969zm-23.055-21.012h34.242l-1.2812-8.5117c-0.44141-2.9375-2.8945-5.0508-5.8711-5.0508h-19.934c-1.4844 0-2.8477 0.52344-3.8867 1.4219-1.0391 0.91016-1.7578 2.1367-1.9844 3.6328l-1.2812 8.5117zm-14.555 5.5859 5.0938 59.254c0.26562 3.0781 2.8086 5.418 5.9141 5.418h41.336c3.1094 0 5.6523-2.3398 5.9141-5.418l5.0938-59.254z"
-                      fill-rule="evenodd"
-                      clip-rule="evenodd"
-                      fill="black"
-                    />
-                  </Svg>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => selectProject(item.id)}
-                  style={{
-                    paddingHorizontal: 8,
-                    paddingVertical: 4,
-                    marginLeft: 8,
-                    backgroundColor:
-                      item.id === activeId ? "#800020" : "#f0f0f0",
-                    borderRadius: 6,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      color: item.id === activeId ? "#fff" : "#222",
-                      fontWeight: "600",
-                    }}
-                  >
-                    {I18n.t("selectProject")}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "flex-end",
-                alignItems: "center",
-              }}
-            >
-              {/* Правая часть: дата и статус */}
-              <View style={{ alignItems: "flex-end" }}>
-                <Text
-                  style={{
-                    color: "#888",
-                    fontSize: 11,
-                    textAlign: "right",
-                    marginBottom: 2,
-                  }}
-                >
-                  {I18n.t("created")}: {formatDate(item.created)}
+                </View>
+                <Text style={[styles.projectDate, { color: theme.colors.textSecondary }]}>
+                  {I18n.t("created")}: {formatDate(item.createdAt || item.created)}
                 </Text>
-                {item.id === activeId && (
-                  <Text
-                    style={{
-                      color: "#800020",
-                      fontSize: 11,
-                      fontWeight: "600",
-                      textAlign: "right",
-                    }}
-                  >
-                    {I18n.t("activeProject")}
-                  </Text>
+                {item.id.toString() === activeId && (
+                  <View style={[styles.activeBadge, { backgroundColor: theme.colors.primary }]}>
+                    <Text style={[styles.activeBadgeText, { color: theme.colors.white }]}>
+                      {I18n.t("activeProject")}
+                    </Text>
+                  </View>
                 )}
               </View>
+              
+              <TouchableOpacity
+                style={styles.moreButton}
+                onPress={() => setShowMenuForProject(item.id)}
+              >
+                <MaterialIcons name="more-vert" size={24} color={theme.colors.text} />
+              </TouchableOpacity>
             </View>
+
+            {/* Кнопка выбора */}
+            {item.id.toString() !== activeId && (
+              <TouchableOpacity
+                style={[styles.selectButton, { borderColor: theme.colors.primary }]}
+                onPress={() => {
+                  console.log('Selecting project:', item.id, item.name);
+                  selectProject(item.id);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.selectButtonText, { color: theme.colors.primary }]}>
+                  {I18n.t("selectProject")}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
+        contentContainerStyle={styles.listContainer}
       />
 
       {/* Модальное окно создания проекта */}
       <Modal
         visible={showCreateModal}
-        transparent
-        animationType="fade"
+        transparent={true}
+        animationType="slide"
         onRequestClose={() => setShowCreateModal(false)}
       >
-        <View
-          style={{
-            flex: 1,
-            justifyContent: "center",
-            alignItems: "center",
-            backgroundColor: "rgba(0,0,0,0.5)",
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: "#fff",
-              borderRadius: 12,
-              padding: 20,
-              width: "80%",
-              maxWidth: 300,
-            }}
-          >
-            <Text
-              style={{
-                fontSize: 18,
-                fontWeight: "bold",
-                marginBottom: 16,
-                textAlign: "center",
-              }}
-            >
+        <View style={styles.createModalOverlay}>
+          <View style={[styles.createModalContainer, { backgroundColor: theme.colors.surface }]}>
+            <Text style={[styles.createModalTitle, { color: theme.colors.text }]}>
               {I18n.t("createProject")}
             </Text>
             <TextInput
-              placeholder={I18n.t("projectNamePlaceholder")}
+              style={[styles.createModalInput, { 
+                borderColor: theme.colors.border, 
+                color: theme.colors.text 
+              }]}
+              placeholder={I18n.t("projectName")}
+              placeholderTextColor={theme.colors.textSecondary}
               value={newProjectName}
               onChangeText={setNewProjectName}
-              style={{
-                borderWidth: 1,
-                borderColor: "#ccc",
-                borderRadius: 8,
-                padding: 12,
-                marginBottom: 16,
-                fontSize: 16,
-              }}
               autoFocus
             />
-            <View
-              style={{ flexDirection: "row", justifyContent: "space-between" }}
-            >
+            <View style={styles.createModalButtons}>
               <TouchableOpacity
+                style={[styles.createModalButton, { backgroundColor: theme.colors.border }]}
                 onPress={() => {
                   setShowCreateModal(false);
                   setNewProjectName("");
                 }}
-                style={{
-                  flex: 1,
-                  padding: 12,
-                  marginRight: 8,
-                  borderRadius: 8,
-                  backgroundColor: "#f0f0f0",
-                  alignItems: "center",
-                }}
               >
-                <Text style={{ color: "#666" }}>{I18n.t("cancel")}</Text>
+                <Text style={[styles.createModalButtonText, { color: theme.colors.text }]}>
+                  {I18n.t("cancel")}
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
+                style={[styles.createModalButton, { backgroundColor: theme.colors.primary }]}
                 onPress={handleCreateProject}
-                style={{
-                  flex: 1,
-                  padding: 12,
-                  marginLeft: 8,
-                  borderRadius: 8,
-                  backgroundColor: "#800020",
-                  alignItems: "center",
-                }}
               >
-                <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                <Text style={[styles.createModalButtonText, { color: theme.colors.white }]}>
                   {I18n.t("create")}
                 </Text>
               </TouchableOpacity>
@@ -481,34 +484,182 @@ export default function ProjectManager() {
           </View>
         </View>
       </Modal>
+
+      {/* Меню действий */}
+      <MenuModal
+        projectId={showMenuForProject}
+        visible={showMenuForProject !== null}
+        onClose={() => setShowMenuForProject(null)}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  button: {
-    backgroundColor: "#800020",
+  container: {
+    flex: 1,
+    padding: 16,
+  },
+  buttonsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 16,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
+    gap: 12,
+  },
+  actionButton: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    gap: 8,
+    flex: 1,
   },
   buttonText: {
-    color: "#fff",
     fontWeight: "bold",
   },
-  projectItem: {
-    flexDirection: "column",
-    backgroundColor: "#f9f9f9",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 10,
-    elevation: 1,
-    minHeight: 120,
+  listContainer: {
+    paddingBottom: 100, // Add padding for the modal
   },
-  activeProject: {
-    borderWidth: 2,
-    borderColor: "#800020",
+  projectCard: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+  },
+  projectHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  projectInfo: {
+    flex: 1,
+  },
+  projectNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  favoriteIcon: {
+    marginRight: 4,
+  },
+  projectName: {
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  projectDate: {
+    fontSize: 12,
+  },
+  activeBadge: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 5,
+    alignSelf: "flex-start",
+  },
+  activeBadgeText: {
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  moreButton: {
+    padding: 8,
+  },
+  selectButton: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignSelf: "flex-end",
+  },
+  selectButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 50,
+  },
+  emptyText: {
+    marginTop: 10,
+    fontSize: 16,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  menuContainer: {
+    width: "80%",
+    maxWidth: 300,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee", // Default border
+  },
+  menuText: {
+    marginLeft: 12,
+    fontSize: 16,
+  },
+  menuDivider: {
+    height: 1,
+    marginVertical: 8,
+  },
+  createModalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  createModalContainer: {
+    width: "90%",
+    maxWidth: 350,
+    borderRadius: 16,
+    padding: 24,
+    alignItems: "center",
+  },
+  createModalTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  createModalInput: {
+    width: "100%",
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 20,
+    fontSize: 16,
+    backgroundColor: "#f5f5f5",
+  },
+  createModalButtons: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    width: "100%",
+  },
+  createModalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  createModalButtonText: {
+    fontSize: 16,
+    fontWeight: "bold",
   },
 });

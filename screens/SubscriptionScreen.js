@@ -11,10 +11,12 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import I18n from "../Localization";
-import LanguageContext from "../LanguageContext";
-import SubscriptionManager from "../utils/SubscriptionManager";
+import { LanguageContext } from "../LanguageContext";
+import { SubscriptionManager } from "../utils/SubscriptionManager";
+import { useTheme } from "react-native-paper";
 
 export default function SubscriptionScreen() {
+  const theme = useTheme();
   const [subscriptionStatus, setSubscriptionStatus] = useState("inactive");
   const [subscriptionType, setSubscriptionType] = useState(null);
   const [expiryDate, setExpiryDate] = useState(null);
@@ -149,7 +151,7 @@ export default function SubscriptionScreen() {
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView contentContainerStyle={{backgroundColor: theme.colors.background }}>
       <View style={styles.header}>
         <Text style={styles.title}>{I18n.t("subscriptionTitle")}</Text>
         <Text style={styles.description}>
@@ -158,8 +160,8 @@ export default function SubscriptionScreen() {
       </View>
 
       {/* Текущий статус подписки */}
-      <View style={styles.statusCard}>
-        <Text style={styles.statusTitle}>{I18n.t("currentPlan")}</Text>
+      <View style={{...styles.statusCard, backgroundColor: theme.colors.surface }}>
+        <Text style={{...styles.statusTitle, color: theme.colors.text}}>{I18n.t("currentPlan")}</Text>
         <View style={styles.statusContent}>
           <View
             style={[
@@ -168,7 +170,7 @@ export default function SubscriptionScreen() {
             ]}
           />
           <View style={styles.statusInfo}>
-            <Text style={styles.statusText}>{getStatusText()}</Text>
+            <Text style={{...styles.statusText, color: theme.colors.text}}>{getStatusText()}</Text>
             {subscriptionType && (
               <Text style={styles.subscriptionType}>
                 {subscriptionType === "monthly"
@@ -300,14 +302,10 @@ export default function SubscriptionScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
-  },
   header: {
-    backgroundColor: "#800020",
     padding: 20,
     alignItems: "center",
+    backgroundColor: "#800020",
   },
   title: {
     fontSize: 24,
@@ -322,7 +320,6 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   statusCard: {
-    backgroundColor: "#fff",
     margin: 16,
     padding: 20,
     borderRadius: 12,
@@ -335,7 +332,6 @@ const styles = StyleSheet.create({
   statusTitle: {
     fontSize: 18,
     fontWeight: "bold",
-    color: "#800020",
     marginBottom: 16,
   },
   statusContent: {
@@ -355,7 +351,6 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#333",
   },
   subscriptionType: {
     fontSize: 14,

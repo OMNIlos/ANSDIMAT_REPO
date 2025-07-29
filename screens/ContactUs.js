@@ -8,9 +8,11 @@ import {
 } from "react-native";
 import { Text, Button } from "react-native-paper";
 import I18n from "../Localization";
-import LanguageContext from "../LanguageContext";
+import { LanguageContext } from "../LanguageContext";
+import { useTheme } from "react-native-paper";
 
 export default function ContactUsScreen() {
+  const theme = useTheme();
   const { locale } = useContext(LanguageContext);
 
   const handlePress = (url) => {
@@ -19,8 +21,8 @@ export default function ContactUsScreen() {
     );
   };
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>{I18n.t("contactsTitle")}</Text>
+    <ScrollView contentContainerStyle={{ padding: 20, backgroundColor: theme.colors.background }}>
+      <Text style={{ color: theme.colors.primary}}>{I18n.t("contactsTitle")}</Text>
 
       <View style={styles.section}>
         <Text style={styles.heading}>{I18n.t("australiaTitle")}</Text>
@@ -93,7 +95,8 @@ export default function ContactUsScreen() {
 
       <Button
         mode="contained"
-        style={styles.button}
+        style={[styles.button,
+          { backgroundColor: theme.colors.primary, color: theme.colors.onPrimary }]}
         onPress={() => Linking.openURL("https://ansdimat.com")}
       >
         {I18n.t("goToWebsite")}
@@ -103,18 +106,7 @@ export default function ContactUsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 20,
-    paddingBottom: 40,
-    backgroundColor: "#fff",
-  },
-  title: {
-    fontSize: 24,
-    color: "#800000",
-    fontWeight: "bold",
-    marginBottom: 20,
-    textAlign: "center",
-  },
+
   section: {
     marginBottom: 20,
   },

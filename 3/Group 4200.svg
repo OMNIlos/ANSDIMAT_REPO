@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="544" height="70.195" viewBox="0 0 544 70.195">
+  <g id="Group_4200" data-name="Group 4200" transform="translate(-1834 -1756.805)">
+    <g id="Help" transform="translate(2183 1756.805)">
+      <rect id="Rectangle_481" data-name="Rectangle 481" width="32" height="32" fill="none"/>
+      <path id="Path_146" data-name="Path 146" d="M16,0A16,16,0,1,0,32,16,16.047,16.047,0,0,0,16,0Zm-.16,26.56a2.24,2.24,0,1,1,2.24-2.24A2.187,2.187,0,0,1,15.84,26.56Zm4.32-12.48L18.4,16a1.954,1.954,0,0,0-.64,1.44,1.946,1.946,0,0,1-1.92,1.92,1.849,1.849,0,0,1-1.92-1.92,3.57,3.57,0,0,1,1.28-2.88l1.44-1.76a3.632,3.632,0,0,0,1.12-2.24A1.679,1.679,0,0,0,16,8.8a1.882,1.882,0,0,0-1.92,1.44,2.089,2.089,0,0,1-1.92,1.12A1.679,1.679,0,0,1,10.4,9.6a1.74,1.74,0,0,1,.16-.8C11.2,6.88,13.12,5.44,16,5.44c3.36,0,5.6,2.24,5.6,5.12A5.249,5.249,0,0,1,20.16,14.08Z" fill="#fff"/>
+    </g>
+    <g id="Component_2" data-name="Component 2" transform="translate(2021 1756.805)">
+      <rect id="Rectangle_193" data-name="Rectangle 193" width="32" height="32" fill="none"/>
+      <path id="Path_104" data-name="Path 104" d="M275.395,20a4,4,0,1,0-4.105-4A4.066,4.066,0,0,0,275.395,20ZM266.979,7.2a11.672,11.672,0,0,1,4.926-2.6L273.547,0h4.105l1.642,4.6a14.454,14.454,0,0,1,4.926,2.6l4.926-1L291.2,9.8l-3.284,3.6a11.117,11.117,0,0,1,.205,2.6c0,.8-.205,1.8-.205,2.6l3.284,3.6-2.053,3.6-4.926-1a11.672,11.672,0,0,1-4.926,2.6L277.653,32h-4.105l-1.642-4.6a14.454,14.454,0,0,1-4.926-2.6l-4.926,1L260,22.2l3.284-3.6a11.117,11.117,0,0,1-.205-2.6c0-.8.205-1.8.205-2.6L260,9.8l2.053-3.6Z" transform="translate(-260)" fill="#fff" fill-rule="evenodd"/>
+    </g>
+    <g id="Export" transform="translate(2327 1756.805)">
+      <rect id="Rectangle_570" data-name="Rectangle 570" width="32" height="32" fill="none"/>
+      <path id="Path_151" data-name="Path 151" d="M3.161,3.161V27.392h15.1v3.161H0V0H18.261V3.161ZM17.208,25.285,14.75,22.827l5.619-5.619H7.375V13.7H20.72L14.75,8.077l2.458-2.458L26.69,15.1Z" transform="translate(2)" fill="#fff"/>
+    </g>
+    <text id="Главная" transform="translate(1834 1821)" fill="#fff" font-size="23" font-family="SegoeUI, Segoe UI" letter-spacing="-0.02em"><tspan x="0" y="0">Главная</tspan></text>
+    <text id="Настройки" transform="translate(1986 1821)" fill="#fff" font-size="23" font-family="SegoeUI, Segoe UI" letter-spacing="-0.02em"><tspan x="0" y="0">Настройки</tspan></text>
+    <text id="Справка" transform="translate(2159 1821)" fill="#fff" font-size="23" font-family="SegoeUI, Segoe UI" letter-spacing="-0.02em"><tspan x="0" y="0">Справка</tspan></text>
+    <text id="Выход" transform="translate(2313 1821)" fill="#fff" font-size="23" font-family="SegoeUI, Segoe UI" letter-spacing="-0.02em"><tspan x="0" y="0">Выход</tspan></text>
+    <g id="Home" transform="translate(1834.19 1009.813)">
+      <g id="Icon_feather-home" data-name="Icon feather-home" transform="translate(25 749.992)">
+        <path id="Path_1323" data-name="Path 1323" d="M4.5,13.5,18,3,31.5,13.5V30a3,3,0,0,1-3,3H7.5a3,3,0,0,1-3-3Z" transform="translate(-4.5 -3)" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="5"/>
+      </g>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="515.802" height="70.153" viewBox="0 0 515.802 70.153">
+  <g id="Group_4186" data-name="Group 4186" transform="translate(-2800.225 -695.305)">
+    <g id="Inactive" transform="translate(2800.725 695.805)">
+      <g id="White_Fond">
+        <g id="Small-Radius">
+          <rect id="Base_Small-Radius" data-name="Base / Small-Radius" width="514.802" height="69.153" rx="5" fill="#e6e6e6" stroke="#72002f" stroke-width="1"/>
+        </g>
+        <rect id="Rectangle" width="514.802" height="69.153" fill="#fff" stroke="#72002f" stroke-width="1"/>
+      </g>
+      <g id="VerySmall-Radius">
+        <g id="Rectangle-2" data-name="Rectangle" fill="none" stroke="#72002f" stroke-miterlimit="10" stroke-width="1">
+          <rect width="514.802" height="69.153" rx="3" stroke="none"/>
+          <rect x="0.5" y="0.5" width="513.802" height="68.153" rx="2.5" fill="none"/>
+        </g>
+      </g>
+    </g>
+    <text id="Select_country" data-name="Select country" transform="translate(2841.177 740.689)" fill="#021784" font-size="26" font-family="SegoeUI, Segoe UI"><tspan x="0" y="0">Введите название проекта</tspan></text>
+  </g>
+</svg>

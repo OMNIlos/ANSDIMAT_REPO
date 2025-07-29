@@ -1,12 +1,11 @@
 import React, { useRef, useEffect, useState } from "react";
 import { Dimensions } from "react-native";
 import Svg, { Line, Circle } from "react-native-svg";
-
+import { useTheme } from "react-native-paper";
 const { width, height } = Dimensions.get("window");
 
 const POINTS_COUNT = 28;
 const RADIUS = 5;
-const COLOR = "#800020";
 const LINE_OPACITY = 0.18;
 const MAX_DISTANCE = 120;
 
@@ -23,6 +22,7 @@ function generatePoints() {
 }
 
 export default function AnimatedNetworkBackground() {
+  const theme = useTheme();
   const points = useRef(generatePoints()).current;
   const [time, setTime] = useState(0);
 
@@ -74,7 +74,7 @@ export default function AnimatedNetworkBackground() {
                   y1={p1.y}
                   x2={p2.x}
                   y2={p2.y}
-                  stroke={COLOR}
+                  stroke={theme.colors.primary}
                   strokeWidth={1}
                   opacity={LINE_OPACITY * (1 - dist / MAX_DISTANCE)}
                 />
@@ -91,7 +91,7 @@ export default function AnimatedNetworkBackground() {
           cx={p.x}
           cy={p.y}
           r={RADIUS}
-          fill={COLOR}
+          fill={theme.colors.primary}
           opacity={0.8}
         />
       ))}

@@ -1,0 +1,19 @@
+<svg id="Status_Bars" data-name="Status Bars" xmlns="http://www.w3.org/2000/svg" width="567.6" height="63.641" viewBox="0 0 567.6 63.641">
+  <rect id="Rectangle" width="375" height="33" transform="translate(140)" fill="none"/>
+  <g id="Group_5" data-name="Group 5" transform="translate(444 41)">
+    <g id="Battery" transform="translate(74 0)">
+      <g id="Border" fill="none" stroke="#fff" stroke-miterlimit="10" stroke-width="2" opacity="0.35">
+        <rect width="46.272" height="22.641" rx="2.667" stroke="none"/>
+        <rect x="1" y="1" width="44.272" height="20.641" rx="1.667" fill="none"/>
+      </g>
+      <path id="Cap" d="M0,0V4A2.17,2.17,0,0,0,1.328,2,2.17,2.17,0,0,0,0,0" transform="translate(47.272 9.32)" fill="#fff" stroke="#fff" stroke-width="2" opacity="0.4"/>
+      <rect id="Capacity" width="18" height="18.641" rx="1.333" transform="translate(2 2)" fill="#fff" stroke="#fff" stroke-width="2"/>
+    </g>
+    <path id="Wifi" d="M15.276,21.935a.625.625,0,0,1-.443-.185l-4-4.033a.627.627,0,0,1,.02-.913,6.843,6.843,0,0,1,8.84,0,.623.623,0,0,1,.207.452.631.631,0,0,1-.187.461l-4,4.033A.617.617,0,0,1,15.276,21.935Zm7.018-7.077a.624.624,0,0,1-.428-.169,9.809,9.809,0,0,0-13.173,0,.624.624,0,0,1-.428.169.617.617,0,0,1-.439-.182L5.516,12.343a.643.643,0,0,1,.007-.918,14.318,14.318,0,0,1,19.508,0,.643.643,0,0,1,.2.457.652.652,0,0,1-.187.461l-2.31,2.333A.617.617,0,0,1,22.294,14.858Zm5.32-5.37a.607.607,0,0,1-.428-.175,17.283,17.283,0,0,0-23.818,0,.607.607,0,0,1-.428.175A.617.617,0,0,1,2.5,9.306L.187,6.973A.643.643,0,0,1,.193,6.06a21.8,21.8,0,0,1,30.166,0,.65.65,0,0,1,.191.455.639.639,0,0,1-.187.457L28.051,9.306A.615.615,0,0,1,27.614,9.488Z" transform="translate(22 0)" fill="#fff"/>
+    <path id="Cellular_Connection" data-name="Cellular Connection" d="M32,21.333H30a2,2,0,0,1-2-2V2a2,2,0,0,1,2-2h2a2,2,0,0,1,2,2V19.334A2,2,0,0,1,32,21.333Zm-9.333,0h-2a2,2,0,0,1-2-2V6.667a2,2,0,0,1,2-2h2a2,2,0,0,1,2,2V19.334A2,2,0,0,1,22.667,21.333Zm-9.335,0h-2a2,2,0,0,1-2-2v-8a2,2,0,0,1,2-2h2a2,2,0,0,1,2,2v8A2,2,0,0,1,13.333,21.333ZM4,21.333H2a2,2,0,0,1-2-2v-4a2,2,0,0,1,2-2H4a2,2,0,0,1,2,2v4A2,2,0,0,1,4,21.333Z" transform="translate(-33.45)" fill="#fff"/>
+  </g>
+  <g id="Time_Style" data-name="Time Style" transform="translate(0 21)">
+    <rect id="Time_Style_background" data-name="Time Style background" width="102" height="40" fill="rgba(0,0,0,0)"/>
+    <text id="_Time" data-name="↳ Time" fill="#fff" font-size="30" font-family="SegoeUI, Segoe UI"><tspan x="15.39" y="32" letter-spacing="-0.02em">9:4</tspan><tspan y="32">1</tspan></text>
+  </g>
+</svg>

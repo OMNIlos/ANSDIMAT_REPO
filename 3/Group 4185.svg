@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="515.802" height="70.153" viewBox="0 0 515.802 70.153">
+  <g id="Group_4185" data-name="Group 4185" transform="translate(-2800.225 -695.305)">
+    <g id="Inactive" transform="translate(2800.725 695.805)">
+      <g id="White_Fond">
+        <g id="Small-Radius">
+          <rect id="Base_Small-Radius" data-name="Base / Small-Radius" width="514.802" height="69.153" rx="5" fill="#e6e6e6" stroke="#72002f" stroke-width="1"/>
+        </g>
+        <rect id="Rectangle" width="514.802" height="69.153" fill="#fff" stroke="#72002f" stroke-width="1"/>
+      </g>
+      <g id="VerySmall-Radius">
+        <g id="Rectangle-2" data-name="Rectangle" fill="none" stroke="#72002f" stroke-miterlimit="10" stroke-width="1">
+          <rect width="514.802" height="69.153" rx="3" stroke="none"/>
+          <rect x="0.5" y="0.5" width="513.802" height="68.153" rx="2.5" fill="none"/>
+        </g>
+      </g>
+    </g>
+    <g id="Chevron-Down" transform="translate(3280.791 739.63) rotate(-90)">
+      <path id="chevron" d="M.34,1.272c-.453-.255-.453-.655,0-.91L.614.208a2.075,2.075,0,0,1,1.81,0L13.66,6.545c.453.255.453.655,0,.91L2.423,13.792a2.075,2.075,0,0,1-1.81,0L.34,13.638c-.453-.255-.453-.655,0-.91l9.35-5.273c.453-.255.453-.655,0-.91Z" transform="translate(14) rotate(90)" fill="#72002f"/>
+    </g>
+    <text id="Select_country" data-name="Select country" transform="translate(2841.177 740.689)" fill="#021784" font-size="26" font-family="SegoeUI, Segoe UI"><tspan x="0" y="0">Выберите тип ОФР</tspan></text>
+  </g>
+</svg>

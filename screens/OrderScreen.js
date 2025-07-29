@@ -8,9 +8,11 @@ import {
   Title,
 } from "react-native-paper";
 import I18n from "../Localization";
-import LanguageContext from "../LanguageContext";
+import { LanguageContext } from "../LanguageContext";
+import { useTheme } from "react-native-paper";
 
 export default function OrderScreen() {
+  const theme = useTheme();
   const [form, setForm] = useState({
     name: "",
     company: "",
@@ -77,8 +79,8 @@ export default function OrderScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Title style={styles.title}>{I18n.t("orderTitle")}</Title>
+    <ScrollView contentContainerStyle={{ padding: 20, backgroundColor: theme.colors.drawerBackground }}>
+      <Title style={{ color: theme.colors.primary, textAlign: "center", marginBottom: 20 }}>{I18n.t("orderTitle")}</Title>
 
       <TextInput
         label={I18n.t("fullName")}
@@ -139,7 +141,10 @@ export default function OrderScreen() {
         style={styles.input}
       />
 
-      <Button mode="contained" onPress={handleSubmit} style={styles.button}>
+      <Button mode="contained" onPress={handleSubmit} style={[
+        styles.button,
+        { backgroundColor: theme.colors.primary, color: theme.colors.onPrimary }
+        ]}>
         {I18n.t("submit")}
       </Button>
     </ScrollView>
@@ -147,15 +152,7 @@ export default function OrderScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 20,
-    backgroundColor: "#fff",
-  },
-  title: {
-    color: "#800020",
-    textAlign: "center",
-    marginBottom: 20,
-  },
+
   input: {
     marginBottom: 15,
   },

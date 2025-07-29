@@ -136,4 +136,4 @@ class SubscriptionManager {
   }
 }
 
-export default SubscriptionManager;
+export { SubscriptionManager };

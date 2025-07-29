@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="349" height="70.166" viewBox="0 0 349 70.166">
+  <g id="Inactive" transform="translate(0.5 0.5)">
+    <g id="White_Fond">
+      <g id="Small-Radius">
+        <rect id="Base_Small-Radius" data-name="Base / Small-Radius" width="348" height="69.166" rx="5" fill="#e6e6e6" stroke="#72002f" stroke-width="1"/>
+      </g>
+      <rect id="Rectangle" width="348" height="69.166" fill="#fff" stroke="#72002f" stroke-width="1"/>
+    </g>
+    <g id="VerySmall-Radius">
+      <g id="Rectangle-2" data-name="Rectangle" fill="none" stroke="#72002f" stroke-miterlimit="10" stroke-width="1">
+        <rect width="348" height="69.166" rx="3" stroke="none"/>
+        <rect x="0.5" y="0.5" width="347" height="68.166" rx="2.5" fill="none"/>
+      </g>
+    </g>
+  </g>
+</svg>

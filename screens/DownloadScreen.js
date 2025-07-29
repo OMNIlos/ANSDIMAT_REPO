@@ -2,17 +2,20 @@ import React, { useContext } from "react";
 import { View, StyleSheet } from "react-native";
 import { Text, Button } from "react-native-paper";
 import I18n from "../Localization";
-import LanguageContext from "../LanguageContext";
+import { LanguageContext } from "../LanguageContext";
+import { useTheme } from "react-native-paper";
 
 export default function DownloadScreen() {
+  const theme = useTheme();
   const { locale } = useContext(LanguageContext);
 
   return (
-    <View style={styles.container}>
-      <Text>{I18n.t("downloadText")}</Text>
+    <View style={{ padding: 20, backgroundColor: theme.colors.background }}>
+      <Text style={{ color: theme.colors.primary, textAlign: "center", marginBottom: 20 }}>{I18n.t("downloadText")}</Text>
       <Button
         mode="contained"
-        style={{ marginTop: 20, backgroundColor: "#800020" }}
+        style={[styles.button,
+          { backgroundColor: theme.colors.primary, color: theme.colors.onPrimary }]}
         onPress={() => {
           // Здесь можно будет вставить логику загрузки
         }}
@@ -24,7 +27,4 @@ export default function DownloadScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 20,
-  },
 });
