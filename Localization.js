@@ -379,6 +379,15 @@ const i18n = new I18n({
     chartSavedSuccess: "График сохранён в галерею!",
     chartSaveError: "Не удалось сохранить график",
     saveChartToGallery: "Сохранить график (PNG)",
+    
+    // Дополнительные переводы для DataProcessing
+    pumpingTestJournals: "Журналы откачек",
+    chartType: "Тип графика",
+    chart: "График",
+    zoomIn: "Увеличить",
+    zoomOut: "Уменьшить",
+    reset: "Сброс",
+    instructions: "Инструкция",
 
     // Единицы измерения для функций
     unitMinutes: "мин",
@@ -774,6 +783,15 @@ const i18n = new I18n({
     chartSavedSuccess: "Chart saved to gallery!",
     chartSaveError: "Could not save chart",
     saveChartToGallery: "Save chart (PNG)",
+    
+    // Дополнительные переводы для DataProcessing
+    pumpingTestJournals: "Pumping Test Journals",
+    chartType: "Chart Type",
+    chart: "Chart",
+    zoomIn: "Zoom In",
+    zoomOut: "Zoom Out",
+    reset: "Reset",
+    instructions: "Instructions",
 
     // Units for functions
     unitMinutes: "min",

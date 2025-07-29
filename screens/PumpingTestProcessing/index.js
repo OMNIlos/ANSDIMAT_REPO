@@ -182,21 +182,14 @@ function MainScreen({ navigation }) {
           <Icon name="water-drop" size={20} color={theme.colors.white} />
         </View>
         <View style={styles.projectInfo}>
-          <Text style={[styles.projectName, { color: theme.colors.text }]}>
+          <Text style={[styles.projectName, { color: 'black' }]}>
             {project.name}
           </Text>
           <Text style={[styles.projectDate, { color: theme.colors.textSecondary }]}>
             {project.date} • {project.wells} скважин
           </Text>
                 </View>
-        <IconButton
-          icon="dots-vertical"
-          iconColor={theme.colors.textSecondary}
-          size={20}
-          onPress={() => {
-            // Меню действий с проектом
-          }}
-        />
+        
       </View>
     </TouchableOpacity>
   );

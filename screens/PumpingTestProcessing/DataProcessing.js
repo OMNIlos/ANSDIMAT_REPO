@@ -64,8 +64,8 @@ const FUNCTIONS = {
     yTransform: (s) => s > 0 ? Math.log10(s) : null,
     xLabel: "lg(t)",
     yLabel: "lg(s)",
-    xUnit: "lg(мин)",
-    yUnit: "lg(м)",
+    xUnit: "",
+    yUnit: "",
     type: "s-t",
   },
   "s-lg(t)": {
@@ -121,7 +121,7 @@ const JournalSelector = React.memo(({
           <MaterialCommunityIcons 
             name="water-well" 
             size={20} 
-            color={index === selectedJournalIdx ? theme.colors.onPrimary : theme.colors.primary} 
+            color={index === selectedJournalIdx ? theme.colors.text : theme.colors.primary} 
           />
           <View style={styles.journalText}>
             <Text style={[
@@ -158,7 +158,7 @@ const JournalSelector = React.memo(({
         <View style={styles.cardHeader}>
           <MaterialIcons name="library-books" size={24} color={theme.colors.primary} />
           <Text style={[styles.cardTitle, { color: theme.colors.primary }]}>
-            Журналы откачек
+            {I18n.t("pumpingTestJournals")}
           </Text>
       </View>
         
@@ -208,7 +208,7 @@ const FunctionSelector = React.memo(({
         <View style={styles.cardHeader}>
           <MaterialIcons name="functions" size={24} color={theme.colors.primary} />
           <Text style={[styles.cardTitle, { color: theme.colors.primary }]}>
-            Тип графика
+            {I18n.t("chartType")}
               </Text>
       </View>
 
@@ -236,16 +236,8 @@ const Chart = React.memo(({
   theme,
   chartRef
 }) => {
-  // Используем реальные данные или тестовые для демонстрации
-  let displayPoints = points.length > 0 ? points : [
-    { x: 1, y: 0.1, t: 1, s: 0.1 },
-    { x: 2, y: 0.2, t: 2, s: 0.2 },
-    { x: 5, y: 0.4, t: 5, s: 0.4 },
-    { x: 10, y: 0.6, t: 10, s: 0.6 },
-    { x: 20, y: 0.8, t: 20, s: 0.8 },
-    { x: 50, y: 1.2, t: 50, s: 1.2 },
-    { x: 100, y: 1.6, t: 100, s: 1.6 }
-  ];
+  // Используем только реальные данные
+  const displayPoints = points;
 
   const func = FUNCTIONS[selectedFunction] || FUNCTIONS["s-t"];
   
@@ -255,8 +247,7 @@ const Chart = React.memo(({
     displayPointsLength: displayPoints.length,
     hasChartBounds: !!chartBounds,
     selectedFunction,
-    firstPoint: points[0],
-    firstDisplayPoint: displayPoints[0]
+    firstPoint: points[0]
   });
 
     return (
@@ -265,237 +256,319 @@ const Chart = React.memo(({
         <View style={styles.cardHeader}>
           <MaterialIcons name="show-chart" size={24} color={theme.colors.primary} />
                     <Text style={[styles.cardTitle, { color: theme.colors.primary }]}>
-            График {func?.name}
+            {I18n.t("chart")} {func?.name}
         </Text>
       </View>
 
                 <View ref={chartRef} collapsable={false} style={styles.chartContainer}>
-          {/* Улучшенный график с правильными координатами */}
-          <View style={styles.simpleChart}>
-            {/* Фон графика */}
-            <View style={styles.chartBackground} />
-            
+          <Svg
+            width={CHART_WIDTH}
+            height={CHART_HEIGHT}
+            style={{ backgroundColor: "#ffffff", borderRadius: 12 }}
+          >
+            {(() => {
+              // Рассчитываем границы данных
+              let minX, maxX, minY, maxY;
+              
+              if (chartBounds) {
+                minX = chartBounds.zoomedMinX;
+                maxX = chartBounds.zoomedMaxX;
+                minY = chartBounds.zoomedMinY;
+                maxY = chartBounds.zoomedMaxY;
+              } else if (displayPoints.length > 0) {
+                const xValues = displayPoints.map(p => p.t || p.x);
+                const yValues = displayPoints.map(p => p.s || p.y);
+                
+                const rawMinX = Math.min(...xValues);
+                const rawMaxX = Math.max(...xValues);
+                const rawMinY = Math.min(...yValues);
+                const rawMaxY = Math.max(...yValues);
+                
+                const xRange = rawMaxX - rawMinX || 1;
+                const yRange = rawMaxY - rawMinY || 1;
+                const padding = 0.1;
+                
+                minX = rawMinX - xRange * padding;
+                maxX = rawMaxX + xRange * padding;
+                minY = rawMinY - yRange * padding;
+                maxY = rawMaxY + yRange * padding;
+              } else {
+                // Если нет данных, показываем пустой график
+                return (
+                  <G>
+                    <SvgText
+                      x={CHART_WIDTH / 2}
+                      y={CHART_HEIGHT / 2}
+                      fontSize="16"
+                      fill="#999"
+                      textAnchor="middle"
+                    >
+                      {I18n.t("noData")}
+                    </SvgText>
+                  </G>
+                );
+              }
+
+              // Функция для преобразования координат в пиксели
+              function getXY(x, y) {
+                const pixelX = ((x - minX) / (maxX - minX)) * (CHART_WIDTH - 2 * CHART_PADDING) + CHART_PADDING;
+                const pixelY = CHART_HEIGHT - CHART_PADDING - ((y - minY) / (maxY - minY)) * (CHART_HEIGHT - 2 * CHART_PADDING);
+                return { x: pixelX, y: pixelY };
+              }
+
+              // Генерация делений осей
+              const tickCount = 5;
+              const xTicks = [];
+              const yTicks = [];
+
+              for (let i = 0; i <= tickCount; i++) {
+                const x = minX + (maxX - minX) * (i / tickCount);
+                const y = minY + (maxY - minY) * (i / tickCount);
+                xTicks.push(x);
+                yTicks.push(y);
+              }
+
+              return (
+                <G>
             {/* Сетка */}
-            {Array.from({ length: 5 }, (_, i) => (
-              <View
-                key={`grid-v-${i}`}
-                style={[
-                  styles.gridLineVertical,
-                  { left: 50 + ((i + 1) * (280 / 6)) }
-                ]}
+                  {xTicks.map((x, i) => {
+                    const pixelX = getXY(x, minY).x;
+                    return (
+                      <Line
+                        key={`x-grid-${i}`}
+                        x1={pixelX}
+                        y1={CHART_PADDING}
+                        x2={pixelX}
+                        y2={CHART_HEIGHT - CHART_PADDING}
+                        stroke="#e0e0e0"
+                        strokeWidth={1}
               />
-            ))}
-            {Array.from({ length: 4 }, (_, i) => (
-              <View
-                key={`grid-h-${i}`}
-                style={[
-                  styles.gridLineHorizontal,
-                  { top: 40 + ((i + 1) * (220 / 5)) }
-                ]}
+                    );
+                  })}
+                  {yTicks.map((y, i) => {
+                    const pixelY = getXY(minX, y).y;
+                    return (
+                      <Line
+                        key={`y-grid-${i}`}
+                        x1={CHART_PADDING}
+                        y1={pixelY}
+                        x2={CHART_WIDTH - CHART_PADDING}
+                        y2={pixelY}
+                        stroke="#e0e0e0"
+                        strokeWidth={1}
               />
-            ))}
+                    );
+                  })}
             
             {/* Оси */}
-            <View style={styles.xAxis} />
-            <View style={styles.yAxis} />
+                  <Line
+                    x1={CHART_PADDING}
+                    y1={CHART_HEIGHT - CHART_PADDING}
+                    x2={CHART_WIDTH - CHART_PADDING}
+                    y2={CHART_HEIGHT - CHART_PADDING}
+                    stroke="#888"
+                    strokeWidth={2}
+                  />
+                  <Line
+                    x1={CHART_PADDING}
+                    y1={CHART_HEIGHT - CHART_PADDING}
+                    x2={CHART_PADDING}
+                    y2={CHART_PADDING}
+                    stroke="#888"
+                    strokeWidth={2}
+                  />
             
-            {/* Деления на осях с реальными данными */}
-            {(() => {
-              if (!chartBounds && displayPoints.length === 0) return null;
-              
-              // Используем границы данных или тестовые значения
-              const minX = chartBounds ? chartBounds.zoomedMinX : 1;  // t от 1
-              const maxX = chartBounds ? chartBounds.zoomedMaxX : 100; // t до 100
-              const minY = chartBounds ? chartBounds.zoomedMinY : 0.1; // s от 0.1
-              const maxY = chartBounds ? chartBounds.zoomedMaxY : 1.6; // s до 1.6
-              
-              // Создаем равномерные деления
-              const xSteps = 6;
-              const ySteps = 6;
-              const xStep = (maxX - minX) / (xSteps - 1);
-              const yStep = (maxY - minY) / (ySteps - 1);
-              
+                  {/* Подписи осей */}
+                  <SvgText
+                    x={CHART_WIDTH / 2}
+                    y={CHART_HEIGHT - CHART_PADDING + 36}
+                    fontSize="14"
+                    fill="#333"
+                    textAnchor="middle"
+                    fontWeight="bold"
+                  >
+                    {func?.xLabel} 
+                  </SvgText>
+                  <SvgText
+                    x={CHART_PADDING - 45}
+                    y={CHART_HEIGHT / 2}
+                    fontSize="14"
+                    fill="#333"
+                    textAnchor="middle"
+                    fontWeight="bold"
+                    transform={`rotate(-90, ${CHART_PADDING - 45}, ${CHART_HEIGHT / 2})`}
+                  >
+                    {func?.yLabel}
+                  </SvgText>
+
+                  {/* Деления осей */}
+                  {xTicks.map((x, i) => {
+                    const pixelX = getXY(x, minY).x;
               return (
-                <>
-                  {Array.from({ length: xSteps }, (_, i) => {
-                    const value = minX + (i * xStep);
-                    const pixelX = 50 + (i * 280 / (xSteps - 1));
-                    return (
-                      <View key={`x-tick-${i}`}>
-                        <View
-                          style={[
-                            styles.xTick,
-                            { left: pixelX - 1 }
-                          ]}
+                      <G key={`x-tick-${i}`}>
+                        <Line
+                          x1={pixelX}
+                          y1={CHART_HEIGHT - CHART_PADDING}
+                          x2={pixelX}
+                          y2={CHART_HEIGHT - CHART_PADDING + 5}
+                          stroke="#333"
+                          strokeWidth={1}
                         />
-                        <Text
-                          style={[
-                            styles.xTickLabel,
-                            { left: pixelX - 15 }
-                          ]}
+                        <SvgText
+                          x={pixelX}
+                          y={CHART_HEIGHT - CHART_PADDING + 18}
+                          fontSize="11"
+                          fill="#333"
+                          textAnchor="middle"
                         >
-                          {value.toFixed(value < 1 ? 2 : value < 10 ? 1 : 0)}
-                        </Text>
-                      </View>
+                          {x.toFixed(x < 1 ? 2 : x < 10 ? 1 : 0)}
+                        </SvgText>
+                      </G>
                     );
                   })}
-                  
-                  {Array.from({ length: ySteps }, (_, i) => {
-                    const value = minY + (i * yStep);
-                    const pixelY = 260 - (i * 220 / (ySteps - 1));
+                  {yTicks.map((y, i) => {
+                    const pixelY = getXY(minX, y).y;
                     return (
-                      <View key={`y-tick-${i}`}>
-                        <View
-                          style={[
-                            styles.yTick,
-                            { top: pixelY - 1 }
-                          ]}
+                      <G key={`y-tick-${i}`}>
+                        <Line
+                          x1={CHART_PADDING}
+                          y1={pixelY}
+                          x2={CHART_PADDING - 5}
+                          y2={pixelY}
+                          stroke="#333"
+                          strokeWidth={1}
                         />
-                        <Text
-                          style={[
-                            styles.yTickLabel,
-                            { top: pixelY - 8 }
-                          ]}
+                        <SvgText
+                          x={CHART_PADDING - 12}
+                          y={pixelY + 4}
+                          fontSize="11"
+                          fill="#333"
+                          textAnchor="end"
                         >
-                          {value.toFixed(value < 1 ? 2 : value < 10 ? 1 : 0)}
-                        </Text>
-                      </View>
+                          {y.toFixed(y < 1 ? 2 : y < 10 ? 1 : 0)}
+                        </SvgText>
+                      </G>
                     );
                   })}
-                </>
-              );
-            })()}
             
-            {/* Точки данных с правильными координатами */}
+                  {/* Точки */}
             {displayPoints.map((point, idx) => {
-              let pixelX, pixelY;
+                    const xValue = point.t || point.x;
+                    const yValue = point.s || point.y;
+                    const { x, y } = getXY(xValue, yValue);
+                    const isSelected = selectedPoints.includes(idx);
+                
+                return (
+                      <Circle
+                    key={idx}
+                        cx={x}
+                        cy={y}
+                        r={isSelected ? 7 : 5}
+                        fill={isSelected ? "#FF4444" : "#1976D2"}
+                    onPress={() => onPointPress && onPointPress(idx)}
+                      />
+                    );
+                  })}
+
+                  {/* Линия тренда - проходит через весь график */}
+                  {selectedPoints.length === 2 && (() => {
+                    const point1 = displayPoints[selectedPoints[0]];
+                    const point2 = displayPoints[selectedPoints[1]];
+                    
+                    if (!point1 || !point2) return null;
               
-              if (!chartBounds && !point.x && !point.y) {
-                // Тестовые данные - используем равномерное распределение
-                const minX = 1, maxX = 100; // t от 1 до 100
-                const minY = 0.1, maxY = 1.6; // s от 0.1 до 1.6
-                
-                // Используем реальные значения t и s для тестовых данных
-                const normalizedX = (point.t - minX) / (maxX - minX);
-                const normalizedY = (point.s - minY) / (maxY - minY);
-                
-                pixelX = 50 + (normalizedX * 280);
-                pixelY = 260 - (normalizedY * 220);
-              } else if (chartBounds) {
-                // Реальные данные - используем chartBounds
-                const { zoomedMinX, zoomedMaxX, zoomedMinY, zoomedMaxY } = chartBounds;
-                
-                // Нормализация координат к области графика (0-1)
-                const normalizedX = (point.x - zoomedMinX) / (zoomedMaxX - zoomedMinX);
-                const normalizedY = (point.y - zoomedMinY) / (zoomedMaxY - zoomedMinY);
-                
-                // Проверяем, что точка в пределах графика
-                if (normalizedX < 0 || normalizedX > 1 || normalizedY < 0 || normalizedY > 1) {
-                  return null;
-                }
-                
-                pixelX = 50 + (normalizedX * 280); // область графика 280px
-                pixelY = 260 - (normalizedY * 220); // область графика 220px, инвертируем Y
+                    const x1Value = point1.t || point1.x;
+                    const y1Value = point1.s || point1.y;
+                    const x2Value = point2.t || point2.x;
+                    const y2Value = point2.s || point2.y;
+              
+                    // Проверяем, что точки разные
+                    if (x1Value === x2Value && y1Value === y2Value) return null;
+                    
+                    // Вычисляем параметры прямой y = kx + b
+                    const k = (y2Value - y1Value) / (x2Value - x1Value);
+                    const b = y1Value - k * x1Value;
+                    
+                    // Находим точки пересечения с границами графика
+                    const leftY = k * minX + b;
+                    const rightY = k * maxX + b;
+                    
+                    // Проверяем, пересекает ли линия график
+                    const topX = (maxY - b) / k;
+                    const bottomX = (minY - b) / k;
+                    
+                    let startX, startY, endX, endY;
+                    
+                    // Определяем точки начала и конца линии
+                    if (k === 0) {
+                      // Горизонтальная линия
+                      startX = minX;
+                      startY = y1Value;
+                      endX = maxX;
+                      endY = y1Value;
+                    } else if (!isFinite(k)) {
+                      // Вертикальная линия
+                      startX = x1Value;
+                      startY = minY;
+                      endX = x1Value;
+                      endY = maxY;
+                    } else {
+                      // Обычная линия - находим пересечения с границами
+                      const intersections = [];
+                      
+                      // Левая граница
+                      if (leftY >= minY && leftY <= maxY) {
+                        intersections.push({ x: minX, y: leftY });
+                      }
+                      
+                      // Правая граница
+                      if (rightY >= minY && rightY <= maxY) {
+                        intersections.push({ x: maxX, y: rightY });
+                      }
+                      
+                      // Верхняя граница
+                      if (topX >= minX && topX <= maxX) {
+                        intersections.push({ x: topX, y: maxY });
+                      }
+                      
+                      // Нижняя граница
+                      if (bottomX >= minX && bottomX <= maxX) {
+                        intersections.push({ x: bottomX, y: minY });
+                      }
+                      
+                      if (intersections.length >= 2) {
+                        startX = intersections[0].x;
+                        startY = intersections[0].y;
+                        endX = intersections[1].x;
+                        endY = intersections[1].y;
               } else {
-                return null;
+                        // Если не нашли пересечений, используем исходные точки
+                        startX = x1Value;
+                        startY = y1Value;
+                        endX = x2Value;
+                        endY = y2Value;
+                      }
               }
               
-              return (
-                <TouchableOpacity
-                  key={idx}
-                  style={[
-                    styles.dataPoint,
-                    {
-                      left: pixelX - 6, // центрируем точку
-                      top: pixelY - 6,
-                      backgroundColor: selectedPoints.includes(idx) ? '#FF4444' : '#1976D2'
-                    }
-                  ]}
-                  onPress={() => onPointPress && onPointPress(idx)}
-                />
-              );
-            })}
-            
-            {/* Линия тренда через выбранные точки */}
-            {selectedPoints.length === 2 && lineParams.k !== 0 && (() => {
-              const point1 = displayPoints[selectedPoints[0]];
-              const point2 = displayPoints[selectedPoints[1]];
-              
-              if (!point1 || !point2) return null;
-              
-              let x1Pixel, y1Pixel, x2Pixel, y2Pixel;
-              
-              if (!chartBounds && !point1.x && !point1.y) {
-                // Тестовые данные - используем те же границы что и для осей
-                const minX = 1, maxX = 100;    // t от 1 до 100
-                const minY = 0.1, maxY = 1.6;  // s от 0.1 до 1.6
-                
-                const normalizedX1 = (point1.t - minX) / (maxX - minX);
-                const normalizedY1 = (point1.s - minY) / (maxY - minY);
-                const normalizedX2 = (point2.t - minX) / (maxX - minX);
-                const normalizedY2 = (point2.s - minY) / (maxY - minY);
-                
-                x1Pixel = 50 + (normalizedX1 * 280);
-                y1Pixel = 260 - (normalizedY1 * 220);
-                x2Pixel = 50 + (normalizedX2 * 280);
-                y2Pixel = 260 - (normalizedY2 * 220);
-              } else if (chartBounds) {
-                // Реальные данные - используем chartBounds
-                const { zoomedMinX, zoomedMaxX, zoomedMinY, zoomedMaxY } = chartBounds;
-                
-                const x1Norm = (point1.x - zoomedMinX) / (zoomedMaxX - zoomedMinX);
-                const y1Norm = (point1.y - zoomedMinY) / (zoomedMaxY - zoomedMinY);
-                const x2Norm = (point2.x - zoomedMinX) / (zoomedMaxX - zoomedMinX);
-                const y2Norm = (point2.y - zoomedMinY) / (zoomedMaxY - zoomedMinY);
-                
-                x1Pixel = 50 + (x1Norm * 280);
-                y1Pixel = 260 - (y1Norm * 220);
-                x2Pixel = 50 + (x2Norm * 280);
-                y2Pixel = 260 - (y2Norm * 220);
-              } else {
-                return null;
-              }
-              
-              // Рассчитываем длину и угол линии для точного соединения точек
-              const length = Math.sqrt(Math.pow(x2Pixel - x1Pixel, 2) + Math.pow(y2Pixel - y1Pixel, 2));
-              const angle = Math.atan2(y2Pixel - y1Pixel, x2Pixel - x1Pixel) * (180 / Math.PI);
+                    const { x: x1, y: y1 } = getXY(startX, startY);
+                    const { x: x2, y: y2 } = getXY(endX, endY);
               
               return (
-                <View
-                  style={[
-                    styles.trendLine,
-                    {
-                      left: x1Pixel,
-                      top: y1Pixel - 1.5, // центрируем по вертикали
-                      width: length,
-                      transform: [
-                        { rotate: `${angle}deg` },
-                        { translateY: 0 }
-                      ],
-                      transformOrigin: 'left center'
-                    }
-                  ]}
+                      <Line
+                        x1={x1}
+                        y1={y1}
+                        x2={x2}
+                        y2={y2}
+                        stroke="#FF6B35"
+                        strokeWidth={3}
+                        opacity={0.9}
                 />
               );
             })()}
-            
-            {/* Подписи */}
-            <Text style={styles.xLabel}>
-              {func?.xLabel} ({func?.xUnit})
-            </Text>
-            <Text style={styles.yLabel}>
-              {func?.yLabel} ({func?.yUnit})
-            </Text>
-            
-            {/* Информация о данных */}
-            <Text style={styles.chartInfo}>
-              {func?.name} | Точек: {displayPoints.length}
-              {chartBounds ? 
-                ` | X: ${chartBounds.zoomedMinX.toFixed(1)}-${chartBounds.zoomedMaxX.toFixed(1)} | Y: ${chartBounds.zoomedMinY.toFixed(1)}-${chartBounds.zoomedMaxY.toFixed(1)}` :
-                ` | X: 1.0-100.0 | Y: 0.1-1.6`
-              }
-            </Text>
-          </View>
+                </G>
+              );
+            })()}
+          </Svg>
         </View>
       </Card.Content>
     </Card>
@@ -513,6 +586,8 @@ export default function DataProcessing() {
   const [journals, setJournals] = useState([]);
   const [selectedJournalIdx, setSelectedJournalIdx] = useState(0);
   const [state, setState] = useState(initialState);
+  const [zoom, setZoom] = useState({ x: 1, y: 1 });
+  const [pan, setPan] = useState({ x: 0, y: 0 });
 
   // Мемоизированные вычисления
   const journal = useMemo(
@@ -574,19 +649,40 @@ export default function DataProcessing() {
 
     const padding = 0.1;
     
+    // Базовые границы с отступами
+    const baseMinX = minX - xRange * padding;
+    const baseMaxX = maxX + xRange * padding;
+    const baseMinY = minY - yRange * padding;
+    const baseMaxY = maxY + yRange * padding;
+    
+    // Применяем пан
+    const pannedMinX = baseMinX + pan.x;
+    const pannedMaxX = baseMaxX + pan.x;
+    const pannedMinY = baseMinY + pan.y;
+    const pannedMaxY = baseMaxY + pan.y;
+    
+    // Применяем зум
+    const xCenter = (pannedMinX + pannedMaxX) / 2;
+    const yCenter = (pannedMinY + pannedMaxY) / 2;
+    const xRangeZoomed = (pannedMaxX - pannedMinX) / zoom.x;
+    const yRangeZoomed = (pannedMaxY - pannedMinY) / zoom.y;
+    
     return {
-      zoomedMinX: minX - xRange * padding + state.pan.x,
-      zoomedMaxX: maxX + xRange * padding + state.pan.x,
-      zoomedMinY: minY - yRange * padding + state.pan.y,
-      zoomedMaxY: maxY + yRange * padding + state.pan.y,
+      zoomedMinX: xCenter - xRangeZoomed / 2,
+      zoomedMaxX: xCenter + xRangeZoomed / 2,
+      zoomedMinY: yCenter - yRangeZoomed / 2,
+      zoomedMaxY: yCenter + yRangeZoomed / 2,
     };
-  }, [points, state.pan, state.zoom]);
+  }, [points, pan, zoom]);
 
   // Загрузка активного проекта
   useFocusEffect(
     useCallback(() => {
-      loadActiveProject();
-    }, [])
+      const fetchData = async () => {
+        await loadActiveProject();
+      };
+      fetchData();
+    }, [loadActiveProject])
   );
 
   const loadActiveProject = useCallback(async () => {
@@ -623,12 +719,12 @@ export default function DataProcessing() {
 
   const handleDeleteJournal = useCallback((journalIndex) => {
     Alert.alert(
-      "Удалить журнал",
-      `Удалить журнал "${journals[journalIndex]?.name || 'журнал'}"?`,
+      I18n.t("deleteJournal"),
+      I18n.t("deleteJournalConfirm", { name: journals[journalIndex]?.name || I18n.t("journal") }),
       [
-        { text: "Отмена", style: "cancel" },
+        { text: I18n.t("cancel"), style: "cancel" },
         {
-          text: "Удалить",
+          text: I18n.t("delete"),
           style: "destructive",
           onPress: async () => {
             try {
@@ -650,9 +746,9 @@ export default function DataProcessing() {
               }
               
               setState(prev => ({ ...prev, selectedPoints: [] }));
-              Alert.alert("Успех", "Журнал удален");
+              Alert.alert(I18n.t("success"), I18n.t("journalDeleted"));
             } catch (error) {
-              Alert.alert("Ошибка", "Не удалось удалить журнал");
+              Alert.alert(I18n.t("error"), I18n.t("exportError"));
             }
           },
         },
@@ -712,16 +808,30 @@ export default function DataProcessing() {
       const { status } = await MediaLibrary.requestPermissionsAsync();
       
       if (status !== "granted") {
-        Alert.alert("Ошибка", "Нет доступа к галерее");
+        Alert.alert(I18n.t("error"), I18n.t("noGalleryAccess"));
         return;
       }
       
       const asset = await MediaLibrary.createAssetAsync(uri);
       await MediaLibrary.createAlbumAsync("Ansdimat", asset, false);
-      Alert.alert("Успех", "График сохранён в галерею!");
+      Alert.alert(I18n.t("success"), I18n.t("chartSavedSuccess"));
     } catch (error) {
-      Alert.alert("Ошибка", "Не удалось сохранить график");
+      Alert.alert(I18n.t("error"), I18n.t("chartSaveError"));
     }
+  }, []);
+
+  // Обработчики масштабирования
+  const handleZoomIn = useCallback(() => {
+    setZoom(prev => ({ x: prev.x * 1.2, y: prev.y * 1.2 }));
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    setZoom(prev => ({ x: prev.x / 1.2, y: prev.y / 1.2 }));
+  }, []);
+
+  const handleResetZoom = useCallback(() => {
+    setZoom({ x: 1, y: 1 });
+    setPan({ x: 0, y: 0 });
   }, []);
 
   // Проверяем наличие данных
@@ -733,10 +843,10 @@ export default function DataProcessing() {
       <View style={styles.centerContainer}>
         <MaterialCommunityIcons name="folder-open" size={64} color={theme.colors.outline} />
         <Text style={[styles.emptyTitle, { color: theme.colors.onSurface }]}>
-          Нет активного проекта
+          {I18n.t("noActiveProject")}
             </Text>
         <Text style={[styles.emptySubtitle, { color: theme.colors.onSurfaceVariant }]}>
-          Выберите проект в разделе "Управление проектами"
+          {I18n.t("selectProjectFirst")}
             </Text>
       </View>
     );
@@ -747,10 +857,10 @@ export default function DataProcessing() {
       <View style={styles.centerContainer}>
         <MaterialCommunityIcons name="book-plus" size={64} color={theme.colors.outline} />
         <Text style={[styles.emptyTitle, { color: theme.colors.onSurface }]}>
-          Нет журналов откачек
+          {I18n.t("noJournals")}
             </Text>
         <Text style={[styles.emptySubtitle, { color: theme.colors.onSurfaceVariant }]}>
-          Создайте журнал с помощью мастера
+          {I18n.t("createJournalInWizard")}
         </Text>
           </View>
     );
@@ -764,10 +874,10 @@ export default function DataProcessing() {
           <MaterialCommunityIcons name="chart-line" size={32} color={theme.colors.primary} />
           <View style={styles.headerText}>
             <Text style={[styles.headerTitle, { color: theme.colors.primary }]}>
-              Обработка данных
+              {I18n.t("processingTitle")}
           </Text>
             <Text style={[styles.headerSubtitle, { color: theme.colors.onPrimaryContainer }]}>
-              Проект: {activeProject.name}
+              {I18n.t("project")}: {activeProject.name}
           </Text>
         </View>
       </View>
@@ -790,6 +900,45 @@ export default function DataProcessing() {
         theme={theme}
       />
 
+      {/* Управление масштабом */}
+      <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+        <Card.Content>
+          <View style={styles.cardHeader}>
+            <MaterialIcons name="zoom-in" size={24} color={theme.colors.primary} />
+            <Text style={[styles.cardTitle, { color: theme.colors.primary }]}>
+              {I18n.t("scale")}
+            </Text>
+          </View>
+          
+          <View style={styles.zoomControls}>
+            <Button
+              mode="outlined"
+              icon="magnify-plus"
+              onPress={handleZoomIn}
+              style={styles.zoomButton}
+            >
+              {I18n.t("zoomIn")}
+            </Button>
+            <Button
+              mode="outlined"
+              icon="magnify-minus"
+              onPress={handleZoomOut}
+              style={styles.zoomButton}
+            >
+              {I18n.t("zoomOut")}
+            </Button>
+            <Button
+              mode="outlined"
+              icon="home"
+              onPress={handleResetZoom}
+              style={styles.zoomButton}
+            >
+              {I18n.t("reset")}
+            </Button>
+          </View>
+        </Card.Content>
+      </Card>
+
       {/* График */}
       <Chart
         points={points}
@@ -809,14 +958,14 @@ export default function DataProcessing() {
             <View style={styles.cardHeader}>
               <MaterialIcons name="analytics" size={24} color={theme.colors.secondary} />
               <Text style={[styles.cardTitle, { color: theme.colors.secondary }]}>
-                Результаты анализа
+                {I18n.t("results")}
       </Text>
             </View>
             
             <View style={styles.resultGrid}>
               <View style={styles.resultItem}>
                 <Text style={[styles.resultLabel, { color: theme.colors.onSecondaryContainer }]}>
-                  Наклон (k)
+                  {I18n.t("slope")}
                 </Text>
                 <Text style={[styles.resultValue, { color: theme.colors.secondary }]}>
                   {state.lineParams.k.toFixed(4)}
@@ -825,7 +974,7 @@ export default function DataProcessing() {
               
               <View style={styles.resultItem}>
                 <Text style={[styles.resultLabel, { color: theme.colors.onSecondaryContainer }]}>
-                  Пересечение (b)
+                  {I18n.t("intercept")}
                 </Text>
                 <Text style={[styles.resultValue, { color: theme.colors.secondary }]}>
                   {state.lineParams.b.toFixed(4)}
@@ -853,7 +1002,7 @@ export default function DataProcessing() {
               style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
               labelStyle={{ color: theme.colors.onPrimary }}
             >
-              Сохранить график
+              {I18n.t("saveChartToGallery")}
             </Button>
           </View>
         </Card.Content>
@@ -865,15 +1014,12 @@ export default function DataProcessing() {
           <View style={styles.cardHeader}>
             <MaterialIcons name="info" size={24} color={theme.colors.onSurfaceVariant} />
             <Text style={[styles.cardTitle, { color: theme.colors.onSurfaceVariant }]}>
-              Инструкция
+              {I18n.t("instructions")}
             </Text>
           </View>
           
           <Text style={[styles.instructionText, { color: theme.colors.onSurfaceVariant }]}>
-            1. Выберите журнал откачки{'\n'}
-            2. Выберите тип графика{'\n'}
-            3. Нажмите на две точки для построения линии тренда{'\n'}
-            4. Анализируйте результаты в разделе "Результаты анализа"
+            {I18n.t("selectTwoPoints")}
           </Text>
         </Card.Content>
       </Card>
@@ -979,152 +1125,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 300,
   },
-  simpleChart: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#e0e0e0',
-    position: 'relative',
-    padding: 16,
-  },
-  chartBackground: {
-    position: 'absolute',
-    top: 40,
-    left: 50,
-    right: 20,
-    bottom: 40,
-    backgroundColor: '#f9f9f9',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  xAxis: {
-    position: 'absolute',
-    bottom: 40,
-    left: 50,
-    right: 20,
-    height: 2,
-    backgroundColor: '#333',
-  },
-  yAxis: {
-    position: 'absolute',
-    top: 40,
-    left: 50,
-    width: 2,
-    bottom: 40,
-    backgroundColor: '#333',
-  },
-  dataPoint: {
-    position: 'absolute',
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#ffffff',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 3,
-  },
-  pointLabel: {
-    fontSize: 10,
-    color: '#ffffff',
-    fontWeight: 'bold',
-  },
-  xLabel: {
-    position: 'absolute',
-    bottom: 10,
-    left: 0,
-    right: 0,
-    textAlign: 'center',
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '600',
-  },
-  yLabel: {
-    position: 'absolute',
-    top: 10,
-    left: 5,
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '600',
-    transform: [{ rotate: '-90deg' }],
-  },
-  chartInfo: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    fontSize: 8,
-    color: '#666',
-    fontWeight: '500',
-    maxWidth: 120,
-    textAlign: 'right',
-    lineHeight: 10,
-  },
-  gridLineVertical: {
-    position: 'absolute',
-    top: 40,
-    bottom: 40,
-    width: 1,
-    backgroundColor: '#e0e0e0',
-    opacity: 0.6,
-  },
-  gridLineHorizontal: {
-    position: 'absolute',
-    left: 50,
-    right: 20,
-    height: 1,
-    backgroundColor: '#e0e0e0',
-    opacity: 0.6,
-  },
-  xTick: {
-    position: 'absolute',
-    bottom: 38,
-    width: 2,
-    height: 8,
-    backgroundColor: '#333',
-  },
-  yTick: {
-    position: 'absolute',
-    left: 48,
-    width: 8,
-    height: 2,
-    backgroundColor: '#333',
-  },
-  xTickLabel: {
-    position: 'absolute',
-    bottom: 20,
-    width: 20,
-    textAlign: 'center',
-    fontSize: 10,
-    color: '#666',
-  },
-  yTickLabel: {
-    position: 'absolute',
-    left: 20,
-    width: 25,
-    textAlign: 'right',
-    fontSize: 10,
-    color: '#666',
-  },
-  trendLine: {
-    position: 'absolute',
-    height: 3,
-    backgroundColor: '#FF6B35',
-    opacity: 0.9,
-    borderRadius: 1.5,
-    shadowColor: '#FF6B35',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.3,
-    shadowRadius: 2,
-    elevation: 2,
-    zIndex: 10,
-  },
   emptyChart: {
     alignItems: 'center',
     paddingVertical: 40,
@@ -1181,6 +1181,15 @@ const styles = StyleSheet.create({
   instructionText: {
     fontSize: 14,
     lineHeight: 22,
+  },
+  zoomControls: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    gap: 8,
+  },
+  zoomButton: {
+    flex: 1,
+    borderRadius: 8,
   },
 
 });

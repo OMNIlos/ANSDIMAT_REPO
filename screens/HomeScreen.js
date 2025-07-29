@@ -40,21 +40,21 @@ export default function HomeScreen({ navigation }) {
   
   const menuItems = [
       {
-      id: 'calculator',
-      title: I18n.t('calculator', { defaultValue: 'Калькулятор' }),
-      subtitle: I18n.t('calculatorDesc', { 
-        defaultValue: 'Гидрогеологические расчеты' 
-      }),
-      icon: 'calculate',
-      iconFamily: 'material',
-      color: theme.colors.secondary,
-      onPress: () => navigation.navigate('Calculator'),
+        id: 'calculator',
+        title: I18n.t('calculator', { defaultValue: 'Калькулятор' }),
+        subtitle: I18n.t('calculatorDesc', { 
+          defaultValue: 'Гидрогеологические расчеты' 
+        }),
+        icon: 'calculate',
+        iconFamily: 'material',
+        color: theme.colors.secondary,
+        onPress: () => navigation.navigate('Calculator'),
       },
       {
-      id: 'pumping',
-      title: I18n.t('pumpingTest', { defaultValue: 'Обработка откачек' }),
-      subtitle: I18n.t('pumpingTestDesc', { 
-        defaultValue: 'Анализ данных откачки скважин' 
+        id: 'pumping',
+        title: I18n.t('pumpingTest', { defaultValue: 'Обработка откачек' }),
+        subtitle: I18n.t('pumpingTestDesc', { 
+          defaultValue: 'Анализ данных откачки скважин' 
       }),
       icon: 'water-pump',
       iconFamily: 'community',
@@ -102,7 +102,7 @@ export default function HomeScreen({ navigation }) {
       </Surface>
       
       <View style={styles.textContainer}>
-        <Text style={[styles.itemTitle, { color: theme.colors.text }]}> 
+        <Text style={[styles.itemTitle, { color: 'black' }]}> 
           {item.title}
         </Text>
         <Text style={[styles.itemSubtitle, { color: theme.colors.textSecondary }]}> 
@@ -205,7 +205,7 @@ export default function HomeScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Быстрые действия - УДАЛЕНО */}
+        
       </ScrollView>
       {/* Нижнее меню */}
       <View style={styles.bottomMenuContainer}>
