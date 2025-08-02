@@ -24,6 +24,7 @@ import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import HomeScreen from '../screens/HomeScreen';
 import CalculatorScreen from '../screens/CalculatorScreen';
 import PumpingTestProcessing from '../screens/PumpingTestProcessing';
+import FieldDiaryScreen from '../screens/FieldDiaryScreen';
 import ExamplesAndVideos from '../screens/ExamplesAndVideos';
 import AboutScreen from '../screens/AboutScreen';
 import ContactUs from '../screens/ContactUs';
@@ -64,6 +65,13 @@ function CustomDrawerContent(props) {
       route: 'PumpingTestProcessing',
     },
     {
+      name: 'FieldDiary',
+      title: I18n.t('field', { defaultValue: 'Полевой дневник' }),
+      icon: 'map-outline',
+      iconFamily: 'community',
+      route: 'FieldDiary',
+    },
+    {
       name: 'ExamplesAndVideos',
       title: I18n.t('examples', { defaultValue: 'Примеры и видео' }),
       icon: 'play-circle-outline',
@@ -83,7 +91,7 @@ function CustomDrawerContent(props) {
     {
       name: 'ContactUs',
       title: I18n.t('contacts', { defaultValue: 'Контакты' }),
-      icon: 'contact-mail',
+      icon: 'contacts',
       iconFamily: 'community',
       route: 'ContactUs',
     },
@@ -148,13 +156,13 @@ function CustomDrawerContent(props) {
       <View style={[styles.drawerHeader, { backgroundColor: theme.colors.primary }]}>
         <View style={styles.logoContainer}>
           <Image
-            source={require('../assets/icon.png')}
+            source={require('../assets/splash.png')}
             style={styles.logo}
             resizeMode="contain"
           />
           <View style={styles.headerText}>
             <Text style={[styles.appTitle, { color: theme.colors.white }]}>
-              АНСДИМАТ
+              {I18n.t('homeTitle', { defaultValue: 'АНСДИМАТ' })}
             </Text>
             <Text style={[styles.appSubtitle, { color: theme.colors.white }]}>
               v1.0.0
@@ -216,8 +224,16 @@ export default function DrawerNavigator() {
         screenOptions={{
           headerStyle: {
           backgroundColor: theme.colors.primary,
+          elevation: 8,
+          shadowColor: '#000',
+          shadowOffset: {
+            width: 0,
+            height: 4,
           },
-        headerTintColor: theme.colors.white,
+          shadowOpacity: 0.15,
+          shadowRadius: 8,
+          },
+        headerTintColor: 'white',
           headerTitleStyle: {
           fontWeight: 'bold',
         },
@@ -232,7 +248,7 @@ export default function DrawerNavigator() {
           name="Home"
           component={HomeScreen}
         options={{
-          title: I18n.t('desktop', { defaultValue: 'Рабочий стол' }),
+          title: I18n.t('homeTitle', { defaultValue: 'АНСДИМАТ' })
         }}
       />
       <Drawer.Screen
@@ -247,6 +263,13 @@ export default function DrawerNavigator() {
         component={PumpingTestProcessing}
         options={{
           title: I18n.t('pumpingTest', { defaultValue: 'Обработка откачек' }),
+        }}
+      />
+      <Drawer.Screen
+        name="FieldDiary"
+        component={FieldDiaryScreen}
+        options={{
+          title: I18n.t('field', { defaultValue: 'Полевой дневник' }),
         }}
       />
       <Drawer.Screen
@@ -312,6 +335,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     marginRight: 16,
+    borderRadius: 15,
   },
   headerText: {
     flex: 1,
@@ -327,8 +351,7 @@ const styles = StyleSheet.create({
   },
   drawerContent: {
     flex: 1,
-    paddingHorizontal: 12,
-    paddingTop: 8,
+    paddingHorizontal: 12
   },
   drawerContentContainer: {
     flexGrow: 0,

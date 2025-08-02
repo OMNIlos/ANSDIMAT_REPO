@@ -113,13 +113,13 @@ export default function ProjectManager({ route }) {
 
   async function handleCreateProject() {
     if (!newProjectName.trim()) {
-      Alert.alert(I18n.t("error"), "Введите название проекта");
+              Alert.alert(I18n.t("error"), I18n.t("enterProjectName"));
       return;
     }
 
     try {
       const newProject = {
-        id: Date.now(),
+        id: Date.now().toString(),
         name: newProjectName.trim(),
         createdAt: new Date().toISOString(),
         lastAccessDate: new Date().toISOString(),
@@ -129,21 +129,21 @@ export default function ProjectManager({ route }) {
 
       const updatedProjects = [...projects, newProject];
       await saveProjects(updatedProjects);
-      await AsyncStorage.setItem("pumping_active_project_id", newProject.id.toString());
+      await AsyncStorage.setItem("pumping_active_project_id", String(newProject.id));
       
-      setActiveId(newProject.id.toString());
+      setActiveId(String(newProject.id));
       setNewProjectName("");
       setShowCreateModal(false);
       
       Alert.alert(I18n.t("success"), I18n.t("projectCreated"));
     } catch (error) {
       console.error("Error creating project:", error);
-      Alert.alert(I18n.t("error"), "Не удалось создать проект");
+              Alert.alert(I18n.t("error"), I18n.t("createProjectError"));
     }
   }
 
   function deleteProject(id) {
-    const project = projects.find((p) => p.id === id);
+    const project = projects.find((p) => String(p.id) === String(id));
     Alert.alert(
       I18n.t("deleteProject"),
       I18n.t("deleteProjectConfirm", { name: project?.name || "" }),
@@ -153,9 +153,9 @@ export default function ProjectManager({ route }) {
           text: I18n.t("delete"),
           style: "destructive",
           onPress: async () => {
-            const newProjects = projects.filter((p) => p.id !== id);
+            const newProjects = projects.filter((p) => String(p.id) !== String(id));
             await saveProjects(newProjects);
-            if (activeId === id) {
+            if (String(activeId) === String(id)) {
               await AsyncStorage.removeItem("pumping_active_project_id");
               setActiveId(null);
             }
@@ -168,7 +168,7 @@ export default function ProjectManager({ route }) {
 
   function toggleFavorite(id) {
     const newProjects = projects.map((p) =>
-      p.id === id ? { ...p, favorite: !p.favorite } : p
+      String(p.id) === String(id) ? { ...p, favorite: !p.favorite } : p
     );
     saveProjects(newProjects);
     setShowMenuForProject(null);
@@ -176,7 +176,7 @@ export default function ProjectManager({ route }) {
 
   async function exportProject(id) {
     try {
-      const project = projects.find((p) => p.id === id);
+      const project = projects.find((p) => String(p.id) === String(id));
       if (!project) {
         Alert.alert(I18n.t("error"), I18n.t("projectNotFound"));
         return;
@@ -233,7 +233,7 @@ export default function ProjectManager({ route }) {
       const data = await AsyncStorage.getItem("pumping_projects");
       let projects = data ? JSON.parse(data) : [];
       // Проверка на дубликаты
-      if (projects.some((p) => p.id === imported.id)) {
+      if (projects.some((p) => String(p.id) === String(imported.id))) {
         Alert.alert(I18n.t("warning"), I18n.t("projectIdExists"));
         return;
       }
@@ -257,10 +257,10 @@ export default function ProjectManager({ route }) {
       const searchId = id.toString();
       
       // Проверяем, что проект существует
-      const project = projects.find(p => p.id.toString() === searchId);
+              const project = projects.find(p => String(p.id) === String(searchId));
       if (!project) {
         console.warn('selectProject: project not found with id:', searchId);
-        Alert.alert("Ошибка", "Проект не найден");
+        Alert.alert(I18n.t("error"), I18n.t("projectNotFound"));
         return;
       }
       
@@ -270,26 +270,26 @@ export default function ProjectManager({ route }) {
       setActiveId(searchId);
       
       // Сохраняем в AsyncStorage
-      await AsyncStorage.setItem("pumping_active_project_id", searchId);
+      await AsyncStorage.setItem("pumping_active_project_id", String(searchId));
       
       // Обновляем lastAccessDate для проекта
       const updatedProjects = projects.map(p => 
-        p.id.toString() === searchId 
+        String(p.id) === String(searchId) 
           ? { ...p, lastAccessDate: new Date().toISOString() }
           : p
       );
       await saveProjects(updatedProjects);
       
       console.log('Project selected successfully:', project.name);
-      Alert.alert("Успех", `Проект "${project.name}" выбран`);
+              Alert.alert(I18n.t("success"), I18n.t("projectSelected", { name: project.name }));
     } catch (error) {
       console.error('Error selecting project:', error);
-      Alert.alert("Ошибка", "Ошибка при выборе проекта");
+              Alert.alert(I18n.t("error"), I18n.t("selectProjectError"));
     }
   }
 
   const MenuModal = ({ projectId, visible, onClose }) => {
-    const project = projects.find(p => p.id === projectId);
+    const project = projects.find(p => String(p.id) === String(projectId));
     if (!project) return null;
 
     return (
@@ -371,7 +371,7 @@ export default function ProjectManager({ route }) {
 
       <FlatList
         data={projects}
-        keyExtractor={(item) => item.id.toString()}
+        keyExtractor={(item) => String(item.id)}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <MaterialIcons name="folder-open" size={64} color={theme.colors.textSecondary} />
@@ -384,7 +384,7 @@ export default function ProjectManager({ route }) {
           <View style={[
             styles.projectCard,
             { backgroundColor: theme.colors.surface },
-            item.id.toString() === activeId && { borderColor: theme.colors.primary, borderWidth: 2 }
+            String(item.id) === String(activeId) && { borderColor: theme.colors.primary, borderWidth: 2 }
           ]}>
             {/* Заголовок проекта */}
             <View style={styles.projectHeader}>
@@ -400,7 +400,7 @@ export default function ProjectManager({ route }) {
                 <Text style={[styles.projectDate, { color: theme.colors.textSecondary }]}>
                   {I18n.t("created")}: {formatDate(item.createdAt || item.created)}
                 </Text>
-                {item.id.toString() === activeId && (
+                {String(item.id) === String(activeId) && (
                   <View style={[styles.activeBadge, { backgroundColor: theme.colors.primary }]}>
                     <Text style={[styles.activeBadgeText, { color: theme.colors.white }]}>
                       {I18n.t("activeProject")}
@@ -418,7 +418,7 @@ export default function ProjectManager({ route }) {
             </View>
 
             {/* Кнопка выбора */}
-            {item.id.toString() !== activeId && (
+            {String(item.id) !== String(activeId) && (
               <TouchableOpacity
                 style={[styles.selectButton, { borderColor: theme.colors.primary }]}
                 onPress={() => {

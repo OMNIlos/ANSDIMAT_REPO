@@ -1,12 +1,13 @@
 import React, { useEffect } from 'react';
-import { View, Text, Image, StyleSheet, StatusBar, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, StatusBar, Dimensions, Image } from 'react-native';
 import { useTheme } from 'react-native-paper';
+import I18n from '../Localization';
 
 const { width, height } = Dimensions.get('window');
 
 export default function SplashScreen({ onFinish }) {
   const theme = useTheme();
-  
+  const currentYear = new Date().getFullYear();
   useEffect(() => {
     const timer = setTimeout(() => {
       onFinish();
@@ -20,20 +21,21 @@ export default function SplashScreen({ onFinish }) {
       <StatusBar backgroundColor={theme.colors.primary} barStyle="light-content" />
       
       <View style={styles.logoContainer}>
-        <View style={[styles.logoBackground, { backgroundColor: theme.colors.white }]}>
+                        <View style={[styles.logoBackground, { backgroundColor: 'transparent' }]}>
           <Image
-            source={require('../assets/icon.png')}
-            style={styles.logo}
+            source={require('../assets/splash.png')}
+            style={{ width: 80, height: 80, borderRadius: 15 }}
             resizeMode="contain"
+            
           />
         </View>
         
         <Text style={[styles.appName, { color: theme.colors.white }]}>
-          АНСДИМАТ
+          {I18n.t('homeTitle')}
         </Text>
         
         <Text style={[styles.subtitle, { color: theme.colors.white }]}>
-          Анализ и обработка гидрогеологических данных
+          {I18n.t('appSubtitle')}
         </Text>
       </View>
       
@@ -42,7 +44,7 @@ export default function SplashScreen({ onFinish }) {
           ansdimat.com
         </Text>
         <Text style={[styles.copyright, { color: theme.colors.white }]}>
-          © 2024 Ансдимат
+          © {currentYear} {I18n.t('homeTitle')}
         </Text>
       </View>
     </View>
@@ -68,19 +70,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 30,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.65,
-    elevation: 8,
   },
-  logo: {
-    width: 80,
-    height: 80,
-  },
+
   appName: {
     fontSize: 32,
     fontWeight: 'bold',

@@ -14,6 +14,8 @@ const colors = {
   border: '#919191', // Серая граница
   white: '#FFFFFF',
   shadow: 'rgba(0, 0, 0, 0.1)',
+  d4d4d4: '#d4d4d4',
+  d3d3d3: '#3d3d3d',
 };
 
 export const lightTheme = {
@@ -37,6 +39,7 @@ export const lightTheme = {
     border: colors.border,
     white: colors.white,
     shadow: colors.shadow,
+    d4d4d4: colors.d4d4d4,
   },
 };
 
@@ -61,6 +64,7 @@ export const darkTheme = {
     border: colors.border,
     white: colors.white,
     shadow: 'rgba(255, 255, 255, 0.1)',
+    d4d4d4: colors.d3d3d3,
   },
 };
 

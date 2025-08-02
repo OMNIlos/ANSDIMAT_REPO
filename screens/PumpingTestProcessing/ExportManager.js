@@ -228,7 +228,7 @@ export default function ExportManager() {
 
   const exportProjectToJSON = useCallback(async () => {
     if (!activeProject) {
-      Alert.alert("Ошибка", "Нет активного проекта");
+              Alert.alert(I18n.t("error"), I18n.t("noActiveProject"));
       return;
     }
     
@@ -247,10 +247,10 @@ export default function ExportManager() {
         dialogTitle: `Экспорт проекта: ${activeProject.name}`
       });
       
-      Alert.alert("Успех", "Проект экспортирован!");
+              Alert.alert(I18n.t("success"), I18n.t("projectExported"));
     } catch (error) {
       console.error("Export error:", error);
-      Alert.alert("Ошибка", "Не удалось экспортировать проект");
+              Alert.alert(I18n.t("error"), I18n.t("exportProjectError"));
     } finally {
       setIsExporting(false);
     }
@@ -258,30 +258,30 @@ export default function ExportManager() {
 
   const exportJournalToCSV = useCallback(async () => {
     if (!hasPremiumAccess) {
-      Alert.alert("Премиум функция", "Экспорт в CSV доступен только в премиум версии", [
-        { text: "Отмена", style: "cancel" },
+              Alert.alert(I18n.t("premiumFeature"), I18n.t("premiumFeatureCSV"), [
+        { text: I18n.t("cancel"), style: "cancel" },
         {
-          text: "Получить премиум",
-          onPress: () => Alert.alert("Подписка", "Переход к экрану подписки"),
+          text: I18n.t("getPremium"),
+          onPress: () => Alert.alert(I18n.t("subscription"), I18n.t("goToSubscription")),
         },
       ]);
       return;
     }
 
     if (!activeProject || !journals.length) {
-      Alert.alert("Ошибка", "Нет данных для экспорта");
+      Alert.alert(I18n.t("error"), I18n.t("noDataToExport"));
       return;
     }
     
     setIsExporting(true);
     try {
-      let csvContent = "Журнал,Дата создания,Тип испытания,Граничные условия\n";
+      let csvContent = I18n.t("csvHeader") + "\n";
       
       journals.forEach((journal, idx) => {
         csvContent += `Журнал ${idx + 1},${new Date(journal.date).toLocaleDateString()},${journal.testType},${journal.boundary}\n`;
         
         if (journal.dataRows?.length) {
-          csvContent += "Время,Понижение\n";
+          csvContent += I18n.t("csvDataHeader") + "\n";
           journal.dataRows.forEach((row) => {
             if (row.t && row.s) {
               csvContent += `${row.t},${row.s}\n`;
@@ -303,10 +303,10 @@ export default function ExportManager() {
         dialogTitle: `Экспорт журналов: ${activeProject.name}`
       });
       
-      Alert.alert("Успех", "Журналы экспортированы в CSV!");
+      Alert.alert(I18n.t("success"), I18n.t("journalsExportedCSV"));
     } catch (error) {
       console.error("CSV export error:", error);
-      Alert.alert("Ошибка", "Не удалось экспортировать журналы");
+      Alert.alert(I18n.t("error"), I18n.t("exportJournalsError"));
     } finally {
       setIsExporting(false);
     }
@@ -314,23 +314,23 @@ export default function ExportManager() {
 
   const exportAnalysisToPDF = useCallback(async () => {
     if (!hasPremiumAccess) {
-      Alert.alert("Премиум функция", "Экспорт анализа в PDF доступен только в премиум версии", [
-        { text: "Отмена", style: "cancel" },
+      Alert.alert(I18n.t("premiumFeature"), I18n.t("premiumFeaturePDF"), [
+        { text: I18n.t("cancel"), style: "cancel" },
         {
-          text: "Получить премиум", 
-          onPress: () => Alert.alert("Подписка", "Переход к экрану подписки"),
+          text: I18n.t("getPremium"), 
+          onPress: () => Alert.alert(I18n.t("subscription"), I18n.t("goToSubscription")),
         },
       ]);
       return;
     }
 
     if (!activeProject || !journals.length) {
-      Alert.alert("Ошибка", "Нет данных для экспорта");
+      Alert.alert(I18n.t("error"), I18n.t("noDataToExport"));
       return;
     }
 
-    Alert.alert("В разработке", "Функция экспорта анализа в PDF находится в разработке и будет доступна в ближайших обновлениях.", [
-      { text: "Понятно" }
+    Alert.alert(I18n.t("inDevelopment"), I18n.t("pdfExportInDevelopment"), [
+      { text: I18n.t("understand") }
     ]);
   }, [activeProject, journals, hasPremiumAccess]);
 
@@ -340,10 +340,10 @@ export default function ExportManager() {
       <View style={styles.centerContainer}>
         <MaterialCommunityIcons name="folder-open" size={64} color={theme.colors.outline} />
         <Text style={[styles.emptyTitle, { color: theme.colors.onSurface }]}>
-          Нет активного проекта
+          {I18n.t("noActiveProject")}
         </Text>
         <Text style={[styles.emptySubtitle, { color: theme.colors.onSurfaceVariant }]}>
-          Выберите проект в разделе "Управление проектами"
+          {I18n.t("selectProjectInManagement")}
         </Text>
       </View>
     );

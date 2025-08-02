@@ -8,6 +8,7 @@ import {
   Alert,
   TextInput,
   Switch,
+  Image,
 } from "react-native";
 import { createMaterialTopTabNavigator } from "@react-navigation/material-top-tabs";
 import { captureRef } from "react-native-view-shot";
@@ -164,54 +165,7 @@ function UnitConverterScreen() {
           </View>
         ))}
       </ScrollView>
-      {/* Баннер с ссылкой */}
-      <View style={styles.banner}>
-        <TouchableOpacity
-          onPress={() => {
-            // Открыть сайт ANSDIMAT
-            const url = "https://ansdimat.com/update.shtml";
-            if (typeof window !== "undefined") {
-              window.open(url, "_blank");
-            } else {
-              // Для React Native
-              import("react-native").then(({ Linking }) =>
-                Linking.openURL(url)
-              );
-            }
-          }}
-          style={{
-            justifyContent: "center",
-            alignItems: "center",
-            borderRadius: 10,
-          }}
-        >
-          <Text
-            style={{ color: "#800020", fontWeight: "bold", marginBottom: 8 }}
-          >
-            {I18n.t("banner")}
-          </Text>
-          <Svg width={350} height={80} style={{ backgroundColor: "#fff" }}>
-            <Rect
-              x={0}
-              y={0}
-              width={350}
-              height={80}
-              fill="#fff"
-              stroke="#800020"
-              strokeWidth={2}
-            />
-            <SvgText
-              x={175}
-              y={45}
-              fontSize="20"
-              fill="#800020"
-              textAnchor="middle"
-            >
-              ANSDIMAT.com
-            </SvgText>
-          </Svg>
-        </TouchableOpacity>
-      </View>
+      
     </View>
   );
 }
@@ -387,7 +341,7 @@ function exportJSON(data, filename = "result.json") {
 function exportPNG(ref, filename = "result.png") {
   return captureRef(ref, { format: "png", quality: 1 })
     .then((uri) => Sharing.shareAsync(uri, { mimeType: "image/png" }))
-    .catch(() => Alert.alert("Ошибка", "Не удалось сохранить PNG"));
+            .catch(() => Alert.alert(I18n.t("error"), I18n.t("savePNGError")));
 }
 
 // --- Вспомогательная функция W(u) для уравнения Тейса ---

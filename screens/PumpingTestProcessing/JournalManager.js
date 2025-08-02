@@ -93,7 +93,7 @@ const DateTimeSelector = React.memo(({ value, onChange, theme }) => {
     <>
       <TouchableOpacity onPress={openPicker}>
         <Text style={[styles.dateText, { color: theme.colors.primary }]}>
-          {value ? formatDate(value) : "Выбрать дату и время"}
+                          {value ? formatDate(value) : I18n.t("selectDateTime")}
         </Text>
       </TouchableOpacity>
       
@@ -178,53 +178,62 @@ const JournalCard = React.memo(({
               color={theme.colors.primary} 
             />
             <View style={styles.journalTitleText}>
-              <Text style={[styles.journalTitle, { color: theme.colors.onSurface }]}>
+              <Text style={[styles.journalTitle, { color: theme.colors.onSurface }]} numberOfLines={1}>
                 {journal.name || `${journal.testType} ${index + 1}`}
               </Text>
-              <Text style={[styles.journalSubtitle, { color: theme.colors.onSurfaceVariant }]}>
+              <Text style={[styles.journalSubtitle, { color: theme.colors.onSurfaceVariant }]} numberOfLines={1}>
                 {journal.testType} • {journal.layerType}
               </Text>
-    </View>
+            </View>
             
             {journal.favorite && (
               <MaterialIcons name="star" size={20} color="#FFD700" />
             )}
           </View>
-          
-          {/* Кнопки действий */}
-          <View style={styles.journalActions}>
-            <IconButton
-              icon="star"
-              iconColor={journal.favorite ? "#FFD700" : theme.colors.outline}
-              size={20}
-              onPress={() => onToggleFavorite(journal)}
-            />
-            <IconButton
-              icon="eye"
-              iconColor={theme.colors.primary}
-              size={20}
-              onPress={() => onView(journal)}
-            />
-            <IconButton
-              icon="pencil"
-              iconColor={theme.colors.secondary}
-              size={20}
-              onPress={() => onEdit(journal)}
-            />
-            <IconButton
-              icon="export"
-              iconColor={theme.colors.tertiary}
-              size={20}
-              onPress={() => onExport(journal)}
-            />
-            <IconButton
-              icon="delete"
-              iconColor={theme.colors.error}
-              size={20}
-              onPress={() => onDelete(journal)}
-            />
-          </View>
         </View>
+
+        {/* Кнопки действий */}
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.journalActions}
+        >
+          <IconButton
+            icon="star"
+            iconColor={journal.favorite ? "#FFD700" : theme.colors.outline}
+            size={18}
+            onPress={() => onToggleFavorite(journal)}
+            style={styles.actionButton}
+          />
+          <IconButton
+            icon="eye"
+            iconColor={theme.colors.primary}
+            size={18}
+            onPress={() => onView(journal)}
+            style={styles.actionButton}
+          />
+          <IconButton
+            icon="pencil"
+            iconColor={theme.colors.secondary}
+            size={18}
+            onPress={() => onEdit(journal)}
+            style={styles.actionButton}
+          />
+          <IconButton
+            icon="export"
+            iconColor={theme.colors.tertiary}
+            size={18}
+            onPress={() => onExport(journal)}
+            style={styles.actionButton}
+          />
+          <IconButton
+            icon="delete"
+            iconColor={theme.colors.error}
+            size={18}
+            onPress={() => onDelete(journal)}
+            style={styles.actionButton}
+          />
+        </ScrollView>
 
         <Divider style={{ marginVertical: 12 }} />
 
@@ -239,7 +248,7 @@ const JournalCard = React.memo(({
           
           <View style={styles.infoRow}>
             <MaterialIcons name="data-usage" size={16} color={theme.colors.onSurfaceVariant} />
-            <Text style={[styles.infoText, { color: theme.colors.onSurfaceVariant }]}>
+            <Text style={[styles.infoText, { color: theme.colors.onSurfaceVariant }]} numberOfLines={1}>
               {journal.dataType} • {journal.dataRows?.length || 0} строк
             </Text>
           </View>
@@ -279,29 +288,33 @@ const JournalDetailModal = React.memo(({
           { backgroundColor: theme.colors.surface }
         ]}
       >
-        <ScrollView>
-          {/* Заголовок */}
-          <View style={styles.modalHeader}>
-            <View style={styles.modalTitleRow}>
-              <MaterialCommunityIcons 
-                name={getJournalTypeIcon(journal.testType)} 
-                size={28} 
-                color={theme.colors.primary} 
-              />
-              <Text style={[styles.modalTitle, { color: theme.colors.primary }]}>
-                Детали журнала
-              </Text>
-            </View>
-            <IconButton
-              icon="close"
-              iconColor={theme.colors.onSurfaceVariant}
-              onPress={onClose}
+        {/* Заголовок */}
+        <View style={styles.modalHeader}>
+          <View style={styles.modalTitleRow}>
+            <MaterialCommunityIcons 
+              name={getJournalTypeIcon(journal.testType)} 
+              size={24} 
+              color={theme.colors.primary} 
             />
+            <Text style={[styles.modalTitle, { color: theme.colors.primary }]}>
+              Детали журнала
+            </Text>
           </View>
+          <IconButton
+            icon="close"
+            iconColor={theme.colors.onSurfaceVariant}
+            onPress={onClose}
+            size={20}
+          />
+        </View>
 
-          <Divider />
+        <Divider style={{ marginBottom: 16 }} />
 
-          {/* Основная информация */}
+        {/* Основная информация */}
+        <ScrollView 
+          style={styles.modalScrollContent}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.modalContent}>
             <View style={styles.detailSection}>
               <Text style={[styles.detailLabel, { color: theme.colors.primary }]}>
@@ -371,7 +384,7 @@ const JournalDetailModal = React.memo(({
                       ? `t: ${row.t}, s1: ${row.s1}, s2: ${row.s2}`
                       : row.s && row.r
                       ? `s: ${row.s}, r: ${row.r}`
-                      : "Нет данных"}
+                      : I18n.t("noData")}
                   </Text>
                 ))}
                 {journal.dataRows.length > 5 && (
@@ -382,28 +395,30 @@ const JournalDetailModal = React.memo(({
               </Surface>
             )}
           </View>
-
-          {/* Кнопки действий */}
-          <View style={styles.modalActions}>
-            <Button
-              mode="outlined"
-              onPress={() => {
-                onClose();
-                onEdit(journal);
-              }}
-              style={styles.modalButton}
-            >
-              Редактировать
-            </Button>
-            <Button
-              mode="contained"
-              onPress={() => onExport(journal)}
-              style={styles.modalButton}
-            >
-              Экспорт
-            </Button>
-          </View>
         </ScrollView>
+
+        {/* Кнопки действий - sticky footer */}
+        <View style={styles.modalActions}>
+          <Button
+            mode="outlined"
+            onPress={() => {
+              onClose();
+              onEdit(journal);
+            }}
+            style={styles.modalButton}
+            compact
+          >
+            Редактировать
+          </Button>
+          <Button
+            mode="contained"
+            onPress={() => onExport(journal)}
+            style={styles.modalButton}
+            compact
+          >
+            Экспорт
+          </Button>
+        </View>
       </Modal>
     </Portal>
   );
@@ -446,86 +461,100 @@ const EditJournalModal = React.memo(({
           { backgroundColor: theme.colors.surface }
         ]}
       >
-        <ScrollView>
-          {/* Заголовок */}
-          <View style={styles.modalHeader}>
-            <View style={styles.modalTitleRow}>
-              <MaterialIcons name="edit" size={28} color={theme.colors.primary} />
-              <Text style={[styles.modalTitle, { color: theme.colors.primary }]}>
-                Редактировать журнал
-              </Text>
-            </View>
-            <IconButton
-              icon="close"
-              iconColor={theme.colors.onSurfaceVariant}
-              onPress={onClose}
-            />
+        {/* Заголовок */}
+        <View style={styles.modalHeader}>
+          <View style={styles.modalTitleRow}>
+            <MaterialIcons name="edit" size={24} color={theme.colors.primary} />
+            <Text style={[styles.modalTitle, { color: theme.colors.primary }]}>
+              Редактировать журнал
+            </Text>
           </View>
+          <IconButton
+            icon="close"
+            iconColor={theme.colors.onSurfaceVariant}
+            onPress={onClose}
+            size={20}
+          />
+        </View>
 
-          <Divider />
+        <Divider style={{ marginBottom: 16 }} />
 
-          {/* Поля ввода */}
+        {/* Поля ввода */}
+        <ScrollView 
+          style={styles.modalScrollContent}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.modalContent}>
             <TextInput
-              label="Тип испытания"
+              label={I18n.t("testTypeLabel")}
               value={editData.testType}
               onChangeText={(text) => setEditData(prev => ({ ...prev, testType: text }))}
               style={styles.input}
               mode="outlined"
+              dense
             />
 
             <TextInput
-              label="Тип пласта"
+              label={I18n.t("layerTypeLabel")}
               value={editData.layerType}
               onChangeText={(text) => setEditData(prev => ({ ...prev, layerType: text }))}
               style={styles.input}
               mode="outlined"
+              dense
             />
 
             <TextInput
-              label="Граничные условия"
+              label={I18n.t("boundaryConditionsLabel")}
               value={editData.boundary}
               onChangeText={(text) => setEditData(prev => ({ ...prev, boundary: text }))}
               style={styles.input}
               mode="outlined"
+              dense
             />
 
             <TextInput
-              label="Тип данных"
+              label={I18n.t("dataTypeLabel")}
               value={editData.dataType}
               onChangeText={(text) => setEditData(prev => ({ ...prev, dataType: text }))}
               style={styles.input}
               mode="outlined"
+              dense
             />
           </View>
-
-          {/* Кнопки действий */}
-          <View style={styles.modalActions}>
-            <Button
-              mode="outlined"
-              onPress={onClose}
-              style={styles.modalButton}
-            >
-              Отмена
-            </Button>
-            <Button
-              mode="contained"
-              onPress={handleSave}
-              style={styles.modalButton}
-            >
-              Сохранить
-            </Button>
-          </View>
         </ScrollView>
+
+        {/* Кнопки действий - sticky footer */}
+        <View style={styles.modalActions}>
+          <Button
+            mode="outlined"
+            onPress={onClose}
+            style={styles.modalButton}
+            compact
+          >
+            Отмена
+          </Button>
+          <Button
+            mode="contained"
+            onPress={handleSave}
+            style={styles.modalButton}
+            compact
+          >
+            Сохранить
+          </Button>
+        </View>
       </Modal>
     </Portal>
   );
 });
 
 // Основной компонент
-export default function JournalManager() {
+export default function JournalManager({ route }) {
   const theme = useTheme();
   const { locale } = useContext(LanguageContext);
+  
+  // Получаем параметры из навигации
+  const projectId = route?.params?.projectId;
+  const projectName = route?.params?.projectName;
   
   // Состояние
   const [activeProject, setActiveProject] = useState(null);
@@ -533,31 +562,51 @@ export default function JournalManager() {
   const [selectedJournal, setSelectedJournal] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Мемоизированные функции
   const loadActiveProject = useCallback(async () => {
     try {
-      const id = await AsyncStorage.getItem("pumping_active_project_id");
+      setIsLoading(true);
+      
+      // Если у нас есть projectId из навигации, используем его
+      const id = projectId || await AsyncStorage.getItem("pumping_active_project_id");
       if (!id) {
         setActiveProject(null);
         setJournals([]);
+        setIsLoading(false);
         return;
       }
       
       const projectsRaw = await AsyncStorage.getItem("pumping_projects");
-      if (!projectsRaw) return;
+      if (!projectsRaw) {
+        setActiveProject(null);
+        setJournals([]);
+        setIsLoading(false);
+        return;
+      }
       
       const projects = JSON.parse(projectsRaw);
-      const project = projects.find((p) => p.id.toString() === id.toString());
+      const project = projects.find((p) => String(p.id) === String(id));
       
-      setActiveProject(project || null);
-      setJournals(project?.journals || []);
+      if (!project) {
+        console.error("Project not found:", id);
+        setActiveProject(null);
+        setJournals([]);
+        setIsLoading(false);
+        return;
+      }
+      
+      setActiveProject(project);
+      setJournals(project.journals || []);
+      setIsLoading(false);
     } catch (error) {
       console.error("Error loading active project:", error);
       setActiveProject(null);
       setJournals([]);
+      setIsLoading(false);
     }
-  }, []);
+  }, [projectId]);
 
   const saveJournals = useCallback(async (newJournals) => {
     if (!activeProject) return;
@@ -567,7 +616,7 @@ export default function JournalManager() {
     let projects = JSON.parse(projectsRaw);
       
     projects = projects.map((p) =>
-      p.id === activeProject.id ? { ...p, journals: newJournals } : p
+      String(p.id) === String(activeProject.id) ? { ...p, journals: newJournals } : p
     );
       
     await AsyncStorage.setItem("pumping_projects", JSON.stringify(projects));
@@ -598,7 +647,7 @@ export default function JournalManager() {
     await saveJournals(updatedJournals);
     setShowEditModal(false);
     setSelectedJournal(null);
-    Alert.alert("Успех", "Журнал обновлен");
+            Alert.alert(I18n.t("success"), I18n.t("journalUpdated"));
   }, [selectedJournal, journals, saveJournals]);
 
   const handleToggleFavorite = useCallback(async (journal) => {
@@ -610,17 +659,17 @@ export default function JournalManager() {
 
   const handleDeleteJournal = useCallback((journal) => {
     Alert.alert(
-      "Удалить журнал",
+              I18n.t("deleteJournalConfirm"),
       `Удалить журнал "${journal.name || journal.testType}"?`,
       [
-        { text: "Отмена", style: "cancel" },
+                  { text: I18n.t("cancel"), style: "cancel" },
         {
-          text: "Удалить",
+                      text: I18n.t("delete"),
           style: "destructive",
           onPress: async () => {
             const updatedJournals = journals.filter((j) => j !== journal);
             await saveJournals(updatedJournals);
-            Alert.alert("Успех", "Журнал удален");
+            Alert.alert(I18n.t("success"), I18n.t("journalDeleted"));
           },
         },
       ]
@@ -639,7 +688,7 @@ export default function JournalManager() {
       
       await Sharing.shareAsync(fileUri, { mimeType: "application/json" });
     } catch (error) {
-      Alert.alert("Ошибка", "Не удалось экспортировать журнал");
+              Alert.alert(I18n.t("error"), I18n.t("exportError"));
     }
   }, []);
 
@@ -658,12 +707,12 @@ export default function JournalManager() {
       try {
         imported = JSON.parse(content);
       } catch (e) {
-        Alert.alert("Ошибка", "Неверный формат файла");
+        Alert.alert(I18n.t("error"), I18n.t("invalidFileFormat"));
         return;
       }
       
       if (!imported || !imported.testType || !imported.dataRows) {
-        Alert.alert("Ошибка", "Файл не является журналом Ansdimat");
+        Alert.alert(I18n.t("error"), I18n.t("notAnsdimatJournal"));
         return;
       }
       
@@ -676,9 +725,9 @@ export default function JournalManager() {
       
       const updatedJournals = [newJournal, ...journals];
       await saveJournals(updatedJournals);
-      Alert.alert("Успех", "Журнал импортирован");
+              Alert.alert(I18n.t("success"), I18n.t("journalImported"));
     } catch (e) {
-      Alert.alert("Ошибка", "Не удалось импортировать файл");
+              Alert.alert(I18n.t("error"), I18n.t("importError"));
     }
   }, [journals, saveJournals]);
 
@@ -691,7 +740,9 @@ export default function JournalManager() {
   }, [journals, saveJournals]);
 
   // Загрузка данных
-  useFocusEffect(loadActiveProject);
+  useEffect(() => {
+    loadActiveProject();
+  }, [loadActiveProject]);
 
   // Мемоизированный рендер элемента списка
   const renderJournal = useCallback(({ item, index }) => (
@@ -717,6 +768,17 @@ export default function JournalManager() {
   ]);
 
   // Проверка состояний
+  if (isLoading) {
+    return (
+      <View style={styles.centerContainer}>
+        <MaterialCommunityIcons name="loading" size={64} color={theme.colors.outline} />
+        <Text style={[styles.emptyTitle, { color: theme.colors.onSurface }]}>
+          Загрузка проекта...
+        </Text>
+      </View>
+    );
+  }
+
   if (!activeProject) {
     return (
       <View style={styles.centerContainer}>
@@ -725,26 +787,26 @@ export default function JournalManager() {
           Нет активного проекта
         </Text>
         <Text style={[styles.emptySubtitle, { color: theme.colors.onSurfaceVariant }]}>
-          Выберите проект в разделе "Управление проектами"
+          {I18n.t("selectProjectInManagement")}
         </Text>
       </View>
     );
   }
 
     return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <View style={[styles.container, { backgroundColor: theme.colors }]}>
       {/* Заголовок */}
-      <Surface style={[styles.headerCard, { backgroundColor: theme.colors.primaryContainer }]}>
+      <Surface style={[styles.headerCard, { backgroundColor: theme.colors.d4d4d4 }]}>
         <View style={styles.headerContent}>
           <MaterialCommunityIcons name="notebook" size={32} color={theme.colors.primary} />
           <View style={styles.headerText}>
             <Text style={[styles.headerTitle, { color: theme.colors.primary }]}>
               Управление журналами
-        </Text>
+            </Text>
             <Text style={[styles.headerSubtitle, { color: theme.colors.onPrimaryContainer }]}>
               Проект: {activeProject.name}
-        </Text>
-      </View>
+            </Text>
+          </View>
           <Button
             mode="contained"
             icon="plus"
@@ -753,7 +815,7 @@ export default function JournalManager() {
           >
             Импорт
           </Button>
-      </View>
+        </View>
       </Surface>
 
       {/* Список журналов */}
@@ -766,11 +828,11 @@ export default function JournalManager() {
             <MaterialCommunityIcons name="book-plus" size={64} color={theme.colors.outline} />
             <Text style={[styles.emptyTitle, { color: theme.colors.onSurface }]}>
               Нет журналов
-              </Text>
+            </Text>
             <Text style={[styles.emptySubtitle, { color: theme.colors.onSurfaceVariant }]}>
               Создайте журнал с помощью мастера или импортируйте существующий
-                  </Text>
-              </View>
+            </Text>
+          </View>
         }
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
@@ -808,25 +870,25 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    padding: 16,
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "bold",
     marginTop: 10,
   },
   emptySubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     marginTop: 5,
     textAlign: "center",
   },
   container: {
     flex: 1,
-    padding: 16,
+    padding: 12,
   },
   headerCard: {
     borderRadius: 12,
-    padding: 16,
+    padding: 12,
     marginBottom: 16,
     flexDirection: "row",
     alignItems: "center",
@@ -834,59 +896,68 @@ const styles = StyleSheet.create({
   headerContent: {
     flexDirection: "row",
     alignItems: "center",
+    flex: 1,
   },
   headerText: {
     marginLeft: 10,
     flex: 1,
+    marginRight: 8,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "bold",
   },
   headerSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     marginTop: 2,
   },
   listContent: {
     paddingBottom: 100, // Add padding for the modal
+    paddingHorizontal: 4,
   },
   emptyContainer: {
     alignItems: "center",
-    paddingVertical: 50,
+    paddingVertical: 40,
+    paddingHorizontal: 16,
   },
   journalCard: {
     borderRadius: 12,
     marginBottom: 10,
     elevation: 2,
+    marginHorizontal: 4,
   },
   journalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     marginBottom: 8,
   },
   journalTitleRow: {
     flexDirection: "row",
     alignItems: "center",
+    flex: 1,
+    marginRight: 8,
   },
   journalTitleText: {
     marginLeft: 8,
+    flex: 1,
   },
   journalTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "bold",
   },
   journalSubtitle: {
-    fontSize: 12,
+    fontSize: 11,
     marginTop: 2,
   },
   journalActions: {
     flexDirection: "row",
     alignItems: "center",
+    minWidth: 140,
   },
   actionButton: {
-    padding: 4,
-    marginLeft: 4,
+    padding: 1,
+    marginHorizontal: 1,
   },
   favoriteIcon: {
     fontSize: 18,
@@ -896,77 +967,103 @@ const styles = StyleSheet.create({
   },
   journalInfo: {
     gap: 4,
+    flex: 1,
   },
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
+    flex: 1,
   },
   infoText: {
-    fontSize: 12,
+    fontSize: 11,
     marginLeft: 5,
+    flex: 1,
   },
   modalContainer: {
-    borderRadius: 12,
-    padding: 20,
-    width: "90%",
-    maxHeight: "80%",
+    borderRadius: 16,
+    padding: 0,
+    width: "85%",
+    maxWidth: 400,
+    maxHeight: "75%",
+    margin: 20,
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
   },
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    padding: 20,
+    paddingBottom: 16,
   },
   modalTitleRow: {
     flexDirection: "row",
     alignItems: "center",
+    flex: 1,
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: "bold",
-    marginLeft: 10,
+    fontWeight: "600",
+    marginLeft: 12,
+  },
+  modalScrollContent: {
+    flex: 1,
+    paddingHorizontal: 20,
   },
   modalContent: {
-    marginBottom: 16,
+    paddingBottom: 16,
   },
   detailSection: {
-    marginBottom: 12,
+    marginBottom: 16,
   },
   detailLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
-    marginBottom: 4,
+    marginBottom: 6,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   detailValue: {
-    fontSize: 14,
-    color: "#333",
+    fontSize: 15,
+    lineHeight: 20,
   },
   dataPreview: {
     marginTop: 16,
-    padding: 12,
-    borderRadius: 8,
+    padding: 16,
+    borderRadius: 12,
   },
   dataRow: {
-    fontSize: 12,
-    marginBottom: 2,
+    fontSize: 13,
+    marginBottom: 4,
+    fontFamily: "monospace",
   },
   moreData: {
     fontSize: 12,
     fontStyle: "italic",
-    color: "#999",
+    marginTop: 8,
   },
   modalActions: {
     flexDirection: "row",
-    justifyContent: "space-around",
-    gap: 8,
+    justifyContent: "space-between",
+    padding: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(0,0,0,0.1)",
   },
   modalButton: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 6,
+    marginHorizontal: 4,
+    borderRadius: 8,
   },
   input: {
     marginBottom: 16,
+    backgroundColor: "transparent",
   },
   dateText: {
     textDecorationLine: "underline",

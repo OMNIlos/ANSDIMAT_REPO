@@ -8,6 +8,7 @@ import {
   Alert,
   Dimensions,
   ScrollView,
+  Pressable,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Svg, { Line, Circle, G, Text as SvgText, Rect } from "react-native-svg";
@@ -241,14 +242,46 @@ const Chart = React.memo(({
 
   const func = FUNCTIONS[selectedFunction] || FUNCTIONS["s-t"];
   
-  // Отладочная информация
-  console.log('Chart render:', {
-    pointsLength: points.length,
-    displayPointsLength: displayPoints.length,
-    hasChartBounds: !!chartBounds,
-    selectedFunction,
-    firstPoint: points[0]
-  });
+  // Функция для преобразования координат в пиксели (вынесена из SVG)
+  const getXY = useCallback((x, y, bounds) => {
+    if (!bounds) return { x: 0, y: 0 };
+    
+    const pixelX = ((x - bounds.minX) / (bounds.maxX - bounds.minX)) * (CHART_WIDTH - 2 * CHART_PADDING) + CHART_PADDING;
+    const pixelY = CHART_HEIGHT - CHART_PADDING - ((y - bounds.minY) / (bounds.maxY - bounds.minY)) * (CHART_HEIGHT - 2 * CHART_PADDING);
+    return { x: pixelX, y: pixelY };
+  }, []);
+
+  // Вычисляем границы данных
+  const bounds = useMemo(() => {
+    if (chartBounds) {
+      return {
+        minX: chartBounds.zoomedMinX,
+        maxX: chartBounds.zoomedMaxX,
+        minY: chartBounds.zoomedMinY,
+        maxY: chartBounds.zoomedMaxY,
+      };
+    } else if (displayPoints.length > 0) {
+      const xValues = displayPoints.map(p => p.t || p.x);
+      const yValues = displayPoints.map(p => p.s || p.y);
+      
+      const rawMinX = Math.min(...xValues);
+      const rawMaxX = Math.max(...xValues);
+      const rawMinY = Math.min(...yValues);
+      const rawMaxY = Math.max(...yValues);
+      
+      const xRange = rawMaxX - rawMinX || 1;
+      const yRange = rawMaxY - rawMinY || 1;
+      const padding = 0.1;
+      
+      return {
+        minX: rawMinX - xRange * padding,
+        maxX: rawMaxX + xRange * padding,
+        minY: rawMinY - yRange * padding,
+        maxY: rawMaxY + yRange * padding,
+      };
+    }
+    return null;
+  }, [chartBounds, displayPoints]);
 
     return (
     <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}>
@@ -267,32 +300,7 @@ const Chart = React.memo(({
             style={{ backgroundColor: "#ffffff", borderRadius: 12 }}
           >
             {(() => {
-              // Рассчитываем границы данных
-              let minX, maxX, minY, maxY;
-              
-              if (chartBounds) {
-                minX = chartBounds.zoomedMinX;
-                maxX = chartBounds.zoomedMaxX;
-                minY = chartBounds.zoomedMinY;
-                maxY = chartBounds.zoomedMaxY;
-              } else if (displayPoints.length > 0) {
-                const xValues = displayPoints.map(p => p.t || p.x);
-                const yValues = displayPoints.map(p => p.s || p.y);
-                
-                const rawMinX = Math.min(...xValues);
-                const rawMaxX = Math.max(...xValues);
-                const rawMinY = Math.min(...yValues);
-                const rawMaxY = Math.max(...yValues);
-                
-                const xRange = rawMaxX - rawMinX || 1;
-                const yRange = rawMaxY - rawMinY || 1;
-                const padding = 0.1;
-                
-                minX = rawMinX - xRange * padding;
-                maxX = rawMaxX + xRange * padding;
-                minY = rawMinY - yRange * padding;
-                maxY = rawMaxY + yRange * padding;
-              } else {
+              if (!bounds) {
                 // Если нет данных, показываем пустой график
                 return (
                   <G>
@@ -309,10 +317,10 @@ const Chart = React.memo(({
                 );
               }
 
-              // Функция для преобразования координат в пиксели
+              // Функция для преобразования координат в пиксели (внутри SVG)
               function getXY(x, y) {
-                const pixelX = ((x - minX) / (maxX - minX)) * (CHART_WIDTH - 2 * CHART_PADDING) + CHART_PADDING;
-                const pixelY = CHART_HEIGHT - CHART_PADDING - ((y - minY) / (maxY - minY)) * (CHART_HEIGHT - 2 * CHART_PADDING);
+                const pixelX = ((x - bounds.minX) / (bounds.maxX - bounds.minX)) * (CHART_WIDTH - 2 * CHART_PADDING) + CHART_PADDING;
+                const pixelY = CHART_HEIGHT - CHART_PADDING - ((y - bounds.minY) / (bounds.maxY - bounds.minY)) * (CHART_HEIGHT - 2 * CHART_PADDING);
                 return { x: pixelX, y: pixelY };
               }
 
@@ -322,17 +330,17 @@ const Chart = React.memo(({
               const yTicks = [];
 
               for (let i = 0; i <= tickCount; i++) {
-                const x = minX + (maxX - minX) * (i / tickCount);
-                const y = minY + (maxY - minY) * (i / tickCount);
+                const x = bounds.minX + (bounds.maxX - bounds.minX) * (i / tickCount);
+                const y = bounds.minY + (bounds.maxY - bounds.minY) * (i / tickCount);
                 xTicks.push(x);
                 yTicks.push(y);
               }
 
               return (
                 <G>
-            {/* Сетка */}
+                  {/* Сетка */}
                   {xTicks.map((x, i) => {
-                    const pixelX = getXY(x, minY).x;
+                    const pixelX = getXY(x, bounds.minY).x;
                     return (
                       <Line
                         key={`x-grid-${i}`}
@@ -342,11 +350,11 @@ const Chart = React.memo(({
                         y2={CHART_HEIGHT - CHART_PADDING}
                         stroke="#e0e0e0"
                         strokeWidth={1}
-              />
+                      />
                     );
                   })}
                   {yTicks.map((y, i) => {
-                    const pixelY = getXY(minX, y).y;
+                    const pixelY = getXY(bounds.minX, y).y;
                     return (
                       <Line
                         key={`y-grid-${i}`}
@@ -356,11 +364,11 @@ const Chart = React.memo(({
                         y2={pixelY}
                         stroke="#e0e0e0"
                         strokeWidth={1}
-              />
+                      />
                     );
                   })}
-            
-            {/* Оси */}
+              
+                  {/* Оси */}
                   <Line
                     x1={CHART_PADDING}
                     y1={CHART_HEIGHT - CHART_PADDING}
@@ -377,7 +385,7 @@ const Chart = React.memo(({
                     stroke="#888"
                     strokeWidth={2}
                   />
-            
+              
                   {/* Подписи осей */}
                   <SvgText
                     x={CHART_WIDTH / 2}
@@ -403,8 +411,8 @@ const Chart = React.memo(({
 
                   {/* Деления осей */}
                   {xTicks.map((x, i) => {
-                    const pixelX = getXY(x, minY).x;
-              return (
+                    const pixelX = getXY(x, bounds.minY).x;
+                    return (
                       <G key={`x-tick-${i}`}>
                         <Line
                           x1={pixelX}
@@ -427,7 +435,7 @@ const Chart = React.memo(({
                     );
                   })}
                   {yTicks.map((y, i) => {
-                    const pixelY = getXY(minX, y).y;
+                    const pixelY = getXY(bounds.minX, y).y;
                     return (
                       <G key={`y-tick-${i}`}>
                         <Line
@@ -450,23 +458,26 @@ const Chart = React.memo(({
                       </G>
                     );
                   })}
-            
+              
                   {/* Точки */}
-            {displayPoints.map((point, idx) => {
+                  {displayPoints.map((point, idx) => {
                     const xValue = point.t || point.x;
                     const yValue = point.s || point.y;
                     const { x, y } = getXY(xValue, yValue);
                     const isSelected = selectedPoints.includes(idx);
                 
-                return (
-                      <Circle
-                    key={idx}
-                        cx={x}
-                        cy={y}
-                        r={isSelected ? 7 : 5}
-                        fill={isSelected ? "#FF4444" : "#1976D2"}
-                    onPress={() => onPointPress && onPointPress(idx)}
-                      />
+                    return (
+                      <G key={idx}>
+                        {/* Видимая точка */}
+                        <Circle
+                          cx={x}
+                          cy={y}
+                          r={isSelected ? 7 : 5}
+                          fill={isSelected ? "#FF4444" : "#1976D2"}
+                          stroke={isSelected ? "#FF0000" : "#1565C0"}
+                          strokeWidth={isSelected ? 2 : 1}
+                        />
+                      </G>
                     );
                   })}
 
@@ -490,50 +501,50 @@ const Chart = React.memo(({
                     const b = y1Value - k * x1Value;
                     
                     // Находим точки пересечения с границами графика
-                    const leftY = k * minX + b;
-                    const rightY = k * maxX + b;
+                    const leftY = k * bounds.minX + b;
+                    const rightY = k * bounds.maxX + b;
                     
                     // Проверяем, пересекает ли линия график
-                    const topX = (maxY - b) / k;
-                    const bottomX = (minY - b) / k;
+                    const topX = (bounds.maxY - b) / k;
+                    const bottomX = (bounds.minY - b) / k;
                     
                     let startX, startY, endX, endY;
                     
                     // Определяем точки начала и конца линии
                     if (k === 0) {
                       // Горизонтальная линия
-                      startX = minX;
+                      startX = bounds.minX;
                       startY = y1Value;
-                      endX = maxX;
+                      endX = bounds.maxX;
                       endY = y1Value;
                     } else if (!isFinite(k)) {
                       // Вертикальная линия
                       startX = x1Value;
-                      startY = minY;
+                      startY = bounds.minY;
                       endX = x1Value;
-                      endY = maxY;
+                      endY = bounds.maxY;
                     } else {
                       // Обычная линия - находим пересечения с границами
                       const intersections = [];
                       
                       // Левая граница
-                      if (leftY >= minY && leftY <= maxY) {
-                        intersections.push({ x: minX, y: leftY });
+                      if (leftY >= bounds.minY && leftY <= bounds.maxY) {
+                        intersections.push({ x: bounds.minX, y: leftY });
                       }
                       
                       // Правая граница
-                      if (rightY >= minY && rightY <= maxY) {
-                        intersections.push({ x: maxX, y: rightY });
+                      if (rightY >= bounds.minY && rightY <= bounds.maxY) {
+                        intersections.push({ x: bounds.maxX, y: rightY });
                       }
                       
                       // Верхняя граница
-                      if (topX >= minX && topX <= maxX) {
-                        intersections.push({ x: topX, y: maxY });
+                      if (topX >= bounds.minX && topX <= bounds.maxX) {
+                        intersections.push({ x: topX, y: bounds.maxY });
                       }
                       
                       // Нижняя граница
-                      if (bottomX >= minX && bottomX <= maxX) {
-                        intersections.push({ x: bottomX, y: minY });
+                      if (bottomX >= bounds.minX && bottomX <= bounds.maxX) {
+                        intersections.push({ x: bottomX, y: bounds.minY });
                       }
                       
                       if (intersections.length >= 2) {
@@ -541,19 +552,19 @@ const Chart = React.memo(({
                         startY = intersections[0].y;
                         endX = intersections[1].x;
                         endY = intersections[1].y;
-              } else {
+                      } else {
                         // Если не нашли пересечений, используем исходные точки
                         startX = x1Value;
                         startY = y1Value;
                         endX = x2Value;
                         endY = y2Value;
                       }
-              }
-              
+                    }
+                    
                     const { x: x1, y: y1 } = getXY(startX, startY);
                     const { x: x2, y: y2 } = getXY(endX, endY);
               
-              return (
+                    return (
                       <Line
                         x1={x1}
                         y1={y1}
@@ -562,13 +573,36 @@ const Chart = React.memo(({
                         stroke="#FF6B35"
                         strokeWidth={3}
                         opacity={0.9}
-                />
-              );
-            })()}
+                      />
+                    );
+                  })()}
                 </G>
               );
             })()}
           </Svg>
+          
+          {/* TouchableOpacity элементы поверх SVG для нажатий */}
+          {bounds && displayPoints.map((point, idx) => {
+            const xValue = point.t || point.x;
+            const yValue = point.s || point.y;
+            const { x, y } = getXY(xValue, yValue, bounds);
+            
+            return (
+              <TouchableOpacity
+                key={`touchable-${idx}`}
+                style={{
+                  position: 'absolute',
+                  left: x - 15,
+                  top: y - 15,
+                  width: 30,
+                  height: 30,
+                  backgroundColor: 'transparent',
+                }}
+                onPress={() => onPointPress && onPointPress(idx)}
+                activeOpacity={0.7}
+              />
+            );
+          })}
         </View>
       </Card.Content>
     </Card>
@@ -576,10 +610,14 @@ const Chart = React.memo(({
 });
 
 // Основной компонент
-export default function DataProcessing() {
+export default function DataProcessing({ route }) {
   const theme = useTheme();
   const { locale } = useContext(LanguageContext);
   const chartRef = useRef();
+  
+  // Получаем параметры из навигации
+  const projectId = route?.params?.projectId;
+  const projectName = route?.params?.projectName;
   
   // Состояние
   const [activeProject, setActiveProject] = useState(null);
@@ -588,6 +626,7 @@ export default function DataProcessing() {
   const [state, setState] = useState(initialState);
   const [zoom, setZoom] = useState({ x: 1, y: 1 });
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isLoading, setIsLoading] = useState(true);
 
   // Мемоизированные вычисления
   const journal = useMemo(
@@ -676,40 +715,54 @@ export default function DataProcessing() {
   }, [points, pan, zoom]);
 
   // Загрузка активного проекта
-  useFocusEffect(
-    useCallback(() => {
-      const fetchData = async () => {
-        await loadActiveProject();
-      };
-      fetchData();
-    }, [loadActiveProject])
-  );
+  useEffect(() => {
+    loadActiveProject();
+  }, [loadActiveProject]);
 
   const loadActiveProject = useCallback(async () => {
     try {
-      const id = await AsyncStorage.getItem("pumping_active_project_id");
+      setIsLoading(true);
+      
+      // Если у нас есть projectId из навигации, используем его
+      const id = projectId || await AsyncStorage.getItem("pumping_active_project_id");
       if (!id) {
         setActiveProject(null);
         setJournals([]);
+        setIsLoading(false);
         return;
       }
       
       const projectsRaw = await AsyncStorage.getItem("pumping_projects");
-      if (!projectsRaw) return;
+      if (!projectsRaw) {
+        setActiveProject(null);
+        setJournals([]);
+        setIsLoading(false);
+        return;
+      }
       
       const projects = JSON.parse(projectsRaw);
-      const project = projects.find(p => p.id.toString() === id.toString());
+      const project = projects.find(p => String(p.id) === String(id));
       
-      setActiveProject(project || null);
-      setJournals(project?.journals || []);
+      if (!project) {
+        console.error("Project not found:", id);
+        setActiveProject(null);
+        setJournals([]);
+        setIsLoading(false);
+        return;
+      }
+      
+      setActiveProject(project);
+      setJournals(project.journals || []);
       setSelectedJournalIdx(0);
       setState(prev => ({ ...prev, selectedPoints: [] }));
+      setIsLoading(false);
     } catch (error) {
       console.error("Error loading active project:", error);
       setActiveProject(null);
       setJournals([]);
+      setIsLoading(false);
     }
-  }, []);
+  }, [projectId]);
 
   // Обработчики событий
   const handleSelectJournal = useCallback((index) => {
@@ -733,7 +786,7 @@ export default function DataProcessing() {
               
               const projectsRaw = await AsyncStorage.getItem("pumping_projects");
               const projects = JSON.parse(projectsRaw);
-              const projectIndex = projects.findIndex(p => p.id.toString() === activeProject.id.toString());
+              const projectIndex = projects.findIndex(p => String(p.id) === String(activeProject.id));
               
               projects[projectIndex] = updatedProject;
               await AsyncStorage.setItem("pumping_projects", JSON.stringify(projects));
@@ -838,6 +891,17 @@ export default function DataProcessing() {
   const hasData = points.length > 0 && chartBounds;
 
   // Проверка состояний
+  if (isLoading) {
+    return (
+      <View style={styles.centerContainer}>
+        <MaterialCommunityIcons name="loading" size={64} color={theme.colors.outline} />
+        <Text style={[styles.emptyTitle, { color: theme.colors.onSurface }]}>
+          Загрузка проекта...
+        </Text>
+      </View>
+    );
+  }
+
   if (!activeProject) {
     return (
       <View style={styles.centerContainer}>
@@ -869,18 +933,18 @@ export default function DataProcessing() {
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {/* Заголовок проекта */}
-      <Surface style={[styles.headerCard, { backgroundColor: theme.colors.primaryContainer }]}>
+      <Surface style={[styles.headerCard, { backgroundColor: theme.colors.d4d4d4 }]}>
         <View style={styles.headerContent}>
           <MaterialCommunityIcons name="chart-line" size={32} color={theme.colors.primary} />
           <View style={styles.headerText}>
             <Text style={[styles.headerTitle, { color: theme.colors.primary }]}>
               {I18n.t("processingTitle")}
-          </Text>
-            <Text style={[styles.headerSubtitle, { color: theme.colors.onPrimaryContainer }]}>
+            </Text>
+            <Text style={[styles.headerSubtitle, { color: theme.colors.primary }]}>
               {I18n.t("project")}: {activeProject.name}
-          </Text>
+            </Text>
+          </View>
         </View>
-      </View>
       </Surface>
 
       {/* Селектор журналов */}

@@ -4,24 +4,29 @@
     "slug": "Ansdimat",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/main.png",
+    "icon": "./assets/app_icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#FFFFFF"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.omnion.Ansdimat"
+      "bundleIdentifier": "com.omnion.Ansdimat",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "This app uses location to show your position on the map and add field diary points.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses location to show your position on the map and add field diary points."
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#FFFFFF"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.omnion.Ansdimat"
+      "package": "com.omnion.Ansdimat",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -39,6 +44,14 @@
         "expo-document-picker",
         {
           "iCloudContainerEnvironment": "Production"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location to show your position on the map and add field diary points.",
+          "locationAlwaysPermission": "Allow $(PRODUCT_NAME) to use your location in the background for field diary tracking.",
+          "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location to show your position on the map and add field diary points."
         }
       ]
     ],

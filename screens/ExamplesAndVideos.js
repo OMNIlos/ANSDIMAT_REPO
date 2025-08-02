@@ -1,18 +1,55 @@
 import React, { useContext } from "react";
-import { View, StyleSheet, ScrollView, Linking, TouchableOpacity } from "react-native";
+import { View, StyleSheet, ScrollView, Linking, TouchableOpacity, Platform, BackHandler, Alert } from "react-native";
 import { Text, Button, Card, Surface, Chip } from "react-native-paper";
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import I18n from "../Localization";
 import { LanguageContext } from "../LanguageContext";
 import { useTheme } from "react-native-paper";
 
-export default function ExamplesAndVideosScreen() {
+export default function ExamplesAndVideosScreen({ navigation }) {
   const theme = useTheme();
   const { locale } = useContext(LanguageContext);
 
   const handleLinkOpen = (url) => {
     Linking.openURL(url);
   };
+
+  // Нижнее меню
+  const bottomMenuItems = [
+    {
+      key: 'menu',
+      label: 'Меню',
+      icon: <MaterialIcons name="menu" size={28} color="#fff" />,
+      onPress: () => navigation.openDrawer(),
+    },
+    {
+      key: 'settings',
+      label: 'Настройки',
+      icon: <MaterialIcons name="settings" size={28} color="#fff" />,
+      onPress: () => navigation.navigate('Settings'),
+    },
+    {
+      key: 'help',
+      label: 'Справка',
+      icon: <MaterialIcons name="help-outline" size={28} color="#fff" />,
+      onPress: () => navigation.navigate('About'),
+    },
+    {
+      key: 'exit',
+      label: 'Выход',
+      icon: <MaterialCommunityIcons name="exit-to-app" size={28} color="#fff" />,
+      onPress: () => {
+        if (Platform.OS === 'android') {
+          BackHandler.exitApp();
+        } else {
+          Alert.alert(
+            'Выход из приложения',
+            'Для выхода из приложения на iOS используйте системное меню (свайп вверх и закройте приложение вручную).'
+          );
+        }
+      },
+    },
+  ];
 
   const examples = [
     {
@@ -21,7 +58,7 @@ export default function ExamplesAndVideosScreen() {
       description: I18n.t("pumpTestDescription"),
       url: "https://ansdimat.com/Ru/video_cases/case_01.shtml",
       icon: "water-pump",
-      difficulty: "Средний",
+              difficulty: I18n.t("difficultyMedium"),
       duration: "15 мин"
     },
     {
@@ -30,7 +67,7 @@ export default function ExamplesAndVideosScreen() {
       description: I18n.t("pitModelDescription"),
       url: "https://ansdimat.com/Ru/video_cases/case_02.shtml",
       icon: "excavator",
-      difficulty: "Сложный",
+              difficulty: I18n.t("difficultyHard"),
       duration: "25 мин"
     }
   ];
@@ -41,49 +78,49 @@ export default function ExamplesAndVideosScreen() {
       title: I18n.t("video1Title"),
       url: "https://rutube.ru/video/a86ee3f1bdd6896d95afc1bd8aa13851/",
       duration: "12:45",
-      category: "Основы"
+              category: I18n.t("categoryBasics")
     },
     {
       id: 2,
       title: I18n.t("video2Title"),
       url: "https://rutube.ru/video/6107cc6ecaf01a721d30661569f92ac0/",
       duration: "8:30",
-      category: "Настройка"
+              category: I18n.t("categorySetup")
     },
     {
       id: 3,
       title: I18n.t("video3Title"),
       url: "https://rutube.ru/video/472c734ab749122fd95c4506a05e6d41/",
       duration: "15:20",
-      category: "Расчеты"
+              category: I18n.t("categoryCalculations")
     },
     {
       id: 4,
       title: I18n.t("video4Title"),
       url: "https://rutube.ru/video/2e106a4faaf4f34fa315b5a5ac8b8b2a/",
       duration: "10:15",
-      category: "Анализ"
+              category: I18n.t("categoryAnalysis")
     },
     {
       id: 5,
       title: I18n.t("video5Title"),
       url: "https://rutube.ru/video/23f1fc0ac55afbec746b9689a30fae0c/",
       duration: "18:45",
-      category: "Экспорт"
+              category: I18n.t("categoryExport")
     },
     {
       id: 6,
       title: I18n.t("video6Title"),
       url: "https://rutube.ru/video/a96c453b0b730de20ac58e0cc097acff/",
       duration: "13:30",
-      category: "Графики"
+              category: I18n.t("categoryCharts")
     },
     {
       id: 7,
       title: I18n.t("video7Title"),
       url: "https://rutube.ru/video/a96c453b0b730de20ac58e0cc097acff/",
       duration: "16:20",
-      category: "Отчеты"
+              category: I18n.t("categoryReports")
     }
   ];
 
@@ -182,58 +219,78 @@ export default function ExamplesAndVideosScreen() {
   );
 
   return (
-    <ScrollView 
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
-      contentContainerStyle={styles.scrollContainer}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Заголовок */}
-      <Surface style={[styles.headerCard, { backgroundColor: theme.colors.surface }]}>
-        <View style={styles.headerContent}>
-          <MaterialCommunityIcons name="school" size={48} color={theme.colors.primary} />
-          <Text style={[styles.mainTitle, { color: theme.colors.primary }]}>
-            {I18n.t("examplesTitle")}
-          </Text>
-          <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
-            Изучайте ANSDIMAT с помощью примеров и видеоуроков
-          </Text>
-        </View>
-      </Surface>
-
-      {/* Примеры использования */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <MaterialCommunityIcons name="book-open-variant" size={24} color={theme.colors.primary} />
-          <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
-            {I18n.t("usageExamples")}
-          </Text>
-        </View>
-        
-        {examples.map(renderExampleCard)}
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Заголовок */}
+        <Surface style={[styles.headerCard, { backgroundColor: theme.colors.surface }]}>
+          <View style={styles.headerContent}>
+            <MaterialCommunityIcons name="school" size={48} color={theme.colors.primary} />
+            <Text style={[styles.mainTitle, { color: theme.colors.primary }]}>
+              {I18n.t("examplesTitle")}
+            </Text>
+            <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
+              Изучайте ANSDIMAT с помощью примеров и видеоуроков
+            </Text>
           </View>
+        </Surface>
 
-      {/* Видеоуроки */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <MaterialCommunityIcons name="video-box" size={24} color={theme.colors.primary} />
-          <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
-            {I18n.t("tutorialVideos")}
-          </Text>
+        {/* Примеры использования */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <MaterialCommunityIcons name="book-open-variant" size={24} color={theme.colors.primary} />
+            <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
+              {I18n.t("usageExamples")}
+            </Text>
           </View>
-        
-        <View style={styles.videosGrid}>
-          {videos.map(renderVideoCard)}
-        </View>
-          </View>
+          
+          {examples.map(renderExampleCard)}
+            </View>
 
-      {/* Нижний отступ */}
-      <View style={{ height: 20 }} />
-    </ScrollView>
+        {/* Видеоуроки */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <MaterialCommunityIcons name="video-box" size={24} color={theme.colors.primary} />
+            <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
+              {I18n.t("tutorialVideos")}
+            </Text>
+            </View>
+          
+          <View style={styles.videosGrid}>
+            {videos.map(renderVideoCard)}
+          </View>
+            </View>
+
+        {/* Нижний отступ */}
+        <View style={{ height: 100 }} />
+      </ScrollView>
+
+      {/* Нижнее меню */}
+      <View style={styles.bottomMenuContainer}>
+        {bottomMenuItems.map(item => (
+          <TouchableOpacity
+            key={item.key}
+            style={styles.bottomMenuItem}
+            onPress={item.onPress}
+            activeOpacity={0.7}
+          >
+            {item.icon}
+            <Text style={styles.bottomMenuLabel}>{item.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  scrollView: {
     flex: 1,
   },
   scrollContainer: {
@@ -398,5 +455,42 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     lineHeight: 20,
+  },
+  bottomMenuContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: '#7a1434', // бордовый
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    marginHorizontal: 16,
+    marginBottom: 50,
+    paddingVertical: 12,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  bottomMenuItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bottomMenuLabel: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.15)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 1,
   },
 });

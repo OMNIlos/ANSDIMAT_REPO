@@ -7,21 +7,60 @@ import {
   ScrollView,
   Alert,
   Platform,
+  BackHandler,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import I18n from "../Localization";
 import { LanguageContext } from "../LanguageContext";
 import { SubscriptionManager } from "../utils/SubscriptionManager";
 import { useTheme } from "react-native-paper";
 
-export default function SubscriptionScreen() {
+export default function SubscriptionScreen({ navigation }) {
   const theme = useTheme();
   const [subscriptionStatus, setSubscriptionStatus] = useState("inactive");
   const [subscriptionType, setSubscriptionType] = useState(null);
   const [expiryDate, setExpiryDate] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const { locale } = useContext(LanguageContext);
+
+  // Нижнее меню
+  const bottomMenuItems = [
+    {
+      key: 'menu',
+      label: 'Меню',
+      icon: <MaterialIcons name="menu" size={28} color="#fff" />,
+      onPress: () => navigation.openDrawer(),
+    },
+    {
+      key: 'settings',
+      label: 'Настройки',
+      icon: <MaterialIcons name="settings" size={28} color="#fff" />,
+      onPress: () => navigation.navigate('Settings'),
+    },
+    {
+      key: 'help',
+      label: 'Справка',
+      icon: <MaterialIcons name="help-outline" size={28} color="#fff" />,
+      onPress: () => navigation.navigate('About'),
+    },
+    {
+      key: 'exit',
+      label: 'Выход',
+      icon: <MaterialCommunityIcons name="exit-to-app" size={28} color="#fff" />,
+      onPress: () => {
+        if (Platform.OS === 'android') {
+          BackHandler.exitApp();
+        } else {
+          Alert.alert(
+            'Выход из приложения',
+            'Для выхода из приложения на iOS используйте системное меню (свайп вверх и закройте приложение вручную).'
+          );
+        }
+      },
+    },
+  ];
 
   useFocusEffect(
     React.useCallback(() => {
@@ -81,7 +120,7 @@ export default function SubscriptionScreen() {
   async function cancelSubscription() {
     Alert.alert(
       I18n.t("cancelSubscription"),
-      "Вы уверены, что хотите отменить подписку?",
+              I18n.t("cancelSubscriptionConfirm"),
       [
         { text: I18n.t("cancel"), style: "cancel" },
         {
@@ -99,7 +138,7 @@ export default function SubscriptionScreen() {
                 { text: I18n.t("ok") },
               ]);
             } catch (error) {
-              Alert.alert(I18n.t("error"), "Ошибка при отмене подписки");
+              Alert.alert(I18n.t("error"), I18n.t("cancelSubscriptionError"));
             }
           },
         },
@@ -151,153 +190,180 @@ export default function SubscriptionScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={{backgroundColor: theme.colors.background }}>
-      <View style={styles.header}>
-        <Text style={styles.title}>{I18n.t("subscriptionTitle")}</Text>
-        <Text style={styles.description}>
-          {I18n.t("subscriptionDescription")}
-        </Text>
-      </View>
-
-      {/* Текущий статус подписки */}
-      <View style={{...styles.statusCard, backgroundColor: theme.colors.surface }}>
-        <Text style={{...styles.statusTitle, color: theme.colors.text}}>{I18n.t("currentPlan")}</Text>
-        <View style={styles.statusContent}>
-          <View
-            style={[
-              styles.statusIndicator,
-              { backgroundColor: getStatusColor() },
-            ]}
-          />
-          <View style={styles.statusInfo}>
-            <Text style={{...styles.statusText, color: theme.colors.text}}>{getStatusText()}</Text>
-            {subscriptionType && (
-              <Text style={styles.subscriptionType}>
-                {subscriptionType === "monthly"
-                  ? I18n.t("monthlySubscription")
-                  : I18n.t("yearlySubscription")}
-              </Text>
-            )}
-            {expiryDate && (
-              <Text style={styles.expiryDate}>
-                {I18n.t("subscriptionExpires")}: {formatDate(expiryDate)}
-              </Text>
-            )}
-          </View>
-        </View>
-
-        {subscriptionStatus === "active" && (
-          <TouchableOpacity
-            style={styles.cancelButton}
-            onPress={cancelSubscription}
-          >
-            <Text style={styles.cancelButtonText}>
-              {I18n.t("cancelSubscription")}
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Существующий контент */}
+        <View style={styles.content}>
+          <View style={{...styles.header, backgroundColor: theme.colors.primary}}>
+            <Text style={styles.title}>{I18n.t("subscriptionTitle")}</Text>
+            <Text style={styles.description}>
+              {I18n.t("subscriptionDescription")}
             </Text>
+          </View>
+
+          {/* Текущий статус подписки */}
+          <View style={{...styles.statusCard, backgroundColor: theme.colors.surface }}>
+            <Text style={{...styles.statusTitle, color: theme.colors.text}}>{I18n.t("currentPlan")}</Text>
+            <View style={styles.statusContent}>
+              <View
+                style={[
+                  styles.statusIndicator,
+                  { backgroundColor: getStatusColor() },
+                ]}
+              />
+              <View style={styles.statusInfo}>
+                <Text style={{...styles.statusText, color: theme.colors.text}}>{getStatusText()}</Text>
+                {subscriptionType && (
+                  <Text style={styles.subscriptionType}>
+                    {subscriptionType === "monthly"
+                      ? I18n.t("monthlySubscription")
+                      : I18n.t("yearlySubscription")}
+                  </Text>
+                )}
+                {expiryDate && (
+                  <Text style={styles.expiryDate}>
+                    {I18n.t("subscriptionExpires")}: {formatDate(expiryDate)}
+                  </Text>
+                )}
+              </View>
+            </View>
+
+            {subscriptionStatus === "active" && (
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={cancelSubscription}
+              >
+                <Text style={styles.cancelButtonText}>
+                  {I18n.t("cancelSubscription")}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Планы подписки */}
+          {subscriptionStatus !== "active" && (
+            <View style={styles.plansContainer}>
+              <Text style={styles.sectionTitle}>{I18n.t("upgradeToPremium")}</Text>
+
+              {/* Месячная подписка */}
+              <View style={styles.planCard}>
+                <View style={styles.planHeader}>
+                  <Text style={styles.planTitle}>
+                    {I18n.t("monthlySubscription")}
+                  </Text>
+                  <View style={styles.priceContainer}>
+                    <Text style={styles.price}>$9.99</Text>
+                    <Text style={styles.pricePeriod}>{I18n.t("perMonth")}</Text>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  style={[
+                    styles.subscribeButton,
+                    isLoading && styles.disabledButton,
+                  ]}
+                  onPress={() => simulatePurchase("monthly")}
+                  disabled={isLoading}
+                >
+                  <Text style={styles.subscribeButtonText}>
+                    {isLoading ? I18n.t("loading") : I18n.t("subscribe")}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Годовая подписка */}
+              <View style={[styles.planCard, styles.recommendedPlan]}>
+                <View style={styles.recommendedBadge}>
+                  <Text style={styles.recommendedText}>
+                    {I18n.t("saveWithYearly")}
+                  </Text>
+                </View>
+                <View style={styles.planHeader}>
+                  <Text style={styles.planTitle}>
+                    {I18n.t("yearlySubscription")}
+                  </Text>
+                  <View style={styles.priceContainer}>
+                    <Text style={styles.price}>$99.99</Text>
+                    <Text style={styles.pricePeriod}>{I18n.t("perYear")}</Text>
+                  </View>
+                </View>
+                <Text style={styles.savingsText}>Экономия $19.89 в год</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.subscribeButton,
+                    styles.recommendedButton,
+                    isLoading && styles.disabledButton,
+                  ]}
+                  onPress={() => simulatePurchase("yearly")}
+                  disabled={isLoading}
+                >
+                  <Text style={styles.subscribeButtonText}>
+                    {isLoading ? I18n.t("loading") : I18n.t("subscribe")}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* Возможности подписки */}
+          <View style={styles.featuresContainer}>
+            <Text style={styles.sectionTitle}>
+              {I18n.t("subscriptionFeatures")}
+            </Text>
+
+            <View style={styles.featureItem}>
+              <Text style={styles.featureIcon}>✓</Text>
+              <Text style={styles.featureText}>{I18n.t("unlimitedProjects")}</Text>
+            </View>
+
+            <View style={styles.featureItem}>
+              <Text style={styles.featureIcon}>✓</Text>
+              <Text style={styles.featureText}>{I18n.t("advancedAnalytics")}</Text>
+            </View>
+
+            <View style={styles.featureItem}>
+              <Text style={styles.featureIcon}>✓</Text>
+              <Text style={styles.featureText}>
+                {I18n.t("advancedFunctionality")}
+              </Text>
+            </View>
+
+            <View style={styles.featureItem}>
+              <Text style={styles.featureIcon}>✓</Text>
+              <Text style={styles.featureText}>{I18n.t("exportAllFormats")}</Text>
+            </View>
+          </View>
+
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>
+              Подписка автоматически продлевается, если не отменена за 24 часа до
+              окончания периода.
+            </Text>
+          </View>
+        </View>
+
+        {/* Нижний отступ */}
+        <View style={{ height: 100 }} />
+      </ScrollView>
+
+      {/* Нижнее меню */}
+      <View style={styles.bottomMenuContainer}>
+        {bottomMenuItems.map(item => (
+          <TouchableOpacity
+            key={item.key}
+            style={styles.bottomMenuItem}
+            onPress={item.onPress}
+            activeOpacity={0.7}
+          >
+            {item.icon}
+            <Text style={styles.bottomMenuLabel}>{item.label}</Text>
           </TouchableOpacity>
-        )}
+        ))}
       </View>
-
-      {/* Планы подписки */}
-      {subscriptionStatus !== "active" && (
-        <View style={styles.plansContainer}>
-          <Text style={styles.sectionTitle}>{I18n.t("upgradeToPremium")}</Text>
-
-          {/* Месячная подписка */}
-          <View style={styles.planCard}>
-            <View style={styles.planHeader}>
-              <Text style={styles.planTitle}>
-                {I18n.t("monthlySubscription")}
-              </Text>
-              <View style={styles.priceContainer}>
-                <Text style={styles.price}>$9.99</Text>
-                <Text style={styles.pricePeriod}>{I18n.t("perMonth")}</Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              style={[
-                styles.subscribeButton,
-                isLoading && styles.disabledButton,
-              ]}
-              onPress={() => simulatePurchase("monthly")}
-              disabled={isLoading}
-            >
-              <Text style={styles.subscribeButtonText}>
-                {isLoading ? I18n.t("loading") : I18n.t("subscribe")}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Годовая подписка */}
-          <View style={[styles.planCard, styles.recommendedPlan]}>
-            <View style={styles.recommendedBadge}>
-              <Text style={styles.recommendedText}>
-                {I18n.t("saveWithYearly")}
-              </Text>
-            </View>
-            <View style={styles.planHeader}>
-              <Text style={styles.planTitle}>
-                {I18n.t("yearlySubscription")}
-              </Text>
-              <View style={styles.priceContainer}>
-                <Text style={styles.price}>$99.99</Text>
-                <Text style={styles.pricePeriod}>{I18n.t("perYear")}</Text>
-              </View>
-            </View>
-            <Text style={styles.savingsText}>Экономия $19.89 в год</Text>
-            <TouchableOpacity
-              style={[
-                styles.subscribeButton,
-                styles.recommendedButton,
-                isLoading && styles.disabledButton,
-              ]}
-              onPress={() => simulatePurchase("yearly")}
-              disabled={isLoading}
-            >
-              <Text style={styles.subscribeButtonText}>
-                {isLoading ? I18n.t("loading") : I18n.t("subscribe")}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      {/* Возможности подписки */}
-      <View style={styles.featuresContainer}>
-        <Text style={styles.sectionTitle}>
-          {I18n.t("subscriptionFeatures")}
-        </Text>
-
-        <View style={styles.featureItem}>
-          <Text style={styles.featureIcon}>✓</Text>
-          <Text style={styles.featureText}>{I18n.t("unlimitedProjects")}</Text>
-        </View>
-
-        <View style={styles.featureItem}>
-          <Text style={styles.featureIcon}>✓</Text>
-          <Text style={styles.featureText}>{I18n.t("advancedAnalytics")}</Text>
-        </View>
-
-        <View style={styles.featureItem}>
-          <Text style={styles.featureIcon}>✓</Text>
-          <Text style={styles.featureText}>
-            {I18n.t("advancedFunctionality")}
-          </Text>
-        </View>
-
-        <View style={styles.featureItem}>
-          <Text style={styles.featureIcon}>✓</Text>
-          <Text style={styles.featureText}>{I18n.t("exportAllFormats")}</Text>
-        </View>
-      </View>
-
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>
-          Подписка автоматически продлевается, если не отменена за 24 часа до
-          окончания периода.
-        </Text>
-      </View>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -305,7 +371,6 @@ const styles = StyleSheet.create({
   header: {
     padding: 20,
     alignItems: "center",
-    backgroundColor: "#800020",
   },
   title: {
     fontSize: 24,
@@ -508,5 +573,54 @@ const styles = StyleSheet.create({
     color: "#666",
     textAlign: "center",
     lineHeight: 18,
+  },
+  container: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContainer: {
+    padding: 20,
+  },
+  content: {
+    // Существующие стили контента
+  },
+  bottomMenuContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: '#7a1434', // бордовый
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    marginHorizontal: 16,
+    marginBottom: 50,
+    paddingVertical: 12,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  bottomMenuItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bottomMenuLabel: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.15)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 1,
   },
 });

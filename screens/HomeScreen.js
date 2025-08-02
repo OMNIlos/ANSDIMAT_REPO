@@ -7,6 +7,11 @@ import {
   TouchableOpacity,
   Dimensions,
   StatusBar,
+  Linking,
+  Image,
+  BackHandler,
+  Platform,
+  Alert,
 } from 'react-native';
 import {
   useTheme,
@@ -21,6 +26,7 @@ import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LanguageContext } from '../LanguageContext.js';
 import { SubscriptionManager } from '../utils/SubscriptionManager';
 import I18n from '../Localization';
+import Vector4 from '../components/Vector4';
 
 const { width } = Dimensions.get('window');
 
@@ -40,17 +46,6 @@ export default function HomeScreen({ navigation }) {
   
   const menuItems = [
       {
-        id: 'calculator',
-        title: I18n.t('calculator', { defaultValue: 'Калькулятор' }),
-        subtitle: I18n.t('calculatorDesc', { 
-          defaultValue: 'Гидрогеологические расчеты' 
-        }),
-        icon: 'calculate',
-        iconFamily: 'material',
-        color: theme.colors.secondary,
-        onPress: () => navigation.navigate('Calculator'),
-      },
-      {
         id: 'pumping',
         title: I18n.t('pumpingTest', { defaultValue: 'Обработка откачек' }),
         subtitle: I18n.t('pumpingTestDesc', { 
@@ -62,14 +57,25 @@ export default function HomeScreen({ navigation }) {
       onPress: () => navigation.navigate('PumpingTestProcessing'),
       },
       {
+        id: 'calculator',
+        title: I18n.t('calculator', { defaultValue: 'Калькулятор' }),
+        subtitle: I18n.t('calculatorDesc', { 
+          defaultValue: 'Гидрогеологические расчеты' 
+        }),
+        icon: 'calculate',
+        iconFamily: 'material',
+        color: theme.colors.secondary,
+        onPress: () => navigation.navigate('Calculator'),
+      },
+      {
         id: 'field-diary',
-        title: I18n.t('fieldDiary', { defaultValue: 'Полевой дневник' }),
-        subtitle: I18n.t('fieldDiaryDesc', { 
+        title: I18n.t('field', { defaultValue: 'Полевой дневник' }),
+        subtitle: I18n.t('fieldDesc', { 
           defaultValue: 'Запись данных в полевых условиях' 
         }),
         icon: 'map-outline',
         iconFamily: 'community', // Используем MaterialCommunityIcons, где есть map-outline
-        color: theme.colors.secondary,
+        color: theme.colors.primary,
         onPress: () => navigation.navigate('FieldDiary'),
       },
       {
@@ -80,8 +86,16 @@ export default function HomeScreen({ navigation }) {
       }),
       icon: 'play-circle-outline',
       iconFamily: 'community',
-      color: theme.colors.primary,
+      color: theme.colors.secondary,
       onPress: () => navigation.navigate('ExamplesAndVideos'),
+    },
+    {
+      id: 'program-adds',
+      title: I18n.t("homeTitle", { defaultValue: 'АНСДИМАТ' }),
+      subtitle: I18n.t('programAddsDesc', { 
+        defaultValue: 'Программа для повседневных гидрогеологических расчетов для windows.' 
+      }), 
+      onPress: () => Linking.openURL('https://www.ansdimat.com/'),
     },
     
   ];
@@ -89,12 +103,18 @@ export default function HomeScreen({ navigation }) {
   const renderMenuItem = (item) => (
     <TouchableOpacity
       key={item.id}
-      style={[styles.menuItem, { borderColor: theme.colors.border }]}
+      style={[styles.menuItem, { borderColor: theme.colors.border, backgroundColor: item.id === 'program-adds' ? theme.colors.d4d4d4 : theme.colors.surface }]}
       onPress={item.onPress}
       activeOpacity={0.7}
     >
-      <Surface style={[styles.iconContainer, { backgroundColor: item.color }]}> 
-        {item.iconFamily === 'community' ? (
+      <Surface style={item.id === 'program-adds' ? [{width: 40, height: 40, borderRadius: 25, justifyContent: 'center', alignItems: 'center', marginRight: 16,}] : [styles.iconContainer, { backgroundColor: item.color }]}> 
+        {item.id === 'program-adds' ? (
+          <Image
+            source={require('../assets/Logo_main.png')}
+            style={{ width: 40, height: 40 }}
+            resizeMode="contain"
+          />
+        ) : item.iconFamily === 'community' ? (
           <MaterialCommunityIcons name={item.icon} size={28} color={theme.colors.white} />
         ) : (
           <MaterialIcons name={item.icon} size={28} color={theme.colors.white} />
@@ -102,7 +122,7 @@ export default function HomeScreen({ navigation }) {
       </Surface>
       
       <View style={styles.textContainer}>
-        <Text style={[styles.itemTitle, { color: 'black' }]}> 
+        <Text style={[styles.itemTitle, { color: theme.colors.text }]}> 
           {item.title}
         </Text>
         <Text style={[styles.itemSubtitle, { color: theme.colors.textSecondary }]}> 
@@ -142,7 +162,16 @@ export default function HomeScreen({ navigation }) {
       key: 'exit',
       label: 'Выход',
       icon: <MaterialCommunityIcons name="exit-to-app" size={28} color="#fff" />,
-      onPress: () => {/* TODO: реализовать выход */},
+      onPress: () => {
+        if (Platform.OS === 'android') {
+          BackHandler.exitApp();
+        } else {
+          Alert.alert(
+            'Выход из приложения',
+            'Для выхода из приложения на iOS используйте системное меню (свайп вверх и закройте приложение вручную).'
+          );
+        }
+      },
     },
   ];
 
@@ -155,50 +184,17 @@ export default function HomeScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 100 }}
       >
-        {/* Статус подписки */}
-        <Card style={[styles.subscriptionCard, { backgroundColor: theme.colors.surface }]}>
-          <Card.Content style={styles.subscriptionContent}>
-            <View style={styles.subscriptionInfo}>
-              <MaterialIcons 
-                name={subscriptionStatus ? "verified" : "info"} 
-                size={24} 
-                color={subscriptionStatus ? theme.colors.primary : theme.colors.textSecondary} 
-              />
-              <View style={styles.subscriptionText}>
-                <Text style={[styles.subscriptionTitle, { color: theme.colors.text }]}>
-                  {I18n.t('subscriptionStatus', { defaultValue: 'Статус подписки' })}
-                </Text>
-                <Text style={[
-                  styles.subscriptionStatus, 
-                  { color: subscriptionStatus ? theme.colors.primary : theme.colors.textSecondary }
-                ]}>
-                  {subscriptionStatus 
-                    ? I18n.t('active', { defaultValue: 'Активна' })
-                    : I18n.t('inactive', { defaultValue: 'Неактивна' })
-                  }
-                </Text>
-              </View>
-            </View>
-            
-            {!subscriptionStatus && (
-              <Button
-                mode="contained"
-                buttonColor={theme.colors.primary}
-                textColor={theme.colors.white}
-                compact
-                onPress={() => navigation.navigate('Subscription')}
-              >
-                {I18n.t('upgrade', { defaultValue: 'Обновить' })}
-              </Button>
-            )}
-          </Card.Content>
-        </Card>
 
         {/* Основное меню */}
         <View style={styles.menuContainer}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-            {I18n.t('mainMenu', { defaultValue: 'Основные функции' })}
-          </Text>
+          <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              {I18n.t('mainMenu', { defaultValue: 'Основные функции' })}
+            </Text>
+
+            <Vector4 width={60} height={50} color={theme.colors.text} /> 
+          </View>
+          
           
           <View style={styles.menuGrid}>
             {menuItems.map(renderMenuItem)}
@@ -260,7 +256,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   menuContainer: {
-    marginBottom: 24,
+    marginBottom: 50,
   },
   sectionTitle: {
     fontSize: 18,
@@ -315,12 +311,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     alignItems: 'center',
     backgroundColor: '#7a1434', // бордовый
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
     marginHorizontal: 16,
-    marginBottom: 32,
+    marginBottom: 50,
     paddingVertical: 12,
     position: 'absolute',
     left: 0,
@@ -339,7 +335,7 @@ const styles = StyleSheet.create({
   },
   bottomMenuLabel: {
     color: '#fff',
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: '600',
     marginTop: 4,
     textAlign: 'center',

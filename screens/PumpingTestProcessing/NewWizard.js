@@ -208,7 +208,7 @@ export default function NewWizard({ navigation }) {
 
   const addObservationWell = () => {
     const newWell = {
-      id: Date.now(),
+      id: Date.now().toString(),
       name: `Скв. ${String.fromCharCode(65 + wizardData.observationWells.length)}`,
       active: true
     };
@@ -236,7 +236,7 @@ export default function NewWizard({ navigation }) {
 
   const addMeasurement = (wellId, type) => {
     const newMeasurement = {
-      id: Date.now(),
+      id: Date.now().toString(),
       time: '',
       drawdown: '',
       date: new Date()
@@ -393,7 +393,7 @@ export default function NewWizard({ navigation }) {
               ]}
               value={wizardData.wellName}
               onChangeText={(value) => updateData('wellName', value)}
-              placeholder="Например: Скважина №1"
+              placeholder={I18n.t("wellNamePlaceholder")}
               placeholderTextColor={theme.colors.textSecondary}
             />
             {errors.wellName && (
@@ -471,24 +471,24 @@ export default function NewWizard({ navigation }) {
         </View>
       </Card>
 
-      <Card style={[styles.infoCard, { backgroundColor: theme.colors.primaryContainer }]}>
+      <View style={[styles.infoCardContainer, { marginTop: 10, marginBottom: '40%'}]}>
         <Card.Content>
           <View style={styles.infoHeader}>
             <MaterialIcons name="info" size={24} color={theme.colors.primary} />
-            <Text style={[styles.infoTitle, { color: theme.colors.primary }]}>Информация</Text>
+            <Text style={[styles.infoTitle, { color: theme.colors.primary }]}>{I18n.t("information")}</Text>
           </View>
-          <Text style={[styles.infoText, { color: theme.colors.onPrimaryContainer }]}>
+          <Text style={[styles.infoText, { color: theme.colors.text }]}>
             {activeProject 
-              ? `Журнал будет добавлен в активный проект "${activeProject.name}".`
-              : 'Поскольку нет активного проекта, будет создан новый проект для этого журнала откачки.'
+              ? `${I18n.t("journalWillBeAddedToActiveProject")} "${activeProject.name}".`
+              : `${I18n.t("noActiveProject")} ${I18n.t("newProjectWillBeCreated")}`
             }
             {'\n\n'}
-            На первом шаге выбирается предполагаемый тип водоносного горизонта (напорный, безнапорный).
+            {I18n.t("firstStep")}
             {'\n\n'}
-            Далее задается имя скважины (например, скв.1) и её расход. Расход можно задать в м³/сут.
+            {I18n.t("secondStep")}
           </Text>
         </Card.Content>
-      </Card>
+      </View>
     </ScrollView>
   );
 
@@ -618,7 +618,7 @@ export default function NewWizard({ navigation }) {
           
           <FlatList
             data={measurements}
-            keyExtractor={(item) => item.id.toString()}
+            keyExtractor={(item) => String(item.id)}
             contentContainerStyle={styles.measurementsList}
             renderItem={({ item, index }) => (
               <Surface style={[styles.measurementItem, { backgroundColor: theme.colors.surface }]}>
@@ -716,7 +716,7 @@ export default function NewWizard({ navigation }) {
         </Card.Content>
       </Card>
 
-      <Card style={[styles.infoCard, { backgroundColor: theme.colors.primaryContainer }]}>
+      <View style={[styles.infoCardContainer, { backgroundColor: 'transparent' }]}>
         <Card.Content>
           <View style={styles.infoHeader}>
             <MaterialIcons name="info" size={24} color={theme.colors.primary} />
@@ -726,10 +726,10 @@ export default function NewWizard({ navigation }) {
             Укажите расстояния от опытной скважины до каждой наблюдательной скважины в километрах.
             Точность расстояний влияет на качество интерпретации данных.
             {'\n\n'}
-            После заполнения всех данных будет создан журнал откачки, который можно будет обрабатывать в разделе "Обработка данных".
+            {I18n.t("journalCreationInfo")}
           </Text>
         </Card.Content>
-      </Card>
+      </View>
     </ScrollView>
   );
 
@@ -767,7 +767,7 @@ export default function NewWizard({ navigation }) {
           if (!targetProject) {
             // Если нет активного проекта, создаем новый
             const projectData = {
-              id: Date.now(),
+              id: Date.now().toString(),
               name: `Проект ${wizardData.wellName}`,
               createdAt: new Date().toISOString(),
               lastAccessDate: new Date().toISOString(),
@@ -779,14 +779,14 @@ export default function NewWizard({ navigation }) {
             projects.push(projectData);
             
             await AsyncStorage.setItem('pumping_projects', JSON.stringify(projects));
-            await AsyncStorage.setItem('pumping_active_project_id', projectData.id.toString());
+            await AsyncStorage.setItem('pumping_active_project_id', String(projectData.id));
             
             targetProject = projectData;
           }
           
           // Создаем журнал откачки
           const journalData = {
-            id: Date.now(),
+            id: Date.now().toString(),
             name: wizardData.wellName,
             testType: 'Откачка',
             layerType: wizardData.layerType,
@@ -813,7 +813,7 @@ export default function NewWizard({ navigation }) {
           // Сохраняем обновленный проект
           const existingProjects = await AsyncStorage.getItem('pumping_projects');
           const projects = existingProjects ? JSON.parse(existingProjects) : [];
-          const projectIndex = projects.findIndex(p => p.id.toString() === targetProject.id.toString());
+          const projectIndex = projects.findIndex(p => String(p.id) === String(targetProject.id));
           
           if (projectIndex >= 0) {
             projects[projectIndex] = updatedProject;
@@ -877,7 +877,7 @@ export default function NewWizard({ navigation }) {
         <View style={[styles.unitsModal, { backgroundColor: theme.colors.surface }]}>
           <View style={[styles.modalHeader, { backgroundColor: theme.colors.primary }]}>
             <Text style={[styles.modalTitle, { color: theme.colors.white }]}>
-              Единицы измерения расхода
+              {I18n.t('flowRateUnits')}
             </Text>
             <TouchableOpacity onPress={() => setShowFlowRateUnits(false)}>
               <MaterialIcons name="close" size={24} color={theme.colors.white} />
@@ -962,23 +962,23 @@ export default function NewWizard({ navigation }) {
       </View>
 
       {/* Navigation buttons */}
-      <Surface style={[styles.navigationButtons, { backgroundColor: theme.colors.surface }]} elevation={8}>
+      <View style={styles.navigationButtonsContainer}>
         <TouchableOpacity 
           style={[styles.backButton, { backgroundColor: theme.colors.secondary }]} 
           onPress={handleBack}
         >
           <MaterialIcons name="chevron-left" size={20} color={theme.colors.white} />
-          <Text style={[styles.backButtonText, { color: theme.colors.white }]}>{getBackButtonText()}</Text>
+          
         </TouchableOpacity>
         
         <TouchableOpacity 
           style={[styles.nextButton, { backgroundColor: theme.colors.primary }]} 
           onPress={handleNext}
         >
-          <Text style={[styles.nextButtonText, { color: theme.colors.white }]}>{getNextButtonText()}</Text>
+          
           <MaterialIcons name="chevron-right" size={20} color={theme.colors.white} />
         </TouchableOpacity>
-      </Surface>
+      </View>
 
       {/* Measurements Modal */}
       {renderMeasurementsModal()}
@@ -1191,7 +1191,13 @@ const styles = StyleSheet.create({
   infoCard: {
     marginTop: 8,
     borderRadius: 12,
-    elevation: 1,
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  infoCardContainer: {
+    marginTop: 8,
+    borderRadius: 12,
+    backgroundColor: 'transparent',
   },
   infoHeader: {
     flexDirection: 'row',
@@ -1373,39 +1379,46 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
   },
+  navigationButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    marginHorizontal: 16,
+    marginBottom: '8%',
+    paddingVertical: 12,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    elevation: 8, 
+  },
   navigationButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingTop: 16,
+    paddingBottom: '16%',
   },
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 25,
+    paddingVertical: 15,
+    borderRadius: 15,
     gap: 4,
-  },
-  backButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
   },
   nextButton: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 25,
+    paddingVertical: 15,
+    borderRadius: 15,
     gap: 4,
-  },
-  nextButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1482,11 +1495,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   unitsModal: {
-    borderRadius: 16,
-    width: '90%',
+    borderRadius: 15,
+    width: '100%',
     maxHeight: '70%',
     elevation: 4,
   },
+
   unitsContent: {
     padding: 16,
   },
