@@ -1,38 +1,5 @@
-{/* Статус подписки */}
-        <Card style={[styles.subscriptionCard, { backgroundColor: theme.colors.surface }]}>
-          <Card.Content style={styles.subscriptionContent}>
-            <View style={styles.subscriptionInfo}>
-              <MaterialIcons 
-                name={subscriptionStatus ? "verified" : "info"} 
-                size={24} 
-                color={subscriptionStatus ? theme.colors.primary : theme.colors.textSecondary} 
-              />
-              <View style={styles.subscriptionText}>
-                <Text style={[styles.subscriptionTitle, { color: theme.colors.text }]}>
-                  {I18n.t('subscriptionStatus', { defaultValue: 'Статус подписки' })}
-                </Text>
-                <Text style={[
-                  styles.subscriptionStatus, 
-                  { color: subscriptionStatus ? theme.colors.primary : theme.colors.textSecondary }
-                ]}>
-                  {subscriptionStatus 
-                    ? I18n.t('active', { defaultValue: 'Активна' })
-                    : I18n.t('inactive', { defaultValue: 'Неактивна' })
-                  }
-                </Text>
-              </View>
-            </View>
-            
-            {!subscriptionStatus && (
-              <Button
-                mode="contained"
-                buttonColor={theme.colors.primary}
-                textColor={theme.colors.white}
-                compact
-                onPress={() => navigation.navigate('Subscription')}
-              >
-                {I18n.t('upgrade', { defaultValue: 'Обновить' })}
-              </Button>
-            )}
-          </Card.Content>
-        </Card>
+1 Удалить нижнее меню  `/
+2 убрать splash screen от expo 
+3 настроить темную/светлую темы для приложения корректно 
+4 Убрать дублирующие надписи (Order)
+5 Сделать локализацию для всего приложения

@@ -21,10 +21,10 @@ export default function SplashScreen({ onFinish }) {
       <StatusBar backgroundColor={theme.colors.primary} barStyle="light-content" />
       
       <View style={styles.logoContainer}>
-                        <View style={[styles.logoBackground, { backgroundColor: 'transparent' }]}>
+            <View style={[styles.logoBackground, { backgroundColor: 'transparent' }]}>
           <Image
             source={require('../assets/splash.png')}
-            style={{ width: 80, height: 80, borderRadius: 15 }}
+            style={{ width: 120, height: 120, borderRadius: 18 }}
             resizeMode="contain"
             
           />

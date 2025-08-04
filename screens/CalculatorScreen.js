@@ -20,6 +20,7 @@ import { SubscriptionManager } from "../utils/SubscriptionManager";
 import PremiumBanner from "../components/PremiumBanner";
 import { useTheme } from "react-native-paper";
 
+
 const Tab = createMaterialTopTabNavigator();
 
 // --- Перевод величин (как раньше) ---
@@ -951,10 +952,11 @@ function InfiltrationLeakageScreen() {
   );
 }
 
-export default function CalculatorScreen() {
+export default function CalculatorScreen({ navigation }) {
   const theme = useTheme();
   return (
-    <Tab.Navigator
+    <View style={{ flex: 1 }}>
+      <Tab.Navigator
       screenOptions={{
         tabBarStyle: { backgroundColor: theme.colors.background },
         tabBarActiveTintColor: theme.colors.primary,
@@ -1007,7 +1009,9 @@ export default function CalculatorScreen() {
           title: I18n.t("infiltrationLeakageTab"),
         }}
       />
-    </Tab.Navigator>
+      </Tab.Navigator>
+
+    </View>
   );
 }
 

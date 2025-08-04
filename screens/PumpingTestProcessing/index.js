@@ -35,6 +35,7 @@ import ProjectManager from './ProjectManager';
 import ExportManager from './ExportManager';
 import NewWizard from './NewWizard';
 
+
 const { width } = Dimensions.get('window');
 const Stack = createStackNavigator();
 
@@ -355,42 +356,7 @@ function MainScreen({ navigation }) {
       </Card.Content>
     </Card>
   );
-  // Нижнее меню
-  const bottomMenuItems = [
-    {
-      key: 'menu',
-      label: 'Меню',
-      icon: <MaterialIcons name="menu" size={28} color="#fff" />,
-      onPress: () => navigation.openDrawer(),
-    },
-    {
-      key: 'settings',
-      label: 'Настройки',
-      icon: <MaterialIcons name="settings" size={28} color="#fff" />,
-      onPress: () => navigation.navigate('Settings'),
-    },
-    {
-      key: 'help',
-      label: 'Справка',
-      icon: <MaterialIcons name="help-outline" size={28} color="#fff" />,
-      onPress: () => navigation.navigate('About'),
-    },
-    {
-      key: 'exit',
-      label: 'Выход',
-      icon: <MaterialCommunityIcons name="exit-to-app" size={28} color="#fff" />,
-      onPress: () => {
-        if (Platform.OS === 'android') {
-          BackHandler.exitApp();
-        } else {
-          Alert.alert(
-            'Выход из приложения',
-            'Для выхода из приложения на iOS используйте системное меню (свайп вверх и закройте приложение вручную).'
-          );
-        }
-      },
-    },
-  ];
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <ScrollView 
@@ -398,24 +364,7 @@ function MainScreen({ navigation }) {
         contentContainerStyle={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
       >
-        {/* Заголовок с кнопкой импорта */}
-        <View style={styles.header}>
-          <View style={styles.headerContent}>
-            <View>
-              <Text style={[styles.headerTitle, { color: theme.colors.onSurface }]}>
-                {I18n.t("pumpingTestProcessingTitle")}
-              </Text>
-              <Text style={[styles.headerSubtitle, { color: theme.colors.onSurfaceVariant }]}>
-                {I18n.t("pumpingTestDesc")}
-              </Text>
-              <TouchableOpacity onPress={handleImportProject} style={{alignSelf: 'flex-start', marginTop: 10}}>
-                <Text style={{color: theme.colors.primary, fontSize: 16, fontWeight: 'bold'}}>
-                  {I18n.t("importProject")}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+        
 
         {/* Главная кнопка создания */}
         <Surface style={[styles.createCard, { backgroundColor: theme.colors.primary }]}>
@@ -445,14 +394,20 @@ function MainScreen({ navigation }) {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
-              Последние проекты
+              {I18n.t("recentProjects")}
             </Text>
+            <TouchableOpacity onPress={handleImportProject} style={{alignSelf: 'flex-start'}}>
+                <Text style={{color: theme.colors.primary, fontSize: 16, fontWeight: 'bold'}}>
+                  {I18n.t("importProject")}
+                </Text>
+            </TouchableOpacity>
             <TouchableOpacity
+              style={{alignSelf: 'flex-start'}}
               onPress={() => navigation.navigate('ProjectManager')}
               activeOpacity={0.7}
             >
-              <Text style={[styles.viewAllText, { color: theme.colors.primary }]}>
-                все проекты
+              <Text style={[styles.viewAllText, { color: theme.colors.primary, fontWeight: 'bold' }]}>
+                {I18n.t("allProjects")}
               </Text>
             </TouchableOpacity>
           </View>
@@ -499,20 +454,7 @@ function MainScreen({ navigation }) {
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* Нижнее меню */}
-      <View style={styles.bottomMenuContainer}>
-        {bottomMenuItems.map(item => (
-          <TouchableOpacity
-            key={item.key}
-            style={styles.bottomMenuItem}
-            onPress={item.onPress}
-            activeOpacity={0.7}
-          >
-            {item.icon}
-            <Text style={styles.bottomMenuLabel}>{item.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+
     </View>
   );
 }
@@ -648,18 +590,20 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   sectionHeader: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     justifyContent: 'space-between',
     alignItems: 'center',
+    alignSelf: 'flex-start',
     marginBottom: 16,
   },
   sectionTitle: {
+    alignSelf: 'flex-start',
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 16,
   },
   viewAllText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
   },
   projectsList: {
@@ -754,41 +698,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-  bottomMenuContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    backgroundColor: '#7a1434', // бордовый
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    marginHorizontal: 16,
-    marginBottom: 50,
-    paddingVertical: 12,
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 8,
-  },
-  bottomMenuItem: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bottomMenuLabel: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 4,
-    textAlign: 'center',
-    textShadowColor: 'rgba(0,0,0,0.15)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 1,
-  },
+
 });

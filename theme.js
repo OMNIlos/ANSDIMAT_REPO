@@ -72,8 +72,26 @@ export default lightTheme;
 
 export function getThemeSwitchLabel(themeMode, locale = 'ru') {
   if (locale === 'en') {
-    return themeMode === 'light' ? 'Dark theme' : 'Light theme';
+    switch (themeMode) {
+      case 'light':
+        return 'Light theme';
+      case 'dark':
+        return 'Dark theme';
+      case 'system':
+        return 'System theme';
+      default:
+        return 'System theme';
+    }
   } else {
-    return themeMode === 'light' ? 'Темная тема' : 'Светлая тема';
+    switch (themeMode) {
+      case 'light':
+        return 'Светлая тема';
+      case 'dark':
+        return 'Темная тема';
+      case 'system':
+        return 'Системная тема';
+      default:
+        return 'Системная тема';
+    }
   }
 }

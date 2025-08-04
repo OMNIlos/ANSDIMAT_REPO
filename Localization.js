@@ -18,7 +18,7 @@ const i18n = new I18n({
     util2: "Обработка откачек",
     toggleLang: "Переключить язык",
     homeTitle: "АНСДИМАТ",
-    
+    import: "Импорт",
     // Экран загрузки
     appSubtitle: "полевой калькулятор гидрогеолога",
     
@@ -177,7 +177,8 @@ const i18n = new I18n({
     unfavoriteProject: "Убрать из избранного",
     addToFavorites: "Добавить в избранное",
     removeFromFavorites: "Удалить из избранного",
-
+    allProjects: "Все проекты",
+    recentProjects: "Последние проекты",
     // Wizard
     wizard: "Ввод",
     wizardTitle: "Мастер создания журнала откачки",
@@ -605,8 +606,8 @@ const i18n = new I18n({
     comment: "Comment",
     submit: "Submit",
     orderSent: "Order Sent",
-    orderThanks: "Thank you, {name}! We will contact you.",
-
+    orderThanks: "Thank you! We will contact you.",
+    import: "Import",
     // Download
     downloadText: "Download ANSDIMAT using the link below:",
     downloadButton: "Download",
@@ -668,7 +669,8 @@ const i18n = new I18n({
     unfavoriteProject: "Remove from Favorites",
     addToFavorites: "Add to Favorites",
     removeFromFavorites: "Remove from Favorites",
-
+    allProjects: "All Projects",
+    recentProjects: "Recent Projects",
     // Wizard
     wizard: "Data Entry",
     wizardTitle: "Pumping Test Journal Creation Wizard",

@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
-  Modal,
   TextInput,
   ScrollView,
   Dimensions,
@@ -16,13 +15,11 @@ import {
 } from 'react-native';
 import {
   useTheme,
-  FAB,
   Card,
   Title,
   Paragraph,
   Button,
   IconButton,
-  Portal,
   Dialog,
   TextInput as PaperTextInput,
   Chip,
@@ -36,6 +33,7 @@ import * as Sharing from 'expo-sharing';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import FieldDiaryStats from '../components/FieldDiaryStats';
+
 
 const { width, height } = Dimensions.get('window');
 
@@ -59,6 +57,7 @@ export default function FieldDiaryScreen({ navigation }) {
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [showStats, setShowStats] = useState(false);
+  const [activeWindow, setActiveWindow] = useState(null); // 'stats', 'filter', 'add', 'edit'
 
   // Типы точек для полевого дневника
   const pointTypes = [
@@ -119,13 +118,30 @@ export default function FieldDiaryScreen({ navigation }) {
     }
   };
 
+  const openWindow = (windowType) => {
+    setActiveWindow(windowType);
+    // Закрываем все другие окна
+    if (windowType !== 'stats') setShowStats(false);
+    if (windowType !== 'filter') setShowPointList(false);
+    if (windowType !== 'add') setIsAddingPoint(false);
+    if (windowType !== 'edit') setIsEditingPoint(false);
+  };
+
+  const closeWindow = (windowType) => {
+    setActiveWindow(null);
+    if (windowType === 'stats') setShowStats(false);
+    if (windowType === 'filter') setShowPointList(false);
+    if (windowType === 'add') setIsAddingPoint(false);
+    if (windowType === 'edit') setIsEditingPoint(false);
+  };
+
   const addPoint = () => {
     if (!location) {
       Alert.alert('Ошибка', 'Не удалось получить текущее местоположение');
       return;
     }
     
-    setIsAddingPoint(true);
+    openWindow('add');
     setNewPointData({
       title: '',
       description: '',
@@ -154,7 +170,7 @@ export default function FieldDiaryScreen({ navigation }) {
     setPoints(updatedPoints);
     savePoints(updatedPoints);
     
-    setIsAddingPoint(false);
+    closeWindow('add');
     setNewPointData({ title: '', description: '', type: 'observation' });
     showSnackbar('Точка успешно добавлена');
   };
@@ -166,7 +182,7 @@ export default function FieldDiaryScreen({ navigation }) {
       description: point.description,
       type: point.type,
     });
-    setIsEditingPoint(true);
+    openWindow('edit');
   };
 
   const updatePoint = () => {
@@ -184,7 +200,7 @@ export default function FieldDiaryScreen({ navigation }) {
     setPoints(updatedPoints);
     savePoints(updatedPoints);
     
-    setIsEditingPoint(false);
+    closeWindow('edit');
     setSelectedPoint(null);
     setNewPointData({ title: '', description: '', type: 'observation' });
     
@@ -368,17 +384,63 @@ export default function FieldDiaryScreen({ navigation }) {
       {/* Кнопки управления */}
       <View style={styles.controlsContainer}>
         <TouchableOpacity
-          style={[styles.controlButton, { backgroundColor: theme.colors.surface }]}
-          onPress={() => setShowPointList(!showPointList)}
+          style={[
+            styles.controlButton, 
+            { 
+              backgroundColor: activeWindow === 'filter' ? '#7a1434' : theme.colors.surface,
+            }
+          ]}
+          onPress={() => {
+            if (activeWindow === 'filter') {
+              closeWindow('filter');
+            } else {
+              openWindow('filter');
+            }
+          }}
         >
-          <MaterialIcons name="list" size={24} color={theme.colors.primary} />
+          <MaterialIcons 
+            name="list" 
+            size={24} 
+            color={activeWindow === 'filter' ? 'white' : theme.colors.primary} 
+          />
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.controlButton, { backgroundColor: theme.colors.surface }]}
-          onPress={() => setShowStats(!showStats)}
+          style={[
+            styles.controlButton, 
+            { 
+              backgroundColor: activeWindow === 'stats' ? '#7a1434' : theme.colors.surface,
+            }
+          ]}
+          onPress={() => {
+            if (activeWindow === 'stats') {
+              closeWindow('stats');
+            } else {
+              openWindow('stats');
+            }
+          }}
         >
-          <MaterialIcons name="analytics" size={24} color={theme.colors.primary} />
+          <MaterialIcons 
+            name="analytics" 
+            size={24} 
+            color={activeWindow === 'stats' ? 'white' : theme.colors.primary} 
+          />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.controlButton, 
+            { 
+              backgroundColor: activeWindow === 'add' ? '#7a1434' : theme.colors.surface,
+            }
+          ]}
+          onPress={addPoint}
+        >
+          <MaterialIcons 
+            name="add" 
+            size={24} 
+            color={activeWindow === 'add' ? 'white' : theme.colors.primary} 
+          />
         </TouchableOpacity>
 
         <Menu
@@ -396,14 +458,6 @@ export default function FieldDiaryScreen({ navigation }) {
           <Menu.Item
             onPress={() => {
               setShowMenu(false);
-              exportData();
-            }}
-            title="Экспорт данных"
-            leadingIcon="download"
-          />
-          <Menu.Item
-            onPress={() => {
-              setShowMenu(false);
               deleteAllPoints();
             }}
             title="Удалить все точки"
@@ -413,48 +467,57 @@ export default function FieldDiaryScreen({ navigation }) {
       </View>
 
       {/* Фильтр по типам */}
-      {showPointList && (
-        <Card style={[styles.filterCard, { backgroundColor: theme.colors.surface }]}>
-          <Card.Content>
-            <Text style={[styles.filterTitle, { color: theme.colors.text }]}>
-              Фильтр по типам:
-            </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <Chip
-                selected={filterType === 'all'}
-                onPress={() => setFilterType('all')}
-                style={styles.filterChip}
-              >
-                Все ({points.length})
-              </Chip>
-              {pointTypes.map(type => {
-                const count = points.filter(point => point.type === type.key).length;
-                return (
-                  <Chip
-                    key={type.key}
-                    selected={filterType === type.key}
-                    onPress={() => setFilterType(type.key)}
-                    style={[styles.filterChip, { borderColor: type.color }]}
-                    textStyle={{ color: filterType === type.key ? 'white' : theme.colors.text }}
-                  >
-                    <MaterialCommunityIcons 
-                      name={type.icon} 
-                      size={16} 
-                      color={filterType === type.key ? 'white' : type.color} 
-                    />
-                    {' '}{type.label} ({count})
-                  </Chip>
-                );
-              })}
-            </ScrollView>
-          </Card.Content>
-        </Card>
+      {activeWindow === 'filter' && (
+        <View style={styles.filterContainer}>
+          <View style={[styles.filterHeader, { backgroundColor: theme.colors.primary }]}>
+            <MaterialIcons name="filter-list" size={24} color="white" />
+            <Text style={styles.filterHeaderText}>Фильтр по типам</Text>
+          </View>
+          <Card style={[styles.filterCard, { backgroundColor: theme.colors.surface }]}>
+            <Card.Content>
+              <ScrollView vertical showsVerticalScrollIndicator={false}>
+                <Chip
+                  selected={filterType === 'all'}
+                  onPress={() => setFilterType('all')}
+                  style={styles.filterChip}
+                >
+                  Все ({points.length})
+                </Chip>
+                {pointTypes.map(type => {
+                  const count = points.filter(point => point.type === type.key).length;
+                  return (
+                    <Chip
+                      key={type.key}
+                      selected={filterType === type.key}
+                      onPress={() => setFilterType(type.key)}
+                      style={[styles.filterChip, { borderColor: type.color }]}
+                      textStyle={{ color: filterType === type.key ? 'white' : theme.colors.text }}
+                    >
+                      <MaterialCommunityIcons 
+                        name={type.icon} 
+                        size={16} 
+                        color={filterType === type.key ? 'white' : type.color} 
+                      />
+                      {' '}{type.label} ({count})
+                    </Chip>
+                  );
+                })}
+              </ScrollView>
+            </Card.Content>
+          </Card>
+        </View>
       )}
 
       {/* Список точек */}
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {showStats && (
-          <FieldDiaryStats points={points} theme={theme} />
+        {activeWindow === 'stats' && (
+          <View style={styles.statsContainer}>
+            <View style={[styles.statsHeader, { backgroundColor: theme.colors.primary }]}>
+              <MaterialIcons name="analytics" size={24} color="white" />
+              <Text style={styles.statsHeaderText}>Статистика полевого дневника</Text>
+            </View>
+            <FieldDiaryStats points={points} theme={theme} />
+          </View>
         )}
 
         {getFilteredPoints().length === 0 ? (
@@ -468,7 +531,7 @@ export default function FieldDiaryScreen({ navigation }) {
               {filterType === 'all' ? 'Нет добавленных точек' : 'Нет точек выбранного типа'}
             </Text>
             <Text style={[styles.emptySubtext, { color: theme.colors.textSecondary }]}>
-              Добавьте первую точку, нажав кнопку "+"
+              Добавьте первую точку, нажав кнопку "+" в панели управления
             </Text>
           </View>
         ) : (
@@ -478,100 +541,90 @@ export default function FieldDiaryScreen({ navigation }) {
         )}
       </ScrollView>
 
-      {/* FAB для добавления точки */}
-      <FAB
-        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
-        icon="plus"
-        onPress={addPoint}
-        label="Добавить точку"
-        color="white"
-      />
 
-      {/* Модальное окно добавления точки */}
-      <Portal>
-        <Modal
-          visible={isAddingPoint}
-          transparent={true}
-          animationType="slide"
-          onRequestClose={() => setIsAddingPoint(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={[styles.modalContent, { backgroundColor: theme.colors.surface }]}>
-              <View style={styles.modalHeader}>
-                <Title style={{ color: theme.colors.text }}>Добавить точку</Title>
-                <IconButton
-                  icon="close"
-                  size={24}
-                  onPress={() => setIsAddingPoint(false)}
-                />
+
+      {/* Окно добавления точки */}
+      {activeWindow === 'add' && (
+        <View style={styles.addPointContainer}>
+          <View style={[styles.addPointHeader, { backgroundColor: theme.colors.primary }]}>
+            <View style={styles.addPointHeaderContent}>
+              <MaterialIcons name="add-location" size={24} color="white" />
+              <Text style={styles.addPointHeaderText}>Добавить точку</Text>
+            </View>
+            <IconButton
+              icon="close"
+              size={24}
+              color="white"
+              onPress={() => closeWindow('add')}
+            />
+          </View>
+          
+          <Card style={[styles.addPointCard, { backgroundColor: theme.colors.surface }]}>
+            <Card.Content>
+              <TextInput
+                style={[styles.input, { 
+                  backgroundColor: theme.colors.background,
+                  color: theme.colors.text,
+                  borderColor: theme.colors.border
+                }]}
+                placeholder="Название точки"
+                placeholderTextColor={theme.colors.textSecondary}
+                value={newPointData.title}
+                onChangeText={(text) => setNewPointData({ ...newPointData, title: text })}
+              />
+              
+              <Text style={[styles.label, { color: theme.colors.text }]}>Тип точки:</Text>
+              <View style={styles.typeSelector}>
+                {pointTypes.map(type => (
+                  <Chip
+                    key={type.key}
+                    selected={newPointData.type === type.key}
+                    onPress={() => setNewPointData({ ...newPointData, type: type.key })}
+                    style={[
+                      styles.typeChip,
+                      newPointData.type === type.key && { backgroundColor: type.color }
+                    ]}
+                    textStyle={{ color: newPointData.type === type.key ? 'white' : theme.colors.text }}
+                  >
+                    <MaterialCommunityIcons 
+                      name={type.icon} 
+                      size={16} 
+                      color={newPointData.type === type.key ? 'white' : theme.colors.textSecondary} 
+                    />
+                    {' '}{type.label}
+                  </Chip>
+                ))}
               </View>
               
-              <ScrollView style={styles.modalBody}>
-                <TextInput
-                  style={[styles.input, { 
-                    backgroundColor: theme.colors.background,
-                    color: theme.colors.text,
-                    borderColor: theme.colors.border
-                  }]}
-                  placeholder="Название точки"
-                  placeholderTextColor={theme.colors.textSecondary}
-                  value={newPointData.title}
-                  onChangeText={(text) => setNewPointData({ ...newPointData, title: text })}
-                />
-                
-                <Text style={[styles.label, { color: theme.colors.text }]}>Тип точки:</Text>
-                <View style={styles.typeSelector}>
-                  {pointTypes.map(type => (
-                    <Chip
-                      key={type.key}
-                      selected={newPointData.type === type.key}
-                      onPress={() => setNewPointData({ ...newPointData, type: type.key })}
-                      style={[
-                        styles.typeChip,
-                        newPointData.type === type.key && { backgroundColor: type.color }
-                      ]}
-                      textStyle={{ color: newPointData.type === type.key ? 'white' : theme.colors.text }}
-                    >
-                      <MaterialCommunityIcons 
-                        name={type.icon} 
-                        size={16} 
-                        color={newPointData.type === type.key ? 'white' : theme.colors.textSecondary} 
-                      />
-                      {' '}{type.label}
-                    </Chip>
-                  ))}
-                </View>
-                
-                <TextInput
-                  style={[styles.textArea, { 
-                    backgroundColor: theme.colors.background,
-                    color: theme.colors.text,
-                    borderColor: theme.colors.border
-                  }]}
-                  placeholder="Описание (необязательно)"
-                  placeholderTextColor={theme.colors.textSecondary}
-                  value={newPointData.description}
-                  onChangeText={(text) => setNewPointData({ ...newPointData, description: text })}
-                  multiline
-                  numberOfLines={4}
-                />
+              <TextInput
+                style={[styles.textArea, { 
+                  backgroundColor: theme.colors.background,
+                  color: theme.colors.text,
+                  borderColor: theme.colors.border
+                }]}
+                placeholder="Описание (необязательно)"
+                placeholderTextColor={theme.colors.textSecondary}
+                value={newPointData.description}
+                onChangeText={(text) => setNewPointData({ ...newPointData, description: text })}
+                multiline
+                numberOfLines={4}
+              />
 
-                {location && (
-                  <View style={styles.locationInfo}>
-                    <Text style={[styles.locationText, { color: theme.colors.textSecondary }]}>
-                      Координаты: {location.coords.latitude.toFixed(6)}, {location.coords.longitude.toFixed(6)}
-                    </Text>
-                    <Text style={[styles.locationText, { color: theme.colors.textSecondary }]}>
-                      Точность: {Math.round(location.coords.accuracy)} м
-                    </Text>
-                  </View>
-                )}
-              </ScrollView>
+              {location && (
+                <View style={[styles.locationInfo, { backgroundColor: theme.colors.surfaceVariant }]}>
+                  <Text style={[styles.locationText, { color: theme.colors.textSecondary }]}>
+                    Координаты: {location.coords.latitude.toFixed(6)}, {location.coords.longitude.toFixed(6)}
+                  </Text>
+                  <Text style={[styles.locationText, { color: theme.colors.textSecondary }]}>
+                    Точность: {Math.round(location.coords.accuracy)} м
+                  </Text>
+                </View>
+              )}
               
-              <View style={styles.modalFooter}>
+              <View style={styles.addPointFooter}>
                 <Button
                   mode="outlined"
-                  onPress={() => setIsAddingPoint(false)}
+                  onPress={() => closeWindow('add')}
                   style={{ marginRight: 8 }}
                 >
                   Отмена
@@ -583,85 +636,82 @@ export default function FieldDiaryScreen({ navigation }) {
                   Добавить
                 </Button>
               </View>
-            </View>
-          </View>
-        </Modal>
-      </Portal>
+            </Card.Content>
+          </Card>
+        </View>
+      )}
 
-      {/* Модальное окно редактирования точки */}
-      <Portal>
-        <Modal
-          visible={isEditingPoint}
-          transparent={true}
-          animationType="slide"
-          onRequestClose={() => setIsEditingPoint(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={[styles.modalContent, { backgroundColor: theme.colors.surface }]}>
-              <View style={styles.modalHeader}>
-                <Title style={{ color: theme.colors.text }}>Изменить точку</Title>
-                <IconButton
-                  icon="close"
-                  size={24}
-                  onPress={() => setIsEditingPoint(false)}
-                />
+      {/* Окно редактирования точки */}
+      {activeWindow === 'edit' && (
+        <View style={styles.editPointContainer}>
+          <View style={[styles.editPointHeader, { backgroundColor: theme.colors.primary }]}>
+            <View style={styles.editPointHeaderContent}>
+              <MaterialIcons name="edit-location" size={24} color="white" />
+              <Text style={styles.editPointHeaderText}>Изменить точку</Text>
+            </View>
+            <IconButton
+              icon="close"
+              size={24}
+              color="white"
+              onPress={() => closeWindow('edit')}
+            />
+          </View>
+          
+          <Card style={[styles.editPointCard, { backgroundColor: theme.colors.surface }]}>
+            <Card.Content>
+              <TextInput
+                style={[styles.input, { 
+                  backgroundColor: theme.colors.background,
+                  color: theme.colors.text,
+                  borderColor: theme.colors.border
+                }]}
+                placeholder="Название точки"
+                placeholderTextColor={theme.colors.textSecondary}
+                value={newPointData.title}
+                onChangeText={(text) => setNewPointData({ ...newPointData, title: text })}
+              />
+              
+              <Text style={[styles.label, { color: theme.colors.text }]}>Тип точки:</Text>
+              <View style={styles.typeSelector}>
+                {pointTypes.map(type => (
+                  <Chip
+                    key={type.key}
+                    selected={newPointData.type === type.key}
+                    onPress={() => setNewPointData({ ...newPointData, type: type.key })}
+                    style={[
+                      styles.typeChip,
+                      newPointData.type === type.key && { backgroundColor: type.color }
+                    ]}
+                    textStyle={{ color: newPointData.type === type.key ? 'white' : theme.colors.text }}
+                  >
+                    <MaterialCommunityIcons 
+                      name={type.icon} 
+                      size={16} 
+                      color={newPointData.type === type.key ? 'white' : theme.colors.textSecondary} 
+                    />
+                    {' '}{type.label}
+                  </Chip>
+                ))}
               </View>
               
-              <ScrollView style={styles.modalBody}>
-                <TextInput
-                  style={[styles.input, { 
-                    backgroundColor: theme.colors.background,
-                    color: theme.colors.text,
-                    borderColor: theme.colors.border
-                  }]}
-                  placeholder="Название точки"
-                  placeholderTextColor={theme.colors.textSecondary}
-                  value={newPointData.title}
-                  onChangeText={(text) => setNewPointData({ ...newPointData, title: text })}
-                />
-                
-                <Text style={[styles.label, { color: theme.colors.text }]}>Тип точки:</Text>
-                <View style={styles.typeSelector}>
-                  {pointTypes.map(type => (
-                    <Chip
-                      key={type.key}
-                      selected={newPointData.type === type.key}
-                      onPress={() => setNewPointData({ ...newPointData, type: type.key })}
-                      style={[
-                        styles.typeChip,
-                        newPointData.type === type.key && { backgroundColor: type.color }
-                      ]}
-                      textStyle={{ color: newPointData.type === type.key ? 'white' : theme.colors.text }}
-                    >
-                      <MaterialCommunityIcons 
-                        name={type.icon} 
-                        size={16} 
-                        color={newPointData.type === type.key ? 'white' : theme.colors.textSecondary} 
-                      />
-                      {' '}{type.label}
-                    </Chip>
-                  ))}
-                </View>
-                
-                <TextInput
-                  style={[styles.textArea, { 
-                    backgroundColor: theme.colors.background,
-                    color: theme.colors.text,
-                    borderColor: theme.colors.border
-                  }]}
-                  placeholder="Описание (необязательно)"
-                  placeholderTextColor={theme.colors.textSecondary}
-                  value={newPointData.description}
-                  onChangeText={(text) => setNewPointData({ ...newPointData, description: text })}
-                  multiline
-                  numberOfLines={4}
-                />
-              </ScrollView>
+              <TextInput
+                style={[styles.textArea, { 
+                  backgroundColor: theme.colors.background,
+                  color: theme.colors.text,
+                  borderColor: theme.colors.border
+                }]}
+                placeholder="Описание (необязательно)"
+                placeholderTextColor={theme.colors.textSecondary}
+                value={newPointData.description}
+                onChangeText={(text) => setNewPointData({ ...newPointData, description: text })}
+                multiline
+                numberOfLines={4}
+              />
               
-              <View style={styles.modalFooter}>
+              <View style={styles.editPointFooter}>
                 <Button
                   mode="outlined"
-                  onPress={() => setIsEditingPoint(false)}
+                  onPress={() => closeWindow('edit')}
                   style={{ marginRight: 8 }}
                 >
                   Отмена
@@ -673,10 +723,10 @@ export default function FieldDiaryScreen({ navigation }) {
                   Сохранить
                 </Button>
               </View>
-            </View>
-          </View>
-        </Modal>
-      </Portal>
+            </Card.Content>
+          </Card>
+        </View>
+      )}
 
       {/* Snackbar для уведомлений */}
       <Snackbar
@@ -687,13 +737,15 @@ export default function FieldDiaryScreen({ navigation }) {
       >
         {snackbarMessage}
       </Snackbar>
+      
+
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flex: 1
   },
   header: {
     paddingTop: 50,
@@ -829,7 +881,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     margin: 16,
     right: 0,
-    bottom: '6%',
+    bottom: '20%',
   },
   modalOverlay: {
     flex: 1,
@@ -909,5 +961,114 @@ const styles = StyleSheet.create({
   locationText: {
     fontSize: 12,
     marginBottom: 2,
+  },
+  statsContainer: {
+    marginBottom: 16,
+  },
+  statsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  statsHeaderText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  filterContainer: {
+    marginBottom: 16,
+  },
+  filterHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  filterHeaderText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  modalHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  modalHeaderText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  addPointContainer: {
+    marginBottom: 16,
+  },
+  addPointHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  addPointHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  addPointHeaderText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  addPointCard: {
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+  },
+  addPointFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 16,
+  },
+  editPointContainer: {
+    marginBottom: 16,
+  },
+  editPointHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  editPointHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  editPointHeaderText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  editPointCard: {
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+  },
+  editPointFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 16,
   },
 }); 

@@ -6,9 +6,6 @@
     "orientation": "portrait",
     "icon": "./assets/app_icon.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "backgroundColor": "#FFFFFF"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.omnion.Ansdimat",
@@ -53,7 +50,8 @@
           "locationAlwaysPermission": "Allow $(PRODUCT_NAME) to use your location in the background for field diary tracking.",
           "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location to show your position on the map and add field diary points."
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "extra": {
       "eas": {

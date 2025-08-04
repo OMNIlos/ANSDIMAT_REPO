@@ -869,53 +869,52 @@ export default function NewWizard({ navigation }) {
   const renderFlowRateUnitsModal = () => (
     <Modal
       visible={showFlowRateUnits}
-      transparent={true}
       animationType="slide"
+      presentationStyle="pageSheet"
       onRequestClose={() => setShowFlowRateUnits(false)}
     >
-      <View style={styles.modalOverlay}>
-        <View style={[styles.unitsModal, { backgroundColor: theme.colors.surface }]}>
-          <View style={[styles.modalHeader, { backgroundColor: theme.colors.primary }]}>
-            <Text style={[styles.modalTitle, { color: theme.colors.white }]}>
-              {I18n.t('flowRateUnits')}
-            </Text>
-            <TouchableOpacity onPress={() => setShowFlowRateUnits(false)}>
-              <MaterialIcons name="close" size={24} color={theme.colors.white} />
-            </TouchableOpacity>
-          </View>
-          
-          <ScrollView style={styles.unitsContent}>
-            {flowRateUnits.map((unit) => (
-              <TouchableOpacity
-                key={unit}
-                style={[
-                  styles.unitOption,
-                  {
-                    backgroundColor: wizardData.flowRateUnit === unit ? theme.colors.primary + '20' : 'transparent',
-                    borderColor: wizardData.flowRateUnit === unit ? theme.colors.primary : theme.colors.border,
-                  }
-                ]}
-                onPress={() => {
-                  updateData('flowRateUnit', unit);
-                  setShowFlowRateUnits(false);
-                }}
-              >
-                <Text style={[
-                  styles.unitOptionText,
-                  { 
-                    color: wizardData.flowRateUnit === unit ? theme.colors.primary : theme.colors.text,
-                    fontWeight: wizardData.flowRateUnit === unit ? '600' : 'normal',
-                  }
-                ]}>
-                  {unit}
-                </Text>
-                {wizardData.flowRateUnit === unit && (
-                  <MaterialIcons name="check" size={20} color={theme.colors.primary} />
-                )}
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+      <View style={[styles.modalContainer, { backgroundColor: theme.colors.background }]}>
+        <View style={[styles.modalHeader, { backgroundColor: theme.colors.primary }]}>
+          <TouchableOpacity onPress={() => setShowFlowRateUnits(false)}>
+            <MaterialIcons name="close" size={24} color={theme.colors.white} />
+          </TouchableOpacity>
+          <Text style={[styles.modalTitle, { color: theme.colors.white }]}>
+            {I18n.t('flowRateUnits')}
+          </Text>
+          <View style={{ width: 24 }} />
         </View>
+        
+        <ScrollView style={styles.unitsContent}>
+          {flowRateUnits.map((unit) => (
+            <TouchableOpacity
+              key={unit}
+              style={[
+                styles.unitOption,
+                {
+                  backgroundColor: wizardData.flowRateUnit === unit ? theme.colors.primary + '20' : theme.colors.surface,
+                  borderColor: wizardData.flowRateUnit === unit ? theme.colors.primary : theme.colors.border,
+                }
+              ]}
+              onPress={() => {
+                updateData('flowRateUnit', unit);
+                setShowFlowRateUnits(false);
+              }}
+            >
+              <Text style={[
+                styles.unitOptionText,
+                { 
+                  color: wizardData.flowRateUnit === unit ? theme.colors.primary : theme.colors.text,
+                  fontWeight: wizardData.flowRateUnit === unit ? '600' : 'normal',
+                }
+              ]}>
+                {unit}
+              </Text>
+              {wizardData.flowRateUnit === unit && (
+                <MaterialIcons name="check" size={20} color={theme.colors.primary} />
+              )}
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
     </Modal>
   );
@@ -998,9 +997,19 @@ export default function NewWizard({ navigation }) {
             }}
           />
         ) : (
-          <Modal visible={showDatePicker} transparent animationType="fade">
-            <View style={styles.modalOverlay}>
-              <Surface style={[styles.modalContent, { backgroundColor: theme.colors.surface }]}>
+          <Modal visible={showDatePicker} animationType="slide" presentationStyle="pageSheet">
+            <View style={[styles.modalContainer, { backgroundColor: theme.colors.background }]}>
+              <View style={[styles.modalHeader, { backgroundColor: theme.colors.primary }]}>
+                <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                  <MaterialIcons name="close" size={24} color={theme.colors.white} />
+                </TouchableOpacity>
+                <Text style={[styles.modalTitle, { color: theme.colors.white }]}>
+                  Выбор даты и времени
+                </Text>
+                <View style={{ width: 24 }} />
+              </View>
+              
+              <View style={styles.datePickerContainer}>
                 <DateTimePicker
                   value={datePickerType === 'start' ? wizardData.startDate : wizardData.recoveryDate}
                   mode="datetime"
@@ -1011,21 +1020,7 @@ export default function NewWizard({ navigation }) {
                     }
                   }}
                 />
-                <View style={styles.modalButtons}>
-                  <TouchableOpacity
-                    style={[styles.modalButton, { backgroundColor: theme.colors.border }]}
-                    onPress={() => setShowDatePicker(false)}
-                  >
-                    <Text style={[styles.modalButtonText, { color: theme.colors.text }]}>Отмена</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.modalButton, { backgroundColor: theme.colors.primary }]}
-                    onPress={() => setShowDatePicker(false)}
-                  >
-                    <Text style={[styles.modalButtonText, { color: theme.colors.white }]}>Готово</Text>
-                  </TouchableOpacity>
-                </View>
-              </Surface>
+              </View>
             </View>
           </Modal>
         )
@@ -1416,9 +1411,14 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     gap: 4,
   },
+  datePickerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: 'rgba(14, 14, 14, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1494,13 +1494,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 14,
   },
-  unitsModal: {
-    borderRadius: 15,
-    width: '100%',
-    maxHeight: '70%',
-    elevation: 4,
-  },
-
   unitsContent: {
     padding: 16,
   },

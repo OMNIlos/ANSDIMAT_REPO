@@ -794,26 +794,31 @@ export default function JournalManager({ route }) {
   }
 
     return (
-    <View style={[styles.container, { backgroundColor: theme.colors }]}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {/* Заголовок */}
-      <Surface style={[styles.headerCard, { backgroundColor: theme.colors.d4d4d4 }]}>
+      <Surface style={[styles.headerCard, { backgroundColor: theme.colors.surfaceVariant }]}>
         <View style={styles.headerContent}>
           <MaterialCommunityIcons name="notebook" size={32} color={theme.colors.primary} />
           <View style={styles.headerText}>
             <Text style={[styles.headerTitle, { color: theme.colors.primary }]}>
-              Управление журналами
+              {I18n.t("journalManagement")}
             </Text>
-            <Text style={[styles.headerSubtitle, { color: theme.colors.onPrimaryContainer }]}>
-              Проект: {activeProject.name}
+            <Text style={[styles.headerSubtitle, { color: theme.colors.onSurfaceVariant }]}>
+              {I18n.t("project")}: {activeProject.name}
             </Text>
           </View>
+        </View>
+        <View style={styles.headerActionsRow}>
           <Button
             mode="contained"
-            icon="plus"
+            icon={({ color, size }) => (
+              <MaterialCommunityIcons name="plus" size={size} color={theme.colors.white} />
+            )}
             onPress={handleImportJournal}
             compact
+            style={{borderRadius: 12}}
           >
-            Импорт
+            <Text style={{ color: theme.colors.white }}>{I18n.t("import")}</Text>
           </Button>
         </View>
       </Surface>

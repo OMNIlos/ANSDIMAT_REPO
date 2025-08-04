@@ -185,6 +185,45 @@ const FieldDiaryStats = ({ points, theme }) => {
             </Text>
           </View>
         )}
+
+        {/* Список последних точек */}
+        {stats.total > 0 && (
+          <View style={styles.recentPoints}>
+            <Text style={[styles.recentTitle, { color: theme.colors.text }]}>
+              Последние добавленные точки:
+            </Text>
+            <View style={styles.recentPointsList}>
+              {points.slice(0, 3).map((point, index) => {
+                const typeInfo = pointTypes.find(t => t.key === point.type);
+                return (
+                  <View key={point.id} style={styles.recentPointItem}>
+                    <View style={[styles.recentPointIcon, { backgroundColor: typeInfo ? typeInfo.color : '#ccc' }]}>
+                      <MaterialCommunityIcons 
+                        name={typeInfo ? typeInfo.icon : 'help'} 
+                        size={16} 
+                        color="white" 
+                      />
+                    </View>
+                    <View style={styles.recentPointContent}>
+                      <Text style={[styles.recentPointTitle, { color: theme.colors.text }]}>
+                        {point.title || `Точка ${index + 1}`}
+                      </Text>
+                      <Text style={[styles.recentPointType, { color: theme.colors.textSecondary }]}>
+                        {typeInfo ? typeInfo.label : 'Неизвестный тип'}
+                      </Text>
+                    </View>
+                    <Text style={[styles.recentPointTime, { color: theme.colors.textSecondary }]}>
+                      {new Date(point.timestamp).toLocaleTimeString('ru-RU', { 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                      })}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
       </Card.Content>
     </Card>
   );
@@ -287,6 +326,48 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 14,
     textAlign: 'center',
+  },
+  recentPoints: {
+    marginTop: 16,
+  },
+  recentTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  recentPointsList: {
+    gap: 8,
+  },
+  recentPointItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+  },
+  recentPointIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  recentPointContent: {
+    flex: 1,
+  },
+  recentPointTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  recentPointType: {
+    fontSize: 12,
+  },
+  recentPointTime: {
+    fontSize: 12,
+    fontWeight: '500',
   },
 });
 
