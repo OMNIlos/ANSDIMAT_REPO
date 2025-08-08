@@ -1,3 +1,5 @@
+
+
 {
   "expo": {
     "name": "Ansdimat",
@@ -6,6 +8,7 @@
     "orientation": "portrait",
     "icon": "./assets/app_icon.png",
     "userInterfaceStyle": "light",
+    
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.omnion.Ansdimat",
@@ -14,6 +17,7 @@
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses location to show your position on the map and add field diary points."
       }
     },
+    
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF"
@@ -25,9 +29,11 @@
         "ACCESS_COARSE_LOCATION"
       ]
     },
+    
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    
     "plugins": [
       [
         "expo-media-library",
@@ -53,11 +59,13 @@
       ],
       "expo-localization"
     ],
+    
     "extra": {
       "eas": {
         "projectId": "ccd8e4bf-0524-44c2-b5f4-f3cd1aa817bf"
       }
     },
+    
     "owner": "omnion"
   }
 }

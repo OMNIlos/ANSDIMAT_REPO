@@ -1,3 +1,23 @@
+/**
+ * Главный экран приложения АНСДИМАТ
+ * 
+ * Этот экран является центральной точкой навигации и содержит:
+ * - Приветствие пользователя
+ * - Карточки основных разделов приложения
+ * - Информацию о подписке
+ * - Ссылки на дополнительные ресурсы
+ * - Адаптивный дизайн для светлой и темной темы
+ * 
+ * Основные разделы:
+ * - Обработка откачек (PumpingTestProcessing)
+ * - Калькулятор (Calculator)
+ * - Полевой дневник (FieldDiary)
+ * - Примеры и видео (ExamplesAndVideos)
+ * - Ссылка на десктопную версию
+ * 
+ * @param {Object} navigation - Объект навигации React Navigation
+ */
+
 import React, { useContext, useState, useEffect } from 'react';
 import {
   View,
@@ -28,66 +48,89 @@ import { SubscriptionManager } from '../utils/SubscriptionManager';
 import I18n from '../Localization';
 import Vector4 from '../components/Vector4';
 
-
+// Получаем ширину экрана для адаптивного дизайна
 const { width } = Dimensions.get('window');
 
 export default function HomeScreen({ navigation }) {
+  // Получаем текущую тему для адаптивного дизайна
   const theme = useTheme();
+  // Получаем текущий язык из контекста
   const { locale } = useContext(LanguageContext);
+  // Состояние статуса подписки пользователя
   const [subscriptionStatus, setSubscriptionStatus] = useState(false);
 
+  /**
+   * Эффект для проверки статуса подписки при загрузке экрана
+   * Вызывается один раз при монтировании компонента
+   */
   useEffect(() => {
     checkSubscriptionStatus();
   }, []);
 
+  /**
+   * Проверяет статус подписки пользователя
+   * Обновляет состояние subscriptionStatus на основе данных из SubscriptionManager
+   */
   const checkSubscriptionStatus = async () => {
     const status = await SubscriptionManager.getSubscriptionStatus();
     setSubscriptionStatus(status);
   };
   
+  /**
+   * Массив пунктов главного меню
+   * 
+   * Каждый пункт содержит:
+   * - id: уникальный идентификатор
+   * - title: название раздела (локализованное)
+   * - subtitle: описание раздела (локализованное)
+   * - icon: название иконки
+   * - iconFamily: семейство иконок (material или community)
+   * - color: цвет акцента для раздела
+   * - onPress: функция навигации или действия
+   */
   const menuItems = [
-      {
-        id: 'pumping',
-        title: I18n.t('pumpingTest', { defaultValue: 'Обработка откачек' }),
-        subtitle: I18n.t('pumpingTestDesc', { 
-          defaultValue: 'Анализ данных откачки скважин' 
+    {
+      id: 'pumping',
+      title: I18n.t('pumpingTest', { defaultValue: 'Обработка откачек' }),
+      subtitle: I18n.t('pumpingTestDesc', { 
+        defaultValue: 'Анализ данных откачки скважин' 
       }),
       icon: 'water-pump',
-      iconFamily: 'community',
-      color: theme.colors.primary,
+      iconFamily: 'community', // MaterialCommunityIcons
+      color: theme.colors.primary, // Основной бордовый цвет
       onPress: () => navigation.navigate('PumpingTestProcessing'),
-      },
-      {
-        id: 'calculator',
-        title: I18n.t('calculator', { defaultValue: 'Калькулятор' }),
-        subtitle: I18n.t('calculatorDesc', { 
-          defaultValue: 'Гидрогеологические расчеты' 
-        }),
-        icon: 'calculate',
-        iconFamily: 'material',
-        color: theme.colors.secondary,
-        onPress: () => navigation.navigate('Calculator'),
-      },
-      {
-        id: 'field-diary',
-        title: I18n.t('field', { defaultValue: 'Полевой дневник' }),
-        subtitle: I18n.t('fieldDesc', { 
-          defaultValue: 'Запись данных в полевых условиях' 
-        }),
-        icon: 'map-outline',
-        iconFamily: 'community', // Используем MaterialCommunityIcons, где есть map-outline
-        color: theme.colors.primary,
-        onPress: () => navigation.navigate('FieldDiary'),
-      },
-      {
+    },
+    {
+      id: 'calculator',
+      title: I18n.t('calculator', { defaultValue: 'Калькулятор' }),
+      subtitle: I18n.t('calculatorDesc', { 
+        defaultValue: 'Гидрогеологические расчеты' 
+      }),
+      icon: 'calculate',
+      iconFamily: 'material', // MaterialIcons
+      color: theme.colors.secondary, // Синий акцент
+      onPress: () => navigation.navigate('Calculator'),
+    },
+    {
+      id: 'field-diary',
+      title: I18n.t('field', { defaultValue: 'Полевой дневник' }),
+      subtitle: I18n.t('fieldDesc', { 
+        defaultValue: 'Запись данных в полевых условиях' 
+      }),
+      icon: 'map-outline',
+      iconFamily: 'community', // MaterialCommunityIcons
+      color: theme.colors.primary, // Основной бордовый цвет
+      onPress: () => navigation.navigate('FieldDiary'),
+    },
+    {
       id: 'examples',
       title: I18n.t('examples', { defaultValue: 'Примеры и видео' }),
       subtitle: I18n.t('examplesDesc', { 
         defaultValue: 'Обучающие материалы' 
       }),
       icon: 'play-circle-outline',
-      iconFamily: 'community',
-      color: theme.colors.secondary,
+      iconFamily: 'community', // MaterialCommunityIcons
+      color: theme.colors.secondary, // Синий акцент
       onPress: () => navigation.navigate('ExamplesAndVideos'),
     },
     {

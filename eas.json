@@ -3,14 +3,17 @@
     "version": ">= 16.13.3",
     "appVersionSource": "remote"
   },
+  
   "build": {
     "development": {
       "developmentClient": true,
       "distribution": "internal"
     },
+    
     "preview": {
       "distribution": "internal"
     },
+    
     "production": {
       "autoIncrement": true,
       "android": {
@@ -18,6 +21,7 @@
       }
     }
   },
+  
   "submit": {
     "production": {}
   }

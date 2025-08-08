@@ -1,3 +1,23 @@
+/**
+ * Главный модуль обработки откачек (Pumping Test Processing)
+ * 
+ * Этот модуль является центральной частью приложения для анализа данных откачки скважин.
+ * Он включает в себя:
+ * - Главный экран с обзором проектов и быстрым доступом к функциям
+ * - Навигационный стек для всех подразделов модуля
+ * - Управление проектами (создание, импорт, экспорт)
+ * - Обработку данных откачки
+ * - Управление журналами наблюдений
+ * 
+ * Структура модуля:
+ * - MainScreen: главный экран с обзором проектов
+ * - Wizard: мастер создания новых журналов
+ * - DataProcessing: обработка и анализ данных
+ * - JournalManager: управление журналами наблюдений
+ * - ProjectManager: управление проектами
+ * - ExportManager: экспорт результатов
+ */
+
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -28,18 +48,28 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
-// Импорт существующих компонентов
+// Импорт компонентов модуля
 import DataProcessing from './DataProcessing';
 import JournalManager from './JournalManager';
 import ProjectManager from './ProjectManager';
 import ExportManager from './ExportManager';
 import NewWizard from './NewWizard';
 
-
+// Получаем ширину экрана для адаптивного дизайна
 const { width } = Dimensions.get('window');
+// Создаем стек навигатор для модуля
 const Stack = createStackNavigator();
 
-// Утилиты
+/**
+ * Утилиты для работы с данными
+ */
+
+/**
+ * Форматирует дату в формат DD.MM.YYYY
+ * 
+ * @param {Date|string|number} date - Дата для форматирования
+ * @returns {string} Отформатированная дата
+ */
 const formatDate = (date) => {
   const d = new Date(date);
   const day = d.getDate().toString().padStart(2, '0');
@@ -48,11 +78,24 @@ const formatDate = (date) => {
   return `${day}.${month}.${year}`;
 };
 
+/**
+ * Обрезает текст до указанной длины с добавлением многоточия
+ * 
+ * @param {string} text - Текст для обрезки
+ * @param {number} maxLength - Максимальная длина (по умолчанию 20)
+ * @returns {string} Обрезанный текст
+ */
 const truncateText = (text, maxLength = 20) => {
   if (text.length <= maxLength) return text;
   return text.substring(0, maxLength - 3) + '...';
 };
 
+/**
+ * Возвращает иконку для типа испытания
+ * 
+ * @param {string} testType - Тип испытания
+ * @returns {string} Название иконки
+ */
 const getTestTypeIcon = (testType) => {
   switch (testType?.toLowerCase()) {
     case 'откачка':
@@ -68,6 +111,12 @@ const getTestTypeIcon = (testType) => {
   }
 };
 
+/**
+ * Переводит тип испытания в английский для локализации
+ * 
+ * @param {string} testType - Тип испытания на русском
+ * @returns {string} Ключ локализации для типа испытания
+ */
 const translateTestType = (testType) => {
   if (!testType) return 'pumping';
   
@@ -86,21 +135,50 @@ const translateTestType = (testType) => {
   }
 };
 
-// Главный экран модуля
+/**
+ * Главный экран модуля обработки откачек
+ * 
+ * Отображает:
+ * - Кнопку создания нового журнала
+ * - Список последних проектов
+ * - Возможность импорта проектов
+ * - Информационную карточку о модуле
+ * 
+ * @param {Object} navigation - Объект навигации
+ */
 function MainScreen({ navigation }) {
+  // Получаем текущую тему для адаптивного дизайна
   const theme = useTheme();
+  // Состояние для хранения последних проектов
   const [recentProjects, setRecentProjects] = useState([]);
 
+  /**
+   * Загружает последние проекты при монтировании компонента
+   */
   useEffect(() => {
     loadRecentProjects();
   }, []);
 
+  /**
+   * Обновляет список проектов при фокусе на экране
+   * Позволяет обновить данные после возврата с других экранов
+   */
   useFocusEffect(
     React.useCallback(() => {
       loadRecentProjects();
     }, [])
   );
 
+  /**
+   * Загружает последние проекты из AsyncStorage
+   * 
+   * Логика загрузки:
+   * 1. Получает данные проектов из AsyncStorage
+   * 2. Парсит JSON и валидирует структуру
+   * 3. Сортирует по дате создания (новые первые)
+   * 4. Берет первые 3 проекта для отображения
+   * 5. Обрабатывает ошибки и устанавливает пустой массив при проблемах
+   */
   const loadRecentProjects = async () => {
     try {
       const projectsData = await AsyncStorage.getItem('pumping_projects');

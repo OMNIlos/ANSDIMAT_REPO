@@ -1,3 +1,18 @@
+/**
+ * Навигационный компонент с боковым меню (Drawer Navigator)
+ * 
+ * Этот файл определяет основную навигационную структуру приложения:
+ * - Боковое меню с основными разделами приложения
+ * - Кастомный дизайн заголовка с логотипом
+ * - Поддержка светлой и темной темы
+ * - Интернационализация всех элементов меню
+ * - Информация о языке и теме в футере
+ * 
+ * Структура меню:
+ * - Основные разделы: Главная, Калькулятор, Обработка откачек, Полевой дневник, Примеры
+ * - Дополнительные разделы: О программе, Контакты, Заказать, Подписка, Настройки
+ */
+
 // DrawerNavigator.js
 import React, { useContext } from 'react';
 import {
@@ -20,7 +35,7 @@ import {
 } from 'react-native-paper';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 
-// Импорт экранов
+// Импорт всех экранов приложения
 import HomeScreen from '../screens/HomeScreen';
 import CalculatorScreen from '../screens/CalculatorScreen';
 import PumpingTestProcessing from '../screens/PumpingTestProcessing';
@@ -35,19 +50,40 @@ import { LanguageContext } from '../LanguageContext';
 import { ThemeContext } from '../ThemeContext';
 import I18n from '../Localization';
 
+// Создаем экземпляр drawer navigator
 const Drawer = createDrawerNavigator();
 
+/**
+ * Кастомный компонент содержимого бокового меню
+ * 
+ * Отвечает за отображение:
+ * - Заголовка с логотипом и информацией о приложении
+ * - Списка основных разделов меню
+ * - Списка дополнительных разделов
+ * - Футера с информацией о языке и теме
+ * 
+ * @param {Object} props - Свойства навигатора
+ */
 function CustomDrawerContent(props) {
+  // Получаем текущую тему для адаптивного дизайна
   const theme = useTheme();
+  // Получаем текущий язык из контекста
   const { locale } = useContext(LanguageContext);
+  // Получаем текущий режим темы из контекста
   const { themeMode } = useContext(ThemeContext);
 
+  /**
+   * Основные пункты меню приложения
+   * 
+   * Содержит основные разделы, которые пользователь использует чаще всего
+   * Каждый пункт имеет название, иконку и маршрут для навигации
+   */
   const menuItems = [
     {
       name: 'Home',
       title: I18n.t('home', { defaultValue: 'Главная' }),
       icon: 'home',
-      iconFamily: 'material',
+      iconFamily: 'material', // Семейство иконок MaterialIcons
       route: 'Home',
     },
     {
@@ -61,7 +97,7 @@ function CustomDrawerContent(props) {
       name: 'PumpingTestProcessing',
       title: I18n.t('pumpingTest', { defaultValue: 'Обработка откачек' }),
       icon: 'water-pump',
-      iconFamily: 'community',
+      iconFamily: 'community', // Семейство иконок MaterialCommunityIcons
       route: 'PumpingTestProcessing',
     },
     {
@@ -80,6 +116,12 @@ function CustomDrawerContent(props) {
     },
   ];
 
+  /**
+   * Дополнительные пункты меню
+   * 
+   * Содержит вспомогательные разделы, которые используются реже
+   * Включает информацию о приложении, контакты, настройки и т.д.
+   */
   const additionalItems = [
     {
       name: 'About',
