@@ -154,14 +154,14 @@ const JournalSelector = React.memo(({
   ), [selectedJournalIdx, onSelectJournal, onDeleteJournal, theme]);
 
     return (
-    <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+    <Card style={[styles.card, { backgroundColor: theme.colors.surface}]}>
       <Card.Content>
         <View style={styles.cardHeader}>
           <MaterialIcons name="library-books" size={24} color={theme.colors.primary} />
           <Text style={[styles.cardTitle, { color: theme.colors.primary }]}>
             {I18n.t("pumpingTestJournals")}
           </Text>
-      </View>
+        </View>
         
         <FlatList
           data={journals}
@@ -169,6 +169,7 @@ const JournalSelector = React.memo(({
           renderItem={renderJournal}
           horizontal
           showsHorizontalScrollIndicator={false}
+          style={{ overflow: 'visible' }}
           contentContainerStyle={styles.journalsList}
         />
       </Card.Content>
@@ -297,7 +298,7 @@ const Chart = React.memo(({
           <Svg
             width={CHART_WIDTH}
             height={CHART_HEIGHT}
-            style={{ backgroundColor: "#ffffff", borderRadius: 12 }}
+            style={{ backgroundColor: theme.colors.surface, borderRadius: 12 }}
           >
             {(() => {
               if (!bounds) {
@@ -308,7 +309,7 @@ const Chart = React.memo(({
                       x={CHART_WIDTH / 2}
                       y={CHART_HEIGHT / 2}
                       fontSize="16"
-                      fill="#999"
+                      fill={theme.colors.onSurfaceVariant}
                       textAnchor="middle"
                     >
                       {I18n.t("noData")}
@@ -348,7 +349,7 @@ const Chart = React.memo(({
                         y1={CHART_PADDING}
                         x2={pixelX}
                         y2={CHART_HEIGHT - CHART_PADDING}
-                        stroke="#e0e0e0"
+                        stroke={theme.colors.outline}
                         strokeWidth={1}
                       />
                     );
@@ -362,7 +363,7 @@ const Chart = React.memo(({
                         y1={pixelY}
                         x2={CHART_WIDTH - CHART_PADDING}
                         y2={pixelY}
-                        stroke="#e0e0e0"
+                        stroke={theme.colors.outline}
                         strokeWidth={1}
                       />
                     );
@@ -374,7 +375,7 @@ const Chart = React.memo(({
                     y1={CHART_HEIGHT - CHART_PADDING}
                     x2={CHART_WIDTH - CHART_PADDING}
                     y2={CHART_HEIGHT - CHART_PADDING}
-                    stroke="#888"
+                    stroke={theme.colors.onSurface}
                     strokeWidth={2}
                   />
                   <Line
@@ -382,7 +383,7 @@ const Chart = React.memo(({
                     y1={CHART_HEIGHT - CHART_PADDING}
                     x2={CHART_PADDING}
                     y2={CHART_PADDING}
-                    stroke="#888"
+                    stroke={theme.colors.onSurface}
                     strokeWidth={2}
                   />
               
@@ -391,7 +392,7 @@ const Chart = React.memo(({
                     x={CHART_WIDTH / 2}
                     y={CHART_HEIGHT - CHART_PADDING + 36}
                     fontSize="14"
-                    fill="#333"
+                    fill={theme.colors.onSurface}
                     textAnchor="middle"
                     fontWeight="bold"
                   >
@@ -401,7 +402,7 @@ const Chart = React.memo(({
                     x={CHART_PADDING - 45}
                     y={CHART_HEIGHT / 2}
                     fontSize="14"
-                    fill="#333"
+                    fill={theme.colors.onSurface}
                     textAnchor="middle"
                     fontWeight="bold"
                     transform={`rotate(-90, ${CHART_PADDING - 45}, ${CHART_HEIGHT / 2})`}
@@ -419,14 +420,14 @@ const Chart = React.memo(({
                           y1={CHART_HEIGHT - CHART_PADDING}
                           x2={pixelX}
                           y2={CHART_HEIGHT - CHART_PADDING + 5}
-                          stroke="#333"
+                          stroke={theme.colors.onSurface}
                           strokeWidth={1}
                         />
                         <SvgText
                           x={pixelX}
                           y={CHART_HEIGHT - CHART_PADDING + 18}
                           fontSize="11"
-                          fill="#333"
+                          fill={theme.colors.onSurface}
                           textAnchor="middle"
                         >
                           {x.toFixed(x < 1 ? 2 : x < 10 ? 1 : 0)}
@@ -443,14 +444,14 @@ const Chart = React.memo(({
                           y1={pixelY}
                           x2={CHART_PADDING - 5}
                           y2={pixelY}
-                          stroke="#333"
+                          stroke={theme.colors.onSurface}
                           strokeWidth={1}
                         />
                         <SvgText
                           x={CHART_PADDING - 12}
                           y={pixelY + 4}
                           fontSize="11"
-                          fill="#333"
+                          fill={theme.colors.onSurface}
                           textAnchor="end"
                         >
                           {y.toFixed(y < 1 ? 2 : y < 10 ? 1 : 0)}
@@ -918,7 +919,7 @@ export default function DataProcessing({ route }) {
 
   if (!journals || journals.length === 0) {
     return (
-      <View style={styles.centerContainer}>
+      <View style={{...styles.centerContainer, backgroundColor: theme.colors.surface}}>
         <MaterialCommunityIcons name="book-plus" size={64} color={theme.colors.outline} />
         <Text style={[styles.emptyTitle, { color: theme.colors.onSurface }]}>
           {I18n.t("noJournals")}
@@ -1131,7 +1132,7 @@ const styles = StyleSheet.create({
   card: {
     marginBottom: 16,
     borderRadius: 12,
-    elevation: 2,
+    elevation: 0,
   },
   cardHeader: {
     flexDirection: 'row',

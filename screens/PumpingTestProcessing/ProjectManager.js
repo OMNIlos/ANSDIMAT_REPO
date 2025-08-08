@@ -264,7 +264,7 @@ export default function ProjectManager({ route }) {
         return;
       }
       
-      console.log('Selecting project:', project.name, 'with ID:', searchId);
+
       
       // Обновляем состояние интерфейса сразу
       setActiveId(searchId);
@@ -280,7 +280,7 @@ export default function ProjectManager({ route }) {
       );
       await saveProjects(updatedProjects);
       
-      console.log('Project selected successfully:', project.name);
+
               Alert.alert(I18n.t("success"), I18n.t("projectSelected", { name: project.name }));
     } catch (error) {
       console.error('Error selecting project:', error);
@@ -422,7 +422,6 @@ export default function ProjectManager({ route }) {
               <TouchableOpacity
                 style={[styles.selectButton, { borderColor: theme.colors.primary }]}
                 onPress={() => {
-                  console.log('Selecting project:', item.id, item.name);
                   selectProject(item.id);
                 }}
                 activeOpacity={0.7}
@@ -441,7 +440,7 @@ export default function ProjectManager({ route }) {
       <Modal
         visible={showCreateModal}
         transparent={true}
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setShowCreateModal(false)}
       >
         <View style={styles.createModalOverlay}>
@@ -608,8 +607,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee", // Default border
   },
   menuText: {
     marginLeft: 12,

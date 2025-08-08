@@ -26,9 +26,9 @@ const STEPS = {
 };
 
 const STEP_TITLES = {
-  [STEPS.BASIC_PARAMETERS]: 'Основные параметры',
-  [STEPS.OBSERVATION_JOURNAL]: 'Журнал наблюдений',
-  [STEPS.DISTANCES]: 'Расстояния между скважинами',
+  [STEPS.BASIC_PARAMETERS]: I18n.t('basicParameters'),
+  [STEPS.OBSERVATION_JOURNAL]: I18n.t('observationJournalStep'),
+  [STEPS.DISTANCES]: I18n.t('distancesBetweenWells'),
 };
 
 export default function NewWizard({ navigation }) {
@@ -426,7 +426,10 @@ export default function NewWizard({ navigation }) {
                 keyboardType="numeric"
               />
               <TouchableOpacity
-                style={[styles.unitSelector, { borderColor: theme.colors.border }]}
+                style={[styles.unitSelector, { 
+                  borderColor: theme.colors.border,
+                  backgroundColor: theme.colors.surface
+                }]}
                 onPress={() => setShowFlowRateUnits(true)}
               >
                 <Text style={[styles.unitText, { color: theme.colors.text }]}>
@@ -679,14 +682,14 @@ export default function NewWizard({ navigation }) {
     <ScrollView style={styles.stepContent} showsVerticalScrollIndicator={false}>
       <Card style={[styles.distanceCard, { backgroundColor: theme.colors.surface }]}>
         <Card.Content>
-          <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Расстояния между скважинами</Text>
+          <Text style={[styles.cardTitle, { color: theme.colors.text }]}>{I18n.t("distancesBetweenWells")}</Text>
           
           {wizardData.observationWells.map((well) => (
             <View key={well.id} style={styles.distanceRow}>
               <View style={styles.distanceInfo}>
                 <MaterialCommunityIcons name="water-well" size={20} color={theme.colors.primary} />
                 <Text style={[styles.distanceLabel, { color: theme.colors.text }]}>
-                  Расстояние до {well.name}, км:
+                  {I18n.t("distanceTo")} {well.name}, {I18n.t("km")}:
                 </Text>
               </View>
               <View style={styles.distanceInputContainer}>
@@ -720,7 +723,7 @@ export default function NewWizard({ navigation }) {
         <Card.Content>
           <View style={styles.infoHeader}>
             <MaterialIcons name="info" size={24} color={theme.colors.primary} />
-            <Text style={[styles.infoTitle, { color: theme.colors.primary }]}>Информация</Text>
+            <Text style={[styles.infoTitle, { color: theme.colors.primary }]}>{I18n.t("information")}</Text>
           </View>
           <Text style={[styles.infoText, { color: theme.colors.onPrimaryContainer }]}>
             Укажите расстояния от опытной скважины до каждой наблюдательной скважины в километрах.
@@ -859,9 +862,9 @@ export default function NewWizard({ navigation }) {
 
   const getCurrentSubtitle = () => {
     if (activeProject) {
-      return `Проект: ${activeProject.name}`;
+      return `${I18n.t('project')}: ${activeProject.name}`;
     } else {
-      return `Новый проект будет создан автоматически`;
+      return I18n.t('newProject');
     }
   };
 
@@ -1171,7 +1174,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderWidth: 1,
     borderRadius: 12,
-    backgroundColor: 'white',
     gap: 8,
     minWidth: 80,
   },

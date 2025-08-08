@@ -399,12 +399,12 @@ export default function ExportManager() {
       {/* Карточки экспорта */}
       <View style={styles.exportSection}>
         <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
-          Доступные форматы экспорта
+          {I18n.t("availableExportFormats")}
         </Text>
 
         <ExportCard
-          title="Экспорт проекта (JSON)"
-          description="Полный экспорт проекта со всеми журналами и данными"
+          title={I18n.t("exportProjectJSON")}
+          description={I18n.t("exportProjectJSONDesc")}
           icon="code-json"
           iconColor={theme.colors.primary}
           onPress={exportProjectToJSON}
@@ -412,8 +412,8 @@ export default function ExportManager() {
         />
 
         <ExportCard
-          title="Экспорт журналов (CSV)"
-          description="Экспорт всех журналов в формате CSV для анализа в Excel"
+          title={I18n.t("exportJournalsCSV")}
+          description={I18n.t("exportJournalsCSVDesc")}
           icon="file-delimited"
           iconColor={theme.colors.secondary}
             onPress={exportJournalToCSV}
@@ -423,8 +423,8 @@ export default function ExportManager() {
         />
 
         <ExportCard
-          title="Экспорт анализа (PDF)"
-          description="Подробный отчет с графиками и результатами анализа"
+          title={I18n.t("exportAnalysisPDF")}
+          description={I18n.t("exportAnalysisPDFDesc")}
           icon="file-pdf-box"
           iconColor={theme.colors.tertiary}
           onPress={exportAnalysisToPDF}
@@ -440,15 +440,12 @@ export default function ExportManager() {
           <View style={styles.infoHeader}>
             <MaterialIcons name="info" size={24} color={theme.colors.primary} />
             <Text style={[styles.infoTitle, { color: theme.colors.primary }]}>
-              Информация об экспорте
+              {I18n.t("exportInformation")}
             </Text>
       </View>
 
           <Text style={[styles.infoText, { color: theme.colors.onSurfaceVariant }]}>
-            • JSON формат сохраняет полную структуру данных{'\n'}
-            • CSV формат подходит для анализа в электронных таблицах{'\n'}
-            • PDF отчеты содержат графики и детальный анализ{'\n'}
-            • Все экспортированные файлы можно импортировать обратно
+            {I18n.t("exportInfoText")}
           </Text>
         </Card.Content>
       </Card>

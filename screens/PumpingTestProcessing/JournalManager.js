@@ -123,7 +123,7 @@ const DateTimeSelector = React.memo(({ value, onChange, theme }) => {
           animationType="fade"
           onRequestClose={() => setShowDate(false)}
         >
-          <View style={styles.iosPickerOverlay}>
+          <View style={[styles.iosPickerOverlay, { backgroundColor: theme.dark ? "rgba(0,0,0,0.7)" : "rgba(0,0,0,0.5)" }]}>
             <View style={[styles.iosPickerContainer, { backgroundColor: theme.colors.surface }]}>
               <DateTimePicker
                 value={tempDate}
@@ -214,21 +214,21 @@ const JournalCard = React.memo(({
           />
           <IconButton
             icon="pencil"
-            iconColor={theme.colors.secondary}
+            iconColor={theme.colors.primary}
             size={18}
             onPress={() => onEdit(journal)}
             style={styles.actionButton}
           />
           <IconButton
             icon="export"
-            iconColor={theme.colors.tertiary}
+            iconColor={theme.colors.primary}
             size={18}
             onPress={() => onExport(journal)}
             style={styles.actionButton}
           />
           <IconButton
             icon="delete"
-            iconColor={theme.colors.error}
+            iconColor={theme.colors.primary}
             size={18}
             onPress={() => onDelete(journal)}
             style={styles.actionButton}
@@ -283,11 +283,10 @@ const JournalDetailModal = React.memo(({
       <Modal
         visible={visible}
         onDismiss={onClose}
-        contentContainerStyle={[
-          styles.modalContainer,
-          { backgroundColor: theme.colors.surface }
-        ]}
+        animationType="slide" 
+        presentationStyle="pageSheet"
       >
+        <View style={{flex:1, backgroundColor: theme.colors.background}}>
         {/* Заголовок */}
         <View style={styles.modalHeader}>
           <View style={styles.modalTitleRow}>
@@ -297,7 +296,7 @@ const JournalDetailModal = React.memo(({
               color={theme.colors.primary} 
             />
             <Text style={[styles.modalTitle, { color: theme.colors.primary }]}>
-              Детали журнала
+              {I18n.t("journalDetails")}
             </Text>
           </View>
           <IconButton
@@ -318,7 +317,7 @@ const JournalDetailModal = React.memo(({
           <View style={styles.modalContent}>
             <View style={styles.detailSection}>
               <Text style={[styles.detailLabel, { color: theme.colors.primary }]}>
-                Тип испытания
+                {I18n.t("testTypeLabel")}
               </Text>
               <Text style={[styles.detailValue, { color: theme.colors.onSurface }]}>
                 {journal.testType}
@@ -327,7 +326,7 @@ const JournalDetailModal = React.memo(({
 
             <View style={styles.detailSection}>
               <Text style={[styles.detailLabel, { color: theme.colors.primary }]}>
-                Тип пласта
+                {I18n.t("layerTypeLabel")}
               </Text>
               <Text style={[styles.detailValue, { color: theme.colors.onSurface }]}>
                 {journal.layerType}
@@ -336,7 +335,7 @@ const JournalDetailModal = React.memo(({
 
             <View style={styles.detailSection}>
               <Text style={[styles.detailLabel, { color: theme.colors.primary }]}>
-                Граничные условия
+                {I18n.t("boundaryConditionsLabel")}
               </Text>
               <Text style={[styles.detailValue, { color: theme.colors.onSurface }]}>
                 {journal.boundary}
@@ -345,7 +344,7 @@ const JournalDetailModal = React.memo(({
 
             <View style={styles.detailSection}>
               <Text style={[styles.detailLabel, { color: theme.colors.primary }]}>
-                Тип данных
+                {I18n.t("dataTypeLabel")}
               </Text>
               <Text style={[styles.detailValue, { color: theme.colors.onSurface }]}>
                 {journal.dataType}
@@ -354,7 +353,7 @@ const JournalDetailModal = React.memo(({
 
             <View style={styles.detailSection}>
               <Text style={[styles.detailLabel, { color: theme.colors.primary }]}>
-                Создан
+                {I18n.t("created")}
               </Text>
               <Text style={[styles.detailValue, { color: theme.colors.onSurface }]}>
                 {formatDate(journal.date)}
@@ -363,7 +362,7 @@ const JournalDetailModal = React.memo(({
 
             <View style={styles.detailSection}>
               <Text style={[styles.detailLabel, { color: theme.colors.primary }]}>
-                Количество измерений
+                {I18n.t("measurementCount")}
               </Text>
               <Text style={[styles.detailValue, { color: theme.colors.onSurface }]}>
                 {journal.dataRows?.length || 0} строк
@@ -374,7 +373,7 @@ const JournalDetailModal = React.memo(({
             {journal.dataRows?.length > 0 && (
               <Surface style={[styles.dataPreview, { backgroundColor: theme.colors.surfaceVariant }]}>
                 <Text style={[styles.detailLabel, { color: theme.colors.primary }]}>
-                  Превью данных
+                  {I18n.t("dataPreview")}
                 </Text>
                 {journal.dataRows.slice(0, 5).map((row, index) => (
                   <Text key={index} style={[styles.dataRow, { color: theme.colors.onSurfaceVariant }]}>
@@ -398,7 +397,7 @@ const JournalDetailModal = React.memo(({
         </ScrollView>
 
         {/* Кнопки действий - sticky footer */}
-        <View style={styles.modalActions}>
+        <View style={[styles.modalActions, { borderTopColor: theme.colors.outline }]}>
           <Button
             mode="outlined"
             onPress={() => {
@@ -407,18 +406,22 @@ const JournalDetailModal = React.memo(({
             }}
             style={styles.modalButton}
             compact
+            textColor={theme.colors.primary}
           >
-            Редактировать
+            {I18n.t("edit")}
           </Button>
           <Button
             mode="contained"
             onPress={() => onExport(journal)}
             style={styles.modalButton}
             compact
+            buttonColor={theme.colors.primary}
+            textColor={theme.colors.text}
           >
-            Экспорт
+            {I18n.t("export")}
           </Button>
         </View>
+      </View>
       </Modal>
     </Portal>
   );
@@ -451,22 +454,24 @@ const EditJournalModal = React.memo(({
 
   if (!journal) return null;
 
+  
+
   return (
     <Portal>
       <Modal
         visible={visible}
         onDismiss={onClose}
-        contentContainerStyle={[
-          styles.modalContainer,
-          { backgroundColor: theme.colors.surface }
-        ]}
+        animationType="slide" 
+        presentationStyle="pageSheet"
+        
       >
+        <View style={{flex:1, backgroundColor: theme.colors.background}}>
         {/* Заголовок */}
         <View style={styles.modalHeader}>
           <View style={styles.modalTitleRow}>
             <MaterialIcons name="edit" size={24} color={theme.colors.primary} />
             <Text style={[styles.modalTitle, { color: theme.colors.primary }]}>
-              Редактировать журнал
+              {I18n.t("editJournal")}
             </Text>
           </View>
           <IconButton
@@ -490,7 +495,8 @@ const EditJournalModal = React.memo(({
               value={editData.testType}
               onChangeText={(text) => setEditData(prev => ({ ...prev, testType: text }))}
               style={styles.input}
-              mode="outlined"
+              mode="flat"
+              textColor={theme.colors.reverseText}
               dense
             />
 
@@ -499,7 +505,8 @@ const EditJournalModal = React.memo(({
               value={editData.layerType}
               onChangeText={(text) => setEditData(prev => ({ ...prev, layerType: text }))}
               style={styles.input}
-              mode="outlined"
+              mode="flat"
+              textColor={theme.colors.reverseText}
               dense
             />
 
@@ -508,7 +515,8 @@ const EditJournalModal = React.memo(({
               value={editData.boundary}
               onChangeText={(text) => setEditData(prev => ({ ...prev, boundary: text }))}
               style={styles.input}
-              mode="outlined"
+              mode="flat"
+              textColor={theme.colors.reverseText}
               dense
             />
 
@@ -517,30 +525,35 @@ const EditJournalModal = React.memo(({
               value={editData.dataType}
               onChangeText={(text) => setEditData(prev => ({ ...prev, dataType: text }))}
               style={styles.input}
-              mode="outlined"
+              mode="flat"
+              textColor={theme.colors.reverseText}
               dense
             />
           </View>
         </ScrollView>
 
         {/* Кнопки действий - sticky footer */}
-        <View style={styles.modalActions}>
+        <View style={[styles.modalActions, { borderTopColor: theme.colors.outline }]}>
           <Button
             mode="outlined"
             onPress={onClose}
             style={styles.modalButton}
             compact
+            textColor={theme.colors.primary}
           >
-            Отмена
+            {I18n.t("cancel")}
           </Button>
           <Button
             mode="contained"
             onPress={handleSave}
             style={styles.modalButton}
             compact
+            buttonColor={theme.colors.primary}
+            textColor={theme.colors.text}
           >
-            Сохранить
+            {I18n.t("save")}
           </Button>
+        </View>
         </View>
       </Modal>
     </Portal>
@@ -832,10 +845,10 @@ export default function JournalManager({ route }) {
           <View style={styles.emptyContainer}>
             <MaterialCommunityIcons name="book-plus" size={64} color={theme.colors.outline} />
             <Text style={[styles.emptyTitle, { color: theme.colors.onSurface }]}>
-              Нет журналов
+              {I18n.t("noJournals")}
             </Text>
             <Text style={[styles.emptySubtitle, { color: theme.colors.onSurfaceVariant }]}>
-              Создайте журнал с помощью мастера или импортируйте существующий
+              {I18n.t("createJournalInWizard")}
             </Text>
           </View>
         }
@@ -986,9 +999,8 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     borderRadius: 16,
-    padding: 0,
+    padding: 25,
     width: "85%",
-    maxWidth: 400,
     maxHeight: "75%",
     margin: 20,
     elevation: 8,
@@ -1059,7 +1071,7 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: "rgba(0,0,0,0.1)",
+    marginBottom: '15%'
   },
   modalButton: {
     flex: 1,
@@ -1077,7 +1089,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.3)",
   },
   iosPickerContainer: {
     borderRadius: 12,

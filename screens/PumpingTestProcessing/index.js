@@ -68,6 +68,24 @@ const getTestTypeIcon = (testType) => {
   }
 };
 
+const translateTestType = (testType) => {
+  if (!testType) return 'pumping';
+  
+  const testTypeLower = testType.toLowerCase();
+  switch (testTypeLower) {
+    case 'откачка':
+      return 'pumping';
+    case 'люжон':
+      return 'lugeon';
+    case 'экспресс':
+      return 'express';
+    case 'наливка':
+      return 'injection';
+    default:
+      return testType; // Возвращаем как есть, если не знаем перевод
+  }
+};
+
 // Главный экран модуля
 function MainScreen({ navigation }) {
   const theme = useTheme();
@@ -135,12 +153,12 @@ function MainScreen({ navigation }) {
       try {
         imported = JSON.parse(content);
       } catch (e) {
-        Alert.alert('Ошибка', 'Неверный формат файла JSON');
+        Alert.alert(I18n.t("error"), I18n.t("invalidJSONFormat"));
         return;
       }
       
       if (!imported || !imported.name || !imported.id) {
-        Alert.alert('Ошибка', 'Файл не является проектом Ansdimat');
+        Alert.alert(I18n.t("error"), I18n.t("invalidProjectFile"));
         return;
       }
       
@@ -152,12 +170,12 @@ function MainScreen({ navigation }) {
       const existingProject = projects.find(p => p.name === imported.name);
       if (existingProject) {
         Alert.alert(
-          'Проект уже существует', 
-          `Проект "${imported.name}" уже существует. Хотите заменить его?`,
+          I18n.t("projectAlreadyExists"), 
+          I18n.t("projectAlreadyExistsDescription", { name: imported.name }),
           [
-            { text: 'Отмена', style: 'cancel' },
+            { text: I18n.t("cancel"), style: 'cancel' },
             {
-              text: 'Заменить',
+              text: I18n.t("replace"),
               style: 'destructive',
               onPress: async () => {
                 const updatedProjects = projects.map(p => 
@@ -165,7 +183,7 @@ function MainScreen({ navigation }) {
                 );
                 await AsyncStorage.setItem('pumping_projects', JSON.stringify(updatedProjects));
                 await AsyncStorage.setItem('pumping_active_project_id', String(existingProject.id));
-                Alert.alert('Успех', 'Проект обновлен');
+                Alert.alert(I18n.t("success"), I18n.t("projectUpdated"));
                 loadRecentProjects();
               }
             }
@@ -264,7 +282,7 @@ function MainScreen({ navigation }) {
                 {truncateText(project.name)}
               </Text>
               <Text style={[styles.projectDate, { color: theme.colors.onSurfaceVariant }]}>
-                {formatDate(project.date)} | {project.testType}
+                {formatDate(project.date)} | {I18n.t(String(translateTestType(project.testType)))}
               </Text>
             </View>
           </View>
@@ -278,7 +296,7 @@ function MainScreen({ navigation }) {
             />
             <IconButton
               icon="export"
-              iconColor={theme.colors.tertiary}
+              iconColor={theme.colors.primary}
               size={20}
               onPress={() => handleExportProject(project)}
             />
@@ -440,10 +458,10 @@ function MainScreen({ navigation }) {
               <MaterialIcons name="info" size={24} color={theme.colors.onSurfaceVariant} />
               <View style={styles.infoText}>
                 <Text style={[styles.infoTitle, { color: theme.colors.onSurfaceVariant }]}>
-                  Обработка откачек
+                  {I18n.t("journalProcessing")}
                 </Text>
                 <Text style={[styles.infoDescription, { color: theme.colors.onSurfaceVariant }]}>
-                  Модуль для анализа результатов откачных испытаний скважин. Создавайте проекты, ведите журналы наблюдений и получайте подробные отчёты.
+                  {I18n.t("journalProcessingDescription")}
                 </Text>
               </View>
             </View>
@@ -479,7 +497,7 @@ export default function PumpingTestProcessing() {
         name="MainScreen"
         component={MainScreen}
         options={{
-          title: 'Обработка откачек',
+          title: I18n.t("pumpingTestProcessingTitle"),
           headerShown: false,
         }}
       />
@@ -487,35 +505,35 @@ export default function PumpingTestProcessing() {
         name="Wizard"
         component={NewWizard}
         options={{
-          title: 'Мастер создания журнала',
+          title: I18n.t("journalCreationWizard"),
         }}
       />
       <Stack.Screen
         name="DataProcessing"
         component={DataProcessing}
         options={{
-          title: 'Обработка данных',
+          title: I18n.t("dataProcessing"),
         }}
       />
       <Stack.Screen
         name="JournalManager"
         component={JournalManager}
         options={{
-          title: 'Журнал наблюдений',
+          title: I18n.t("observationJournal"),
         }}
       />
       <Stack.Screen
         name="ProjectManager"
         component={ProjectManager}
         options={{
-          title: 'Управление проектами',
+          title: I18n.t("projectManagement"),
         }}
       />
       <Stack.Screen
         name="ExportManager"
         component={ExportManager}
         options={{
-          title: 'Экспорт результатов',
+          title: I18n.t("exportData"),
         }}
       />
     </Stack.Navigator>

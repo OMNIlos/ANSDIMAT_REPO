@@ -2,6 +2,7 @@ import { MD3LightTheme, MD3DarkTheme } from 'react-native-paper';
 
 // Цвета из ans.html дизайна
 const colors = {
+  reverseText: '#00000',
   primary: '#72002F', // Основной бордовый цвет
   primaryLight: '#A56981', // Светлый бордовый
   secondary: '#031888', // Синий акцент
@@ -23,6 +24,7 @@ export const lightTheme = {
   colors: {
     ...MD3LightTheme.colors,
     primary: colors.primary,
+    reverseText: '#FFFFFF',
     secondary: colors.secondary,
     background: colors.background,
     surface: colors.surface,
