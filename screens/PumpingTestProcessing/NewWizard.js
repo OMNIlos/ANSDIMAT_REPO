@@ -11,6 +11,7 @@ import {
   Platform,
   StatusBar,
   FlatList,
+  Pressable,
 } from 'react-native';
 import { useTheme, Card, Surface } from 'react-native-paper';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -21,17 +22,19 @@ import { LanguageContext } from '../../LanguageContext';
 
 const STEPS = {
   BASIC_PARAMETERS: 0,
-  OBSERVATION_JOURNAL: 1,
-  DISTANCES: 2,
+  PROCESSING_SETUP: 1,
+  OBSERVATION_JOURNAL: 2,
+  DISTANCES: 3,
 };
 
 const STEP_TITLES = {
   [STEPS.BASIC_PARAMETERS]: I18n.t('basicParameters'),
+  [STEPS.PROCESSING_SETUP]: I18n.t('processingTypeSelection') || 'Выбор типа обработки',
   [STEPS.OBSERVATION_JOURNAL]: I18n.t('observationJournalStep'),
   [STEPS.DISTANCES]: I18n.t('distancesBetweenWells'),
 };
 
-export default function NewWizard({ navigation }) {
+export default function NewWizard({ navigation, route }) {
   const { locale } = useContext(LanguageContext);
   const theme = useTheme();
   const [currentStep, setCurrentStep] = useState(STEPS.BASIC_PARAMETERS);
@@ -40,14 +43,23 @@ export default function NewWizard({ navigation }) {
   
   const [wizardData, setWizardData] = useState({
     // Основные параметры
+    projectName: '',
+    ofrType: 'Откачка/Восстановление', // Pumping/Recovery | Express | Packer
     layerType: 'напорный',
-    wellName: '',
+    wellName: '', // главное имя опытной скважины
     flowRate: '',
     flowRateUnit: 'м³/сут',
-    aquiferThickness: '',
+    aquiferThickness: '', // зависит от типа водоноса
+    saturatedThickness: '',
+    mainFormationThickness: '',
+    experimentalWellRadius: '',
     
     // Журнал наблюдений
-    startDate: new Date(),
+    // Даты обработки
+    pumpingSelected: true,
+    recoverySelected: true,
+    pumpingStartDate: new Date(),
+    recoveryStartDate: new Date(Date.now() + 60 * 60 * 1000),
     observationWells: [
       { id: 1, name: 'Скв. 7Ц', active: true }
     ],
@@ -56,10 +68,10 @@ export default function NewWizard({ navigation }) {
     measurements: {
       1: {
         pumping: [
-          { id: 1, time: '', drawdown: '', date: new Date() }
+          { id: 1, time: '', timeUnit: 'мин', drawdown: '', date: new Date() }
         ],
         recovery: [
-          { id: 1, time: '', drawdown: '', date: new Date() }
+          { id: 1, time: '', timeUnit: 'мин', drawdown: '', date: new Date() }
         ]
       }
     },
@@ -71,24 +83,46 @@ export default function NewWizard({ navigation }) {
   });
 
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [datePickerType, setDatePickerType] = useState('start');
+  const [datePickerType, setDatePickerType] = useState('pumping');
   const [showMeasurementsFor, setShowMeasurementsFor] = useState(null);
   const [measurementType, setMeasurementType] = useState('pumping'); // 'pumping' or 'recovery'
   const [showFlowRateUnits, setShowFlowRateUnits] = useState(false);
 
   const flowRateUnits = [
-    'm³/сут',
+    'м³/сут',
     'м³/час',
     'м³/мин',
     'л/с',
     'л/мин',
     'л/час',
+    'm³/h',
+    'l/day',
   ];
 
   useEffect(() => {
-    loadActiveProject();
-    loadWizardData();
-  }, []);
+    const projectId = route?.params?.projectId;
+    const projectName = route?.params?.projectName;
+    const ofrType = route?.params?.ofrType;
+    const isEditing = route?.params?.isEditing || false;
+
+    if (isEditing && projectId) {
+      // Режим редактирования - загружаем существующий проект
+      loadExistingProjectForEditing();
+    } else {
+      // Режим создания
+      loadActiveProject();
+      // Применяем переданные параметры
+      if (projectName != null || ofrType != null) {
+        setWizardData(prev => ({
+          ...prev,
+          projectName: projectName != null ? projectName : prev.projectName,
+          ofrType: ofrType != null ? ofrType : prev.ofrType,
+        }));
+      }
+      // Затем загружаем сохраненные данные, но не перезаписываем переданные параметры
+      loadWizardData();
+    }
+  }, [route?.params]);
 
   async function loadActiveProject() {
     try {
@@ -106,13 +140,87 @@ export default function NewWizard({ navigation }) {
     }
   }
 
+  async function loadExistingProjectForEditing() {
+    try {
+      if (!route?.params?.projectId) return;
+      
+      const projectsRaw = await AsyncStorage.getItem('pumping_projects');
+      if (!projectsRaw) return;
+      
+      const projects = JSON.parse(projectsRaw);
+      const project = projects.find(p => String(p.id) === String(route.params.projectId));
+      
+      if (!project) {
+        console.error('Project not found for editing:', route.params.projectId);
+        return;
+      }
+      
+      // Загружаем данные проекта в wizardData
+      const projectData = {
+        projectName: project.name || '',
+        ofrType: project.testType || 'Откачка/Восстановление',
+        layerType: project.layerType || 'напорный',
+        wellName: project.wellName || project.observationWells?.[0]?.name || 'Скв. 7Ц',
+        flowRate: project.flowRate || '',
+        flowRateUnit: project.flowRateUnit || 'м³/сут',
+        aquiferThickness: project.aquiferThickness || '',
+        saturatedThickness: project.saturatedThickness || '',
+        mainFormationThickness: project.mainFormationThickness || '',
+        experimentalWellRadius: project.experimentalWellRadius || '',
+        pumpingSelected: project.pumpingSelected !== false,
+        recoverySelected: project.recoverySelected !== false,
+        pumpingStartDate: project.pumpingStartDate ? new Date(project.pumpingStartDate) : new Date(),
+        recoveryStartDate: project.recoveryStartDate ? new Date(project.recoveryStartDate) : new Date(Date.now() + 60 * 60 * 1000),
+        observationWells: project.observationWells || [{ id: 1, name: 'Скв. 7Ц', active: true }],
+        measurements: (() => {
+          const measurements = project.measurements || {
+            1: {
+              pumping: [{ id: 1, time: '', timeUnit: 'мин', drawdown: '', date: new Date() }],
+              recovery: [{ id: 1, time: '', timeUnit: 'мин', drawdown: '', date: new Date() }]
+            }
+          };
+          
+          // Convert measurement dates
+          Object.keys(measurements).forEach(wellId => {
+            ['pumping', 'recovery'].forEach(type => {
+              if (measurements[wellId][type]) {
+                measurements[wellId][type].forEach(measurement => {
+                  if (measurement.date) {
+                    measurement.date = new Date(measurement.date);
+                  }
+                });
+              }
+            });
+          });
+          
+          return measurements;
+        })(),
+        distances: project.distances || { 1: '0.074' }
+      };
+      
+      setWizardData(projectData);
+      
+      // Сохраняем во временные данные для восстановления при переключении шагов
+      await AsyncStorage.setItem('wizard_temp_data', JSON.stringify(projectData));
+      
+    } catch (error) {
+      console.error('Error loading project for editing:', error);
+    }
+  }
+
   async function loadWizardData() {
     try {
+      const isEditing = route?.params?.isEditing || false;
+      
+      // Если мы в режиме редактирования, не загружаем временные данные
+      if (isEditing) return;
+      
       const savedData = await AsyncStorage.getItem('wizard_temp_data');
       if (savedData) {
         const parsed = JSON.parse(savedData);
         // Convert date strings back to Date objects
-        if (parsed.startDate) parsed.startDate = new Date(parsed.startDate);
+        if (parsed.pumpingStartDate) parsed.pumpingStartDate = new Date(parsed.pumpingStartDate);
+        if (parsed.recoveryStartDate) parsed.recoveryStartDate = new Date(parsed.recoveryStartDate);
         
         // Convert measurement dates
         Object.keys(parsed.measurements || {}).forEach(wellId => {
@@ -124,6 +232,12 @@ export default function NewWizard({ navigation }) {
             }
           });
         });
+        
+        // Не перезаписываем переданные параметры
+        const projectName = route?.params?.projectName;
+        const ofrType = route?.params?.ofrType;
+        if (projectName != null) parsed.projectName = projectName;
+        if (ofrType != null) parsed.ofrType = ofrType;
         
         setWizardData(parsed);
       }
@@ -159,13 +273,34 @@ export default function NewWizard({ navigation }) {
         } else if (isNaN(parseFloat(wizardData.flowRate))) {
           newErrors.flowRate = 'Введите числовое значение';
         }
-        if (!wizardData.aquiferThickness.trim()) {
-          newErrors.aquiferThickness = 'Введите мощность водоносного горизонта';
-        } else if (isNaN(parseFloat(wizardData.aquiferThickness))) {
-          newErrors.aquiferThickness = 'Введите числовое значение';
+        if (wizardData.layerType === 'напорный') {
+          if (!wizardData.aquiferThickness.trim()) newErrors.aquiferThickness = 'Введите мощность водоносного горизонта';
+          else if (isNaN(parseFloat(wizardData.aquiferThickness))) newErrors.aquiferThickness = 'Введите числовое значение';
+        } else if (wizardData.layerType === 'безнапорный') {
+          if (!wizardData.saturatedThickness.trim()) newErrors.saturatedThickness = 'Введите насыщенную мощность';
+          else if (isNaN(parseFloat(wizardData.saturatedThickness))) newErrors.saturatedThickness = 'Введите числовое значение';
+        } else if (wizardData.layerType === 'с перетеканием') {
+          if (!wizardData.mainFormationThickness.trim()) newErrors.mainFormationThickness = 'Введите основную мощность';
+          else if (isNaN(parseFloat(wizardData.mainFormationThickness))) newErrors.mainFormationThickness = 'Введите числовое значение';
+        }
+        if (!wizardData.experimentalWellRadius.trim()) {
+          newErrors.experimentalWellRadius = 'Введите радиус опытной скважины';
+        } else if (isNaN(parseFloat(wizardData.experimentalWellRadius))) {
+          newErrors.experimentalWellRadius = 'Введите числовое значение';
         }
         if (!wizardData.layerType) {
           newErrors.layerType = 'Выберите тип водоносного горизонта';
+        }
+        break;
+      case STEPS.PROCESSING_SETUP:
+        if (!wizardData.pumpingSelected && !wizardData.recoverySelected) {
+          newErrors.processingTypes = 'Выберите хотя бы один тип обработки';
+        }
+        if (wizardData.pumpingSelected && !wizardData.pumpingStartDate) {
+          newErrors.pumpingStartDate = 'Укажите дату начала откачки';
+        }
+        if (wizardData.recoverySelected && !wizardData.recoveryStartDate) {
+          newErrors.recoveryStartDate = 'Укажите дату начала восстановления';
         }
         break;
         
@@ -174,6 +309,20 @@ export default function NewWizard({ navigation }) {
         if (!wizardData.observationWells || wizardData.observationWells.length === 0) {
           newErrors.wells = 'Добавьте хотя бы одну наблюдательную скважину';
         }
+        // Валидация порядков времени в текущих измерениях
+        wizardData.observationWells.forEach(well => {
+          ['pumping', 'recovery'].forEach(type => {
+            const list = wizardData.measurements[well.id]?.[type] || [];
+            for (let i = 1; i < list.length; i += 1) {
+              const prev = parseFloat(list[i - 1].time || '');
+              const curr = parseFloat(list[i].time || '');
+              if (!isNaN(prev) && !isNaN(curr) && prev > curr) {
+                newErrors[`measure_${well.id}_${type}_${i}`] = 'Время должно неубывать';
+                break;
+              }
+            }
+          });
+        });
         break;
         
       case STEPS.DISTANCES:
@@ -234,24 +383,35 @@ export default function NewWizard({ navigation }) {
     }));
   };
 
-  const addMeasurement = (wellId, type) => {
+  const addMeasurement = (wellId, type, insertAfterId = null) => {
     const newMeasurement = {
       id: Date.now().toString(),
       time: '',
+      timeUnit: 'мин',
       drawdown: '',
       date: new Date()
     };
     
-    setWizardData(prev => ({
-      ...prev,
-      measurements: {
-        ...prev.measurements,
-        [wellId]: {
-          ...prev.measurements[wellId],
-          [type]: [...(prev.measurements[wellId][type] || []), newMeasurement]
+    setWizardData(prev => {
+      const list = prev.measurements[wellId][type] || [];
+      let newList;
+      if (insertAfterId) {
+        const idx = list.findIndex(m => String(m.id) === String(insertAfterId));
+        if (idx >= 0) {
+          newList = [...list.slice(0, idx + 1), newMeasurement, ...list.slice(idx + 1)];
+        } else newList = [...list, newMeasurement];
+      } else newList = [...list, newMeasurement];
+      return ({
+        ...prev,
+        measurements: {
+          ...prev.measurements,
+          [wellId]: {
+            ...prev.measurements[wellId],
+            [type]: newList
+          }
         }
-      }
-    }));
+      });
+    });
   };
 
   const deleteMeasurement = (wellId, type, measurementId) => {
@@ -282,6 +442,22 @@ export default function NewWizard({ navigation }) {
     }));
   };
 
+  // Функция для переключения единиц времени при нажатии
+  const toggleTimeUnit = (wellId, type, measurementId) => {
+    const measurement = wizardData.measurements[wellId]?.[type]?.find(m => m.id === measurementId);
+    if (!measurement) return;
+    
+    const currentUnit = measurement.timeUnit || 'мин';
+    const units = ['сек', 'мин', 'час', 's', 'm', 'h'];
+    const currentIndex = units.indexOf(currentUnit);
+    const nextIndex = (currentIndex + 1) % units.length;
+    const nextUnit = units[nextIndex];
+    
+    updateMeasurement(wellId, type, measurementId, 'timeUnit', nextUnit);
+  };
+
+
+
   // Функция для преобразования measurements в формат dataRows
   const convertMeasurementsToDataRows = (measurements, observationWells) => {
     const dataRows = [];
@@ -293,8 +469,14 @@ export default function NewWizard({ navigation }) {
         if (wellMeasurements.pumping) {
           wellMeasurements.pumping.forEach(measurement => {
             if (measurement.time && measurement.drawdown) {
+              const tVal = parseFloat(measurement.time);
+              const unit = measurement.timeUnit || 'мин';
+              let days = tVal;
+              if (unit === 'сек' || unit === 's') days = tVal / 86400;
+              else if (unit === 'мин' || unit === 'm') days = tVal / 1440;
+              else if (unit === 'час' || unit === 'h') days = tVal / 24;
               dataRows.push({
-                t: parseFloat(measurement.time),
+                t: days,
                 s: parseFloat(measurement.drawdown),
                 wellId: well.id,
                 wellName: well.name,
@@ -308,8 +490,14 @@ export default function NewWizard({ navigation }) {
         if (wellMeasurements.recovery) {
           wellMeasurements.recovery.forEach(measurement => {
             if (measurement.time && measurement.drawdown) {
+              const tVal = parseFloat(measurement.time);
+              const unit = measurement.timeUnit || 'мин';
+              let days = tVal;
+              if (unit === 'сек' || unit === 's') days = tVal / 86400;
+              else if (unit === 'мин' || unit === 'm') days = tVal / 1440;
+              else if (unit === 'час' || unit === 'h') days = tVal / 24;
               dataRows.push({
-                t: parseFloat(measurement.time),
+                t: days,
                 s: parseFloat(measurement.drawdown),
                 wellId: well.id,
                 wellName: well.name,
@@ -332,44 +520,80 @@ export default function NewWizard({ navigation }) {
         <View style={styles.cardContent}>
           <Text style={[styles.cardTitle, { color: theme.colors.primary }]}>
             <MaterialIcons name="settings" size={20} color={theme.colors.primary} /> 
-            Основные параметры
+            {I18n.t("basicParameters")}
           </Text>
+
+          {/* Имя проекта/журнала (только инфо) */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Название проекта/журнала</Text>
+            <Surface style={{ padding: 12, borderRadius: 8, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.background }}>
+              <Text style={{ color: theme.colors.text }}>
+                {wizardData.projectName || '-'} 
+              </Text>
+            </Surface>
+          </View>
+
+          {/* Тип ОФР (только инфо) */}
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Тип ОФР</Text>
+            <Surface style={{ padding: 12, borderRadius: 8, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.background }}>
+              <Text style={{ color: theme.colors.text }}>{wizardData.ofrType}</Text>
+            </Surface>
+            <Text style={[styles.errorText, { color: theme.colors.onSurfaceVariant, marginTop: 6 }]}>Пока реализован только вариант "Откачка/Восстановление".</Text>
+          </View>
           
           {/* Тип водоносного горизонта */}
           <View style={styles.inputGroup}>
             <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
-              Тип водоносного горизонта *
+              {I18n.t("layerType")} *
             </Text>
-            <View style={styles.radioGroup}>
-              <TouchableOpacity
-                style={[
-                  styles.radioOption,
-                  { borderColor: wizardData.layerType === 'напорный' ? theme.colors.primary : theme.colors.border }
-                ]}
-                onPress={() => updateData('layerType', 'напорный')}
-              >
-                <MaterialIcons 
-                  name={wizardData.layerType === 'напорный' ? 'radio-button-checked' : 'radio-button-unchecked'} 
-                  size={20} 
-                  color={wizardData.layerType === 'напорный' ? theme.colors.primary : theme.colors.textSecondary} 
-                />
-                <Text style={[styles.radioText, { color: theme.colors.text }]}>Напорный</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.radioOption,
-                  { borderColor: wizardData.layerType === 'безнапорный' ? theme.colors.primary : theme.colors.border }
-                ]}
-                onPress={() => updateData('layerType', 'безнапорный')}
-              >
-                <MaterialIcons 
-                  name={wizardData.layerType === 'безнапорный' ? 'radio-button-checked' : 'radio-button-unchecked'} 
-                  size={20} 
-                  color={wizardData.layerType === 'безнапорный' ? theme.colors.primary : theme.colors.textSecondary} 
-                />
-                <Text style={[styles.radioText, { color: theme.colors.text }]}>Безнапорный</Text>
-              </TouchableOpacity>
-            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+              <View style={[styles.radioGroup, { flexDirection: 'row', gap: 20, paddingHorizontal: 16 }]}>
+                <TouchableOpacity
+                  style={[
+                    styles.radioOption,
+                    { borderColor: wizardData.layerType === 'напорный' ? theme.colors.primary : theme.colors.border }
+                  ]}
+                  onPress={() => updateData('layerType', 'напорный')}
+                >
+                  <MaterialIcons 
+                    name={wizardData.layerType === 'напорный' ? 'radio-button-checked' : 'radio-button-unchecked'} 
+                    size={20} 
+                    color={wizardData.layerType === 'напорный' ? theme.colors.primary : theme.colors.textSecondary} 
+                  />
+                  <Text style={[styles.radioText, { color: theme.colors.text }]}>{I18n.t("confined")}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.radioOption,
+                    { borderColor: wizardData.layerType === 'безнапорный' ? theme.colors.primary : theme.colors.border }
+                  ]}
+                  onPress={() => updateData('layerType', 'безнапорный')}
+                >
+                  <MaterialIcons 
+                    name={wizardData.layerType === 'безнапорный' ? 'radio-button-checked' : 'radio-button-unchecked'} 
+                    size={20} 
+                    color={wizardData.layerType === 'безнапорный' ? theme.colors.primary : theme.colors.textSecondary} 
+                  />
+                  <Text style={[styles.radioText, { color: theme.colors.text }]}>{I18n.t("unconfined")}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.radioOption,
+                    { borderColor: wizardData.layerType === 'с перетеканием' ? theme.colors.primary : theme.colors.border }
+                  ]}
+                  onPress={() => updateData('layerType', 'с перетеканием')}
+                >
+                  <MaterialIcons 
+                    name={wizardData.layerType === 'с перетеканием' ? 'radio-button-checked' : 'radio-button-unchecked'} 
+                    size={20} 
+                    color={wizardData.layerType === 'с перетеканием' ? theme.colors.primary : theme.colors.textSecondary} 
+                  />
+                  <Text style={[styles.radioText, { color: theme.colors.text }]}>{I18n.t("withInterflow")}</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
             {errors.layerType && (
               <Text style={[styles.errorText, { color: theme.colors.error }]}>
                 {errors.layerType}
@@ -377,10 +601,10 @@ export default function NewWizard({ navigation }) {
             )}
           </View>
 
-          {/* Название скважины */}
+          {/* Название главной (опытной) скважины */}
           <View style={styles.inputGroup}>
             <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
-              Название скважины *
+              {I18n.t("wellName")} *
             </Text>
             <TextInput
               style={[
@@ -406,7 +630,7 @@ export default function NewWizard({ navigation }) {
           {/* Расход */}
           <View style={styles.inputGroup}>
             <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
-              Расход *
+              {I18n.t("flowRate")} *
             </Text>
             <View style={styles.inputWithUnit}>
               <TextInput
@@ -445,30 +669,75 @@ export default function NewWizard({ navigation }) {
             )}
           </View>
 
-          {/* Мощность водоносного горизонта */}
+          {/* Зависимые поля по типу водоноса */}
+          {wizardData.layerType === 'напорный' && (
+            <View style={styles.inputGroup}>
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}> 
+                {I18n.t("aquiferThickness")} (м) *
+              </Text>
+              <TextInput
+                style={[styles.textInput, { borderColor: errors.aquiferThickness ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background, color: theme.colors.text }]}
+                value={wizardData.aquiferThickness}
+                onChangeText={(value) => updateData('aquiferThickness', value)}
+                placeholder="0"
+                placeholderTextColor={theme.colors.textSecondary}
+                keyboardType="numeric"
+              />
+              {errors.aquiferThickness && (
+                <Text style={[styles.errorText, { color: theme.colors.error }]}>{errors.aquiferThickness}</Text>
+              )}
+            </View>
+          )}
+          {wizardData.layerType === 'безнапорный' && (
+            <View style={styles.inputGroup}>
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}> 
+                {I18n.t("saturatedThickness")} (м) *
+              </Text>
+              <TextInput
+                style={[styles.textInput, { borderColor: errors.saturatedThickness ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background, color: theme.colors.text }]}
+                value={wizardData.saturatedThickness}
+                onChangeText={(value) => updateData('saturatedThickness', value)}
+                placeholder="0"
+                placeholderTextColor={theme.colors.textSecondary}
+                keyboardType="numeric"
+              />
+              {errors.saturatedThickness && (
+                <Text style={[styles.errorText, { color: theme.colors.error }]}>{errors.saturatedThickness}</Text>
+              )}
+            </View>
+          )}
+          {wizardData.layerType === 'с перетеканием' && (
+            <View style={styles.inputGroup}>
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}> 
+                {I18n.t("mainFormationThickness")} (м) *
+              </Text>
+              <TextInput
+                style={[styles.textInput, { borderColor: errors.mainFormationThickness ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background, color: theme.colors.text }]}
+                value={wizardData.mainFormationThickness}
+                onChangeText={(value) => updateData('mainFormationThickness', value)}
+                placeholder="0"
+                placeholderTextColor={theme.colors.textSecondary}
+                keyboardType="numeric"
+              />
+              {errors.mainFormationThickness && (
+                <Text style={[styles.errorText, { color: theme.colors.error }]}>{errors.mainFormationThickness}</Text>
+              )}
+            </View>
+          )}
+
+          {/* Радиус опытной скважины */}
           <View style={styles.inputGroup}>
-            <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
-              Мощность водоносного горизонта (м) *
-            </Text>
+            <Text style={[styles.inputLabel, { color: theme.colors.text }]}>{I18n.t("wellRadius")} (м) *</Text>
             <TextInput
-              style={[
-                styles.textInput,
-                {
-                  borderColor: errors.aquiferThickness ? theme.colors.error : theme.colors.border,
-                  backgroundColor: theme.colors.background,
-                  color: theme.colors.text,
-                }
-              ]}
-              value={wizardData.aquiferThickness}
-              onChangeText={(value) => updateData('aquiferThickness', value)}
-              placeholder="0"
+              style={[styles.textInput, { borderColor: errors.experimentalWellRadius ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background, color: theme.colors.text }]}
+              value={wizardData.experimentalWellRadius}
+              onChangeText={(value) => updateData('experimentalWellRadius', value)}
+              placeholder="0.000"
               placeholderTextColor={theme.colors.textSecondary}
               keyboardType="numeric"
             />
-            {errors.aquiferThickness && (
-              <Text style={[styles.errorText, { color: theme.colors.error }]}>
-                {errors.aquiferThickness}
-              </Text>
+            {errors.experimentalWellRadius && (
+              <Text style={[styles.errorText, { color: theme.colors.error }]}>{errors.experimentalWellRadius}</Text>
             )}
           </View>
         </View>
@@ -481,10 +750,16 @@ export default function NewWizard({ navigation }) {
             <Text style={[styles.infoTitle, { color: theme.colors.primary }]}>{I18n.t("information")}</Text>
           </View>
           <Text style={[styles.infoText, { color: theme.colors.text }]}>
-            {activeProject 
-              ? `${I18n.t("journalWillBeAddedToActiveProject")} "${activeProject.name}".`
-              : `${I18n.t("noActiveProject")} ${I18n.t("newProjectWillBeCreated")}`
-            }
+            {(() => {
+              const isEditing = route?.params?.isEditing || false;
+              if (isEditing) {
+                return `Редактирование проекта "${route?.params?.projectName || 'Неизвестный проект'}". Все изменения будут сохранены.`;
+              } else if (activeProject) {
+                return `${I18n.t("journalWillBeAddedToActiveProject")} "${activeProject.name}".`;
+              } else {
+                return `${I18n.t("noActiveProject")} ${I18n.t("newProjectWillBeCreated")}`;
+              }
+            })()}
             {'\n\n'}
             {I18n.t("firstStep")}
             {'\n\n'}
@@ -495,29 +770,118 @@ export default function NewWizard({ navigation }) {
     </ScrollView>
   );
 
-  // Шаг 2: Журнал наблюдений
+  // Шаг 2: Выбор типов обработки, даты и главный ствол
+  const renderProcessingSetup = () => {
+    const pumpingDurationHours = wizardData.pumpingSelected && wizardData.recoverySelected
+      ? Math.max(0, (wizardData.recoveryStartDate - wizardData.pumpingStartDate) / 3600000).toFixed(2)
+      : null;
+    return (
+      <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
+        <Card style={[styles.parameterCard, { backgroundColor: theme.colors.surface }]}> 
+          <View style={styles.cardContent}>
+            <Text style={[styles.cardTitle, { color: theme.colors.primary }]}> 
+              <MaterialIcons name="tune" size={20} color={theme.colors.primary} /> 
+              Тип обработки и даты
+            </Text>
+
+            {/* Выбор типов */}
+            <View style={styles.radioGroup}>
+              {[{key:'pumpingSelected', label:'Откачка'}, {key:'recoverySelected', label:'Восстановление'}].map(opt => (
+                <TouchableOpacity
+                  key={opt.key}
+                  style={[styles.radioOption, { borderColor: wizardData[opt.key] ? theme.colors.primary : theme.colors.border }]}
+                  onPress={() => updateData(opt.key, !wizardData[opt.key])}
+                >
+                  <MaterialIcons name={wizardData[opt.key] ? 'check-box' : 'check-box-outline-blank'} size={20} color={wizardData[opt.key] ? theme.colors.primary : theme.colors.textSecondary} />
+                  <Text style={[styles.radioText, { color: theme.colors.text }]}>{opt.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {errors.processingTypes && <Text style={[styles.errorText, { color: theme.colors.error }]}>{errors.processingTypes}</Text>}
+
+            {/* Даты */}
+            {wizardData.pumpingSelected && (
+              <TouchableOpacity
+                style={[styles.dateButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, marginTop: 12 }]}
+                onPress={() => {
+                  setDatePickerType('pumping');
+                  setShowDatePicker(true);
+                }}
+              >
+                <MaterialIcons name="calendar-today" size={20} color={theme.colors.primary} />
+                <Text style={[styles.dateText, { color: theme.colors.text }]}>
+                  Начало откачки: {wizardData.pumpingStartDate.toLocaleDateString('ru-RU')} {wizardData.pumpingStartDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {wizardData.recoverySelected && (
+              <TouchableOpacity
+                style={[styles.dateButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, marginTop: 12 }]}
+                onPress={() => {
+                  setDatePickerType('recovery');
+                  setShowDatePicker(true);
+                }}
+              >
+                <MaterialIcons name="calendar-today" size={20} color={theme.colors.primary} />
+                <Text style={[styles.dateText, { color: theme.colors.text }]}>
+                  Начало восстановления: {wizardData.recoveryStartDate.toLocaleDateString('ru-RU')} {wizardData.recoveryStartDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {wizardData.pumpingSelected && wizardData.recoverySelected && (
+              <Text style={{ marginTop: 12, color: theme.colors.onSurfaceVariant }}>Длительность откачки: {pumpingDurationHours} ч</Text>
+            )}
+          </View>
+        </Card>
+
+        {/* Главная (опытная) скважина */}
+        <Card style={[styles.parameterCard, { backgroundColor: theme.colors.surface }]}> 
+          <View style={styles.cardContent}>
+            <Text style={[styles.cardTitle, { color: theme.colors.primary }]}> 
+              <MaterialCommunityIcons name="water-well" size={20} color={theme.colors.primary} /> 
+              Опытная скважина (главная)
+            </Text>
+            <Surface style={[styles.wellCard, { backgroundColor: theme.colors.background }]}> 
+              <View style={styles.wellHeader}>
+                <MaterialCommunityIcons name="water-well" size={24} color={theme.colors.primary} />
+                <TextInput
+                  style={[styles.textInput, { flex: 1, marginLeft: 8, borderColor: theme.colors.border, backgroundColor: theme.colors.background, color: theme.colors.text }]}
+                  value={wizardData.wellName}
+                  onChangeText={(v) => updateData('wellName', v)}
+                />
+                {/* Без удаления для главной */}
+              </View>
+              <View style={styles.wellButtons}>
+                {wizardData.pumpingSelected && (
+                  <TouchableOpacity
+                    style={[styles.wellButton, { backgroundColor: theme.colors.primary }]}
+                    onPress={() => { setShowMeasurementsFor('1'); setMeasurementType('pumping'); }}
+                  >
+                    <MaterialIcons name="arrow-downward" size={18} color={theme.colors.white} />
+                    <Text style={[styles.wellButtonText, { color: theme.colors.white }]}>Откачка ({wizardData.measurements['1']?.pumping?.length || 0})</Text>
+                  </TouchableOpacity>
+                )}
+                {wizardData.recoverySelected && (
+                  <TouchableOpacity
+                    style={[styles.wellButton, { backgroundColor: theme.colors.secondary }]}
+                    onPress={() => { setShowMeasurementsFor('1'); setMeasurementType('recovery'); }}
+                  >
+                    <MaterialIcons name="arrow-upward" size={18} color={theme.colors.white} />
+                    <Text style={[styles.wellButtonText, { color: theme.colors.white }]}>Восстановление ({wizardData.measurements['1']?.recovery?.length || 0})</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </Surface>
+          </View>
+        </Card>
+      </ScrollView>
+    );
+  };
+
+  // Шаг 3: Журнал наблюдений по доп. скважинам
   const renderObservationJournal = () => (
     <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
-      {/* Дата начала откачки */}
-      <Card style={[styles.parameterCard, { backgroundColor: theme.colors.surface }]}>
-        <View style={styles.cardContent}>
-          <Text style={[styles.cardTitle, { color: theme.colors.primary }]}>
-            <MaterialIcons name="event" size={20} color={theme.colors.primary} /> 
-            Дата начала откачки
-          </Text>
-          
-          <TouchableOpacity
-            style={[styles.dateButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
-            onPress={() => setShowDatePicker(true)}
-          >
-            <MaterialIcons name="calendar-today" size={20} color={theme.colors.primary} />
-            <Text style={[styles.dateText, { color: theme.colors.text }]}>
-              {wizardData.startDate.toLocaleDateString('ru-RU')} {wizardData.startDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </Card>
-
       {/* Наблюдательные скважины */}
       <Card style={[styles.parameterCard, { backgroundColor: theme.colors.surface }]}>
         <View style={styles.cardContent}>
@@ -534,20 +898,27 @@ export default function NewWizard({ navigation }) {
             </TouchableOpacity>
           </View>
 
-          {wizardData.observationWells.map((well, index) => (
+           {wizardData.observationWells.filter(w => String(w.id) !== '1').map((well, index) => (
             <Surface 
               key={well.id} 
               style={[styles.wellCard, { backgroundColor: theme.colors.background }]}
             >
               <View style={styles.wellHeader}>
                 <MaterialCommunityIcons name="water-well" size={24} color={theme.colors.primary} />
-                <Text style={[styles.wellName, { color: theme.colors.text }]}>
-                  {well.name}
-                </Text>
+                <TextInput
+                  style={[styles.textInput, { flex: 1, marginLeft: 8, borderColor: theme.colors.border, backgroundColor: theme.colors.background, color: theme.colors.text }]}
+                  value={well.name}
+                  onChangeText={(v) => {
+                    const newWells = wizardData.observationWells.map(w => w.id === well.id ? { ...w, name: v } : w);
+                    updateData('observationWells', newWells);
+                  }}
+                />
                 <TouchableOpacity
                   onPress={() => {
                     const newWells = wizardData.observationWells.filter(w => w.id !== well.id);
-                    updateData('observationWells', newWells);
+                    const { [well.id]: removed, ...restDistances } = wizardData.distances;
+                    const { [well.id]: removedM, ...restMeas } = wizardData.measurements;
+                    setWizardData(prev => ({ ...prev, observationWells: newWells, distances: restDistances, measurements: restMeas }));
                   }}
                 >
                   <MaterialIcons name="delete" size={20} color={theme.colors.error} />
@@ -555,31 +926,30 @@ export default function NewWizard({ navigation }) {
               </View>
               
               <View style={styles.wellButtons}>
-                <TouchableOpacity
-                  style={[styles.wellButton, { backgroundColor: theme.colors.primary }]}
-                  onPress={() => {
-                    setShowMeasurementsFor(well.id);
-                    setMeasurementType('pumping');
-                  }}
-                >
-                  <MaterialIcons name="arrow-downward" size={18} color={theme.colors.white} />
-                  <Text style={[styles.wellButtonText, { color: theme.colors.white }]}>
-                    Откачка ({wizardData.measurements[well.id]?.pumping?.length || 0})
-                  </Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[styles.wellButton, { backgroundColor: theme.colors.secondary }]}
-                  onPress={() => {
-                    setShowMeasurementsFor(well.id);
-                    setMeasurementType('recovery');
-                  }}
-                >
-                  <MaterialIcons name="arrow-upward" size={18} color={theme.colors.white} />
-                  <Text style={[styles.wellButtonText, { color: theme.colors.white }]}>
-                    Восстановление ({wizardData.measurements[well.id]?.recovery?.length || 0})
-                  </Text>
-                </TouchableOpacity>
+                {wizardData.pumpingSelected && (
+                  <TouchableOpacity
+                    style={[styles.wellButton, { backgroundColor: theme.colors.primary }]}
+                    onPress={() => {
+                      setShowMeasurementsFor(well.id);
+                      setMeasurementType('pumping');
+                    }}
+                  >
+                    <MaterialIcons name="arrow-downward" size={18} color={theme.colors.white} />
+                    <Text style={[styles.wellButtonText, { color: theme.colors.white }]}>Откачка ({wizardData.measurements[well.id]?.pumping?.length || 0})</Text>
+                  </TouchableOpacity>
+                )}
+                {wizardData.recoverySelected && (
+                  <TouchableOpacity
+                    style={[styles.wellButton, { backgroundColor: theme.colors.secondary }]}
+                    onPress={() => {
+                      setShowMeasurementsFor(well.id);
+                      setMeasurementType('recovery');
+                    }}
+                  >
+                    <MaterialIcons name="arrow-upward" size={18} color={theme.colors.white} />
+                    <Text style={[styles.wellButtonText, { color: theme.colors.white }]}>Восстановление ({wizardData.measurements[well.id]?.recovery?.length || 0})</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </Surface>
           ))}
@@ -612,7 +982,7 @@ export default function NewWizard({ navigation }) {
               <MaterialIcons name="close" size={24} color={theme.colors.white} />
             </TouchableOpacity>
             <Text style={[styles.modalTitle, { color: theme.colors.white }]}>
-              {well?.name} - {measurementType === 'pumping' ? 'Откачка' : 'Восстановление'}
+              {well?.name} - {measurementType === 'pumping' ? I18n.t('pumping') : I18n.t('recovery')}
             </Text>
             <TouchableOpacity onPress={() => addMeasurement(showMeasurementsFor, measurementType)}>
               <MaterialIcons name="add" size={24} color={theme.colors.white} />
@@ -640,7 +1010,7 @@ export default function NewWizard({ navigation }) {
                 
                 <View style={styles.measurementInputs}>
                   <View style={styles.measurementField}>
-                    <Text style={[styles.fieldLabel, { color: theme.colors.textSecondary }]}>Время (мин)</Text>
+                    <Text style={[styles.fieldLabel, { color: theme.colors.textSecondary }]}>Время</Text>
                     <TextInput
                       style={[styles.measurementInput, { 
                         borderColor: theme.colors.border,
@@ -652,6 +1022,9 @@ export default function NewWizard({ navigation }) {
                       placeholder="0"
                       keyboardType="numeric"
                     />
+                    <TouchableOpacity onPress={() => toggleTimeUnit(showMeasurementsFor, measurementType, item.id)} style={{ marginTop: 6 }}>
+                      <Text style={{ color: theme.colors.primary }}>{I18n.t("timeUnit")}: {item.timeUnit || 'мин'}</Text>
+                    </TouchableOpacity>
                   </View>
                   
                   <View style={styles.measurementField}>
@@ -669,6 +1042,13 @@ export default function NewWizard({ navigation }) {
                     />
                   </View>
                 </View>
+
+                {/* Разделитель с кнопкой вставки */}
+                <View style={{ alignItems: 'center', marginTop: 8 }}>
+                  <TouchableOpacity onPress={() => addMeasurement(showMeasurementsFor, measurementType, item.id)} style={{ paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: theme.colors.surface }}>
+                    <Text style={{ color: theme.colors.primary }}>{I18n.t("insertMeasurement")}</Text>
+                  </TouchableOpacity>
+                </View>
               </Surface>
             )}
           />
@@ -677,14 +1057,14 @@ export default function NewWizard({ navigation }) {
     );
   };
 
-  // Шаг 3: Расстояния
+  // Шаг 4: Расстояния
   const renderDistances = () => (
     <ScrollView style={styles.stepContent} showsVerticalScrollIndicator={false}>
       <Card style={[styles.distanceCard, { backgroundColor: theme.colors.surface }]}>
         <Card.Content>
           <Text style={[styles.cardTitle, { color: theme.colors.text }]}>{I18n.t("distancesBetweenWells")}</Text>
           
-          {wizardData.observationWells.map((well) => (
+           {wizardData.observationWells.filter(w => String(w.id) !== '1').map((well) => (
             <View key={well.id} style={styles.distanceRow}>
               <View style={styles.distanceInfo}>
                 <MaterialCommunityIcons name="water-well" size={20} color={theme.colors.primary} />
@@ -740,6 +1120,8 @@ export default function NewWizard({ navigation }) {
     switch (currentStep) {
       case STEPS.BASIC_PARAMETERS:
         return renderBasicParameters();
+      case STEPS.PROCESSING_SETUP:
+        return renderProcessingSetup();
       case STEPS.OBSERVATION_JOURNAL:
         return renderObservationJournal();
       case STEPS.DISTANCES:
@@ -761,79 +1143,107 @@ export default function NewWizard({ navigation }) {
     if (currentStep < STEPS.DISTANCES) {
       nextStep();
     } else {
-      // Завершение мастера - создание журнала
+      // Завершение мастера - создание или обновление журнала
       if (validateStep(currentStep)) {
         try {
-          // Проверяем наличие активного проекта
-          let targetProject = activeProject;
+          const isEditing = route?.params?.isEditing || false;
+          const existingProjectId = route?.params?.projectId;
           
-          if (!targetProject) {
-            // Если нет активного проекта, создаем новый
-            const projectData = {
-              id: Date.now().toString(),
-              name: `Проект ${wizardData.wellName}`,
-              createdAt: new Date().toISOString(),
+          if (isEditing && existingProjectId) {
+            // Обновляем существующий проект
+            const projectsRaw = await AsyncStorage.getItem('pumping_projects');
+            if (!projectsRaw) {
+              Alert.alert('Ошибка', 'Не удалось найти проекты для обновления');
+              return;
+            }
+            
+            const projects = JSON.parse(projectsRaw);
+            const projectIndex = projects.findIndex(p => String(p.id) === String(existingProjectId));
+            
+            if (projectIndex === -1) {
+              Alert.alert('Ошибка', 'Проект не найден для обновления');
+              return;
+            }
+            
+            const dataRows = convertMeasurementsToDataRows(wizardData.measurements, wizardData.observationWells);
+            const updatedProject = {
+              ...projects[projectIndex],
+              name: wizardData.projectName || `Журнал ${wizardData.wellName}`,
               lastAccessDate: new Date().toISOString(),
-              journals: []
+              testType: wizardData.ofrType || 'Откачка/Восстановление',
+              layerType: wizardData.layerType,
+              wellName: wizardData.wellName, // Добавляем сохранение названия скважины
+              flowRate: wizardData.flowRate,
+              flowRateUnit: wizardData.flowRateUnit,
+              experimentalWellRadius: wizardData.experimentalWellRadius,
+              aquiferThickness: wizardData.aquiferThickness,
+              saturatedThickness: wizardData.saturatedThickness,
+              mainFormationThickness: wizardData.mainFormationThickness,
+              pumpingSelected: wizardData.pumpingSelected,
+              recoverySelected: wizardData.recoverySelected,
+              pumpingStartDate: wizardData.pumpingStartDate?.toISOString?.() || new Date().toISOString(),
+              recoveryStartDate: wizardData.recoveryStartDate?.toISOString?.() || new Date().toISOString(),
+              observationWells: wizardData.observationWells,
+              measurements: wizardData.measurements,
+              distances: wizardData.distances,
+              dataRows,
+              dataType: 's-t',
             };
             
+            projects[projectIndex] = updatedProject;
+            await AsyncStorage.setItem('pumping_projects', JSON.stringify(projects));
+            
+            Alert.alert(
+              'Успех', 
+              `Проект "${updatedProject.name}" обновлен успешно!`,
+              [{ text: 'OK', onPress: () => navigation.goBack() }]
+            );
+          } else {
+            // Создаем новый проект
+            const projectId = Date.now().toString();
+            const dataRows = convertMeasurementsToDataRows(wizardData.measurements, wizardData.observationWells);
+            const projectData = {
+              id: projectId,
+              name: wizardData.projectName || `Журнал ${wizardData.wellName}`,
+              createdAt: new Date().toISOString(),
+              lastAccessDate: new Date().toISOString(),
+              favorite: false,
+              testType: wizardData.ofrType || 'Откачка/Восстановление',
+              layerType: wizardData.layerType,
+              wellName: wizardData.wellName, // Добавляем сохранение названия скважины
+              flowRate: wizardData.flowRate,
+              flowRateUnit: wizardData.flowRateUnit,
+              experimentalWellRadius: wizardData.experimentalWellRadius,
+              aquiferThickness: wizardData.aquiferThickness,
+              saturatedThickness: wizardData.saturatedThickness,
+              mainFormationThickness: wizardData.mainFormationThickness,
+              pumpingSelected: wizardData.pumpingSelected,
+              recoverySelected: wizardData.recoverySelected,
+              pumpingStartDate: wizardData.pumpingStartDate?.toISOString?.() || new Date().toISOString(),
+              recoveryStartDate: wizardData.recoveryStartDate?.toISOString?.() || new Date().toISOString(),
+              observationWells: wizardData.observationWells,
+              measurements: wizardData.measurements,
+              distances: wizardData.distances,
+              dataRows,
+              dataType: 's-t',
+              journals: [],
+            };
+
             const existingProjects = await AsyncStorage.getItem('pumping_projects');
             const projects = existingProjects ? JSON.parse(existingProjects) : [];
-            projects.push(projectData);
-            
+            projects.unshift(projectData);
             await AsyncStorage.setItem('pumping_projects', JSON.stringify(projects));
-            await AsyncStorage.setItem('pumping_active_project_id', String(projectData.id));
+            await AsyncStorage.setItem('pumping_active_project_id', String(projectId));
             
-            targetProject = projectData;
+            Alert.alert(
+              'Успех', 
+              `Журнал "${projectData.name}" создан успешно!`,
+              [{ text: 'OK', onPress: () => navigation.goBack() }]
+            );
           }
-          
-          // Создаем журнал откачки
-          const journalData = {
-            id: Date.now().toString(),
-            name: wizardData.wellName,
-            testType: 'Откачка',
-            layerType: wizardData.layerType,
-            flowRate: wizardData.flowRate,
-            flowRateUnit: wizardData.flowRateUnit,
-            aquiferThickness: wizardData.aquiferThickness,
-            startDate: wizardData.startDate.toISOString(),
-            observationWells: wizardData.observationWells,
-            measurements: wizardData.measurements,
-            distances: wizardData.distances,
-            createdAt: new Date().toISOString(),
-            // Добавляем dataRows для совместимости с DataProcessing
-            dataRows: convertMeasurementsToDataRows(wizardData.measurements, wizardData.observationWells),
-            dataType: 's-t', // Тип данных для графика
-          };
-          
-          // Добавляем журнал в проект
-          const updatedProject = {
-            ...targetProject,
-            journals: [...(targetProject.journals || []), journalData],
-            lastAccessDate: new Date().toISOString()
-          };
-          
-          // Сохраняем обновленный проект
-          const existingProjects = await AsyncStorage.getItem('pumping_projects');
-          const projects = existingProjects ? JSON.parse(existingProjects) : [];
-          const projectIndex = projects.findIndex(p => String(p.id) === String(targetProject.id));
-          
-          if (projectIndex >= 0) {
-            projects[projectIndex] = updatedProject;
-          } else {
-            projects.push(updatedProject);
-          }
-          
-          await AsyncStorage.setItem('pumping_projects', JSON.stringify(projects));
           
           // Очистка временных данных
           await AsyncStorage.removeItem('wizard_temp_data');
-          
-          Alert.alert(
-            'Успех', 
-            `Журнал откачки "${journalData.name}" создан ${targetProject === activeProject ? '' : 'в новом проекте '}успешно!`,
-            [{ text: 'OK', onPress: () => navigation.goBack() }]
-          );
         } catch (error) {
           console.error('Error saving journal:', error);
           Alert.alert('Ошибка', 'Не удалось сохранить журнал');
@@ -850,8 +1260,9 @@ export default function NewWizard({ navigation }) {
   };
 
   const getNextButtonText = () => {
+    const isEditing = route?.params?.isEditing || false;
     if (currentStep === STEPS.DISTANCES) {
-      return 'Создать журнал';
+      return isEditing ? 'Сохранить изменения' : 'Создать журнал';
     }
     return 'Далее';
   };
@@ -861,7 +1272,10 @@ export default function NewWizard({ navigation }) {
   };
 
   const getCurrentSubtitle = () => {
-    if (activeProject) {
+    const isEditing = route?.params?.isEditing || false;
+    if (isEditing) {
+      return `Редактирование проекта: ${route?.params?.projectName || 'Неизвестный проект'}`;
+    } else if (activeProject) {
       return `${I18n.t('project')}: ${activeProject.name}`;
     } else {
       return I18n.t('newProject');
@@ -989,13 +1403,13 @@ export default function NewWizard({ navigation }) {
       {showDatePicker && (
         Platform.OS === 'android' ? (
           <DateTimePicker
-            value={datePickerType === 'start' ? wizardData.startDate : wizardData.recoveryDate}
+            value={datePickerType === 'pumping' ? wizardData.pumpingStartDate : wizardData.recoveryStartDate}
             mode="datetime"
             display="default"
             onChange={(event, selectedDate) => {
               setShowDatePicker(false);
               if (selectedDate) {
-                updateData(datePickerType === 'start' ? 'startDate' : 'recoveryDate', selectedDate);
+                updateData(datePickerType === 'pumping' ? 'pumpingStartDate' : 'recoveryStartDate', selectedDate);
               }
             }}
           />
@@ -1007,19 +1421,19 @@ export default function NewWizard({ navigation }) {
                   <MaterialIcons name="close" size={24} color={theme.colors.white} />
                 </TouchableOpacity>
                 <Text style={[styles.modalTitle, { color: theme.colors.white }]}>
-                  Выбор даты и времени
+                  {I18n.t("dateTimeSelection")}
                 </Text>
                 <View style={{ width: 24 }} />
               </View>
               
               <View style={styles.datePickerContainer}>
                 <DateTimePicker
-                  value={datePickerType === 'start' ? wizardData.startDate : wizardData.recoveryDate}
+                  value={datePickerType === 'pumping' ? wizardData.pumpingStartDate : wizardData.recoveryStartDate}
                   mode="datetime"
                   display="spinner"
                   onChange={(event, selectedDate) => {
                     if (selectedDate) {
-                      updateData(datePickerType === 'start' ? 'startDate' : 'recoveryDate', selectedDate);
+                      updateData(datePickerType === 'pumping' ? 'pumpingStartDate' : 'recoveryStartDate', selectedDate);
                     }
                   }}
                 />

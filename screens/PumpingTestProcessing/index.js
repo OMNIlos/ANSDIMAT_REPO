@@ -29,6 +29,8 @@ import {
   Alert,
   Platform,
   BackHandler,
+  Modal,
+  TextInput,
 } from 'react-native';
 import {
   useTheme,
@@ -38,6 +40,7 @@ import {
   IconButton,
   Divider,
   Chip,
+  Menu,
 } from 'react-native-paper';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -50,9 +53,10 @@ import * as Sharing from 'expo-sharing';
 
 // Импорт компонентов модуля
 import DataProcessing from './DataProcessing';
-import JournalManager from './JournalManager';
-import ProjectManager from './ProjectManager';
-import ExportManager from './ExportManager';
+// Удалены экраны старого менеджмента: все действия теперь на карточке
+// import JournalManager from './JournalManager';
+// import ProjectManager from './ProjectManager';
+// import ExportManager from './ExportManager';
 import NewWizard from './NewWizard';
 
 // Получаем ширину экрана для адаптивного дизайна
@@ -98,13 +102,13 @@ const truncateText = (text, maxLength = 20) => {
  */
 const getTestTypeIcon = (testType) => {
   switch (testType?.toLowerCase()) {
-    case 'откачка':
+    case 'откачка/восстановление':
       return 'water-pump';
     case 'люжон':
       return 'water-plus';
-    case 'экспресс':
+    case 'экспресс откачка':
       return 'timer-sand';
-    case 'наливка':
+    case 'пакерное испытание':
       return 'water-plus';
     default:
       return 'water-well';
@@ -122,13 +126,13 @@ const translateTestType = (testType) => {
   
   const testTypeLower = testType.toLowerCase();
   switch (testTypeLower) {
-    case 'откачка':
+    case 'откачка/восстановление':
       return 'pumping';
     case 'люжон':
       return 'lugeon';
-    case 'экспресс':
+    case 'экспресс откачка':
       return 'express';
-    case 'наливка':
+    case 'пакерное испытание':
       return 'injection';
     default:
       return testType; // Возвращаем как есть, если не знаем перевод
@@ -151,6 +155,11 @@ function MainScreen({ navigation }) {
   const theme = useTheme();
   // Состояние для хранения последних проектов
   const [recentProjects, setRecentProjects] = useState([]);
+  const [createName, setCreateName] = useState('');
+  const [createOfrType, setCreateOfrType] = useState('Откачка/Восстановление');
+  const [ofrMenuVisible, setOfrMenuVisible] = useState(false);
+  const [ofrMenuAnchor, setOfrMenuAnchor] = useState(null);
+  const [editProject, setEditProject] = useState(null);
 
   /**
    * Загружает последние проекты при монтировании компонента
@@ -192,16 +201,20 @@ function MainScreen({ navigation }) {
           return;
         }
         
-        // Сортируем по дате создания и берем первые 3
+        // Сортируем: избранные наверху, затем по дате создания (новые первые)
         const sortedProjects = allProjects
           .filter(project => project && project.id && project.name) // Фильтруем валидные проекты
-          .sort((a, b) => new Date(b.createdAt || b.date || 0) - new Date(a.createdAt || a.date || 0))
-          .slice(0, 3)
+          .sort((a, b) => {
+            if ((b.favorite ? 1 : 0) !== (a.favorite ? 1 : 0)) {
+              return (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0);
+            }
+            return new Date(b.createdAt || b.date || 0) - new Date(a.createdAt || a.date || 0);
+          })
           .map(project => ({
             id: project.id,
             name: project.name,
             date: project.createdAt || project.date || Date.now(),
-            testType: project.testType || 'Откачка',
+            testType: project.testType || 'Откачка/Восстановление',
             favorite: project.favorite || false,
             journals: project.journals || [],
           }));
@@ -344,6 +357,47 @@ function MainScreen({ navigation }) {
     }
   };
 
+  const handleDeleteProject = async (projectId) => {
+    Alert.alert(
+      I18n.t('delete'),
+      I18n.t('deleteJournalConfirm'),
+      [
+        { text: I18n.t('cancel'), style: 'cancel' },
+        {
+          text: I18n.t('delete'),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const projectsData = await AsyncStorage.getItem('pumping_projects');
+              if (!projectsData) return;
+              let projects = JSON.parse(projectsData);
+              projects = projects.filter(p => String(p.id) !== String(projectId));
+              await AsyncStorage.setItem('pumping_projects', JSON.stringify(projects));
+              const activeId = await AsyncStorage.getItem('pumping_active_project_id');
+              if (activeId && String(activeId) === String(projectId)) {
+                await AsyncStorage.removeItem('pumping_active_project_id');
+              }
+              loadRecentProjects();
+            } catch (e) {
+              Alert.alert('Ошибка', 'Не удалось удалить проект');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const openEditModal = (project) => {
+    setEditProject(project);
+    // Вместо простого модального окна, открываем полноценный редактор
+    navigation.navigate('Wizard', { 
+      projectId: project.id,
+      projectName: project.name,
+      ofrType: project.testType,
+      isEditing: true 
+    });
+  };
+
   const renderRecentProject = (project) => (
     <Card key={project.id} style={[styles.projectCard, { backgroundColor: theme.colors.surface }]}>
       <Card.Content>
@@ -364,90 +418,71 @@ function MainScreen({ navigation }) {
               </Text>
             </View>
           </View>
-          
-          <View style={styles.projectActions}>
+        </View>
+        <View style={[styles.projectActions, { 
+            backgroundColor: theme.colors.surfaceVariant,
+            borderColor: theme.colors.outline,
+            
+          }]}>
             <IconButton
               icon={project.favorite ? 'star' : 'star-outline'}
               iconColor={project.favorite ? '#FFD700' : theme.colors.outline}
               size={20}
               onPress={() => handleToggleFavorite(project.id)}
+              style={{ marginHorizontal: 2 }}
+            />
+            <IconButton
+              icon="pencil"
+              iconColor={theme.colors.primary}
+              size={20}
+              onPress={() => openEditModal(project)}
+              style={{ marginHorizontal: 2 }}
             />
             <IconButton
               icon="export"
               iconColor={theme.colors.primary}
               size={20}
               onPress={() => handleExportProject(project)}
+              style={{ marginHorizontal: 2 }}
+            />
+            <IconButton
+              icon="delete"
+              iconColor={theme.colors.error}
+              size={20}
+              onPress={() => handleDeleteProject(project.id)}
+              style={{ marginHorizontal: 2 }}
             />
           </View>
-        </View>
-
         <Divider style={{ marginVertical: 12 }} />
 
         {/* Кнопки действий */}
         <View style={styles.projectButtons}>
-                     <TouchableOpacity
-             style={[styles.actionButton, { backgroundColor: '#72002F' }]}
-             onPress={async () => {
-               try {
-                 // Проверяем, что проект существует
-                 if (!project || !project.id) {
-                   Alert.alert('Ошибка', 'Неверные данные проекта');
-                   return;
-                 }
-                 
-                 // Устанавливаем активный проект
-                 await AsyncStorage.setItem('pumping_active_project_id', String(project.id));
-                 
-                 // Переходим к журналу с параметрами
-                 navigation.navigate('JournalManager', { 
-                   projectId: project.id,
-                   projectName: project.name 
-                 });
-               } catch (error) {
-                 console.error('Navigation error:', error);
-                 Alert.alert('Ошибка', 'Не удалось открыть журнал. Попробуйте еще раз.');
-               }
-             }}
-             activeOpacity={0.7}
-           >
-             <MaterialIcons name="edit" size={20} color={'white'} />
-             <Text style={[styles.buttonText, { color: 'white' }]}>
-               {I18n.t("journal")}
-             </Text>
-             <MaterialIcons name="chevron-right" size={16} color={'white'} />
-           </TouchableOpacity>
-
-           <TouchableOpacity
-             style={[styles.actionButton, { backgroundColor: '#031888' }]}
-             onPress={async () => {
-               try {
-                 // Проверяем, что проект существует
-                 if (!project || !project.id) {
-                   Alert.alert('Ошибка', 'Неверные данные проекта');
-                   return;
-                 }
-                 
-                 // Устанавливаем активный проект
-                 await AsyncStorage.setItem('pumping_active_project_id', String(project.id));
-                 
-                 // Переходим к обработке с параметрами
-                 navigation.navigate('DataProcessing', { 
-                   projectId: project.id,
-                   projectName: project.name 
-                 });
-               } catch (error) {
-                 console.error('Navigation error:', error);
-                 Alert.alert('Ошибка', 'Не удалось открыть обработку. Попробуйте еще раз.');
-               }
-             }}
-             activeOpacity={0.7}
-           >
-             <MaterialIcons name="analytics" size={20} color={'white'} />
-             <Text style={[styles.buttonText, { color: 'white' }]}>
-               {I18n.t("dataProcessing")}
-             </Text>
-             <MaterialIcons name="chevron-right" size={16} color={'white'} />
-           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionButton, { backgroundColor: '#031888' }]}
+            onPress={async () => {
+              try {
+                if (!project || !project.id) {
+                  Alert.alert('Ошибка', 'Неверные данные проекта');
+                  return;
+                }
+                await AsyncStorage.setItem('pumping_active_project_id', String(project.id));
+                navigation.navigate('DataProcessing', { 
+                  projectId: project.id,
+                  projectName: project.name 
+                });
+              } catch (error) {
+                console.error('Navigation error:', error);
+                Alert.alert('Ошибка', 'Не удалось открыть обработку. Попробуйте еще раз.');
+              }
+            }}
+            activeOpacity={0.7}
+          >
+            <MaterialIcons name="analytics" size={20} color={'white'} />
+            <Text style={[styles.buttonText, { color: 'white' }]}>
+              {I18n.t("dataProcessing")}
+            </Text>
+            <MaterialIcons name="chevron-right" size={16} color={'white'} />
+          </TouchableOpacity>
         </View>
       </Card.Content>
     </Card>
@@ -464,9 +499,44 @@ function MainScreen({ navigation }) {
 
         {/* Главная кнопка создания */}
         <Surface style={[styles.createCard, { backgroundColor: theme.colors.primary }]}>
+          {/* Поля над кнопкой */}
+          <View style={{ marginBottom: 12 }}>
+            <Text style={{ color: 'white', marginBottom: 6, fontWeight: '600' }}>Название проекта/журнала</Text>
+            <TextInput
+              value={createName}
+              onChangeText={setCreateName}
+              placeholder={I18n.t('project')}
+              placeholderTextColor={'#EEE'}
+              style={{ backgroundColor: 'white', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, color: 'black' }}
+            />
+            <Text style={{ color: 'white', marginTop: 12, marginBottom: 6, fontWeight: '600' }}>Тип ОФР</Text>
+            <View style={{ alignSelf: 'flex-start' }}>
+              <Menu
+                visible={ofrMenuVisible}
+                onDismiss={() => setOfrMenuVisible(false)}
+                anchor={
+                  <TouchableOpacity
+                    onPress={() => setOfrMenuVisible(true)}
+                    style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8, backgroundColor: 'white' }}
+                  >
+                    <Text style={{ color: theme.colors.primary, fontWeight: '600', marginRight: 8 }}>{createOfrType}</Text>
+                    <MaterialIcons name="arrow-drop-down" size={22} color={theme.colors.primary} />
+                  </TouchableOpacity>
+                }
+              >
+                {['Откачка/Восстановление','Экспресс-откачка','Пакерные испытания'].map(option => (
+                  <Menu.Item
+                    key={option}
+                    onPress={() => { setCreateOfrType(option); setOfrMenuVisible(false); }}
+                    title={option}
+                  />
+                ))}
+              </Menu>
+            </View>
+          </View>
           <TouchableOpacity
             style={styles.createButton}
-            onPress={() => navigation.navigate('Wizard')}
+            onPress={() => navigation.navigate('Wizard', { projectName: createName, ofrType: createOfrType })}
             activeOpacity={0.8}
           >
             <View style={styles.createContent}>
@@ -486,25 +556,16 @@ function MainScreen({ navigation }) {
           </TouchableOpacity>
         </Surface>
 
-        {/* Последние проекты */}
+        {/* Проекты/Журналы */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}> 
               {I18n.t("recentProjects")}
             </Text>
             <TouchableOpacity onPress={handleImportProject} style={{alignSelf: 'flex-start'}}>
                 <Text style={{color: theme.colors.primary, fontSize: 16, fontWeight: 'bold'}}>
                   {I18n.t("importProject")}
                 </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={{alignSelf: 'flex-start'}}
-              onPress={() => navigation.navigate('ProjectManager')}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.viewAllText, { color: theme.colors.primary, fontWeight: 'bold' }]}>
-                {I18n.t("allProjects")}
-              </Text>
             </TouchableOpacity>
           </View>
           
@@ -549,8 +610,6 @@ function MainScreen({ navigation }) {
         {/* Нижний отступ */}
         <View style={{ height: 100 }} />
       </ScrollView>
-
-
     </View>
   );
 }
@@ -593,27 +652,6 @@ export default function PumpingTestProcessing() {
           title: I18n.t("dataProcessing"),
         }}
       />
-      <Stack.Screen
-        name="JournalManager"
-        component={JournalManager}
-        options={{
-          title: I18n.t("observationJournal"),
-        }}
-      />
-      <Stack.Screen
-        name="ProjectManager"
-        component={ProjectManager}
-        options={{
-          title: I18n.t("projectManagement"),
-        }}
-      />
-      <Stack.Screen
-        name="ExportManager"
-        component={ExportManager}
-        options={{
-          title: I18n.t("exportData"),
-        }}
-      />
     </Stack.Navigator>
   );
 }
@@ -626,7 +664,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContainer: {
-    padding: 20,
+    padding: 16,
     paddingBottom: 100, // Отступ для нижнего меню
   },
   header: {
@@ -713,14 +751,19 @@ const styles = StyleSheet.create({
   projectHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+    marginBottom: 12,
   },
   projectInfo: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
   },
   projectText: {
     marginLeft: 12,
+    flex: 1,
   },
   projectName: {
     fontSize: 16,
@@ -733,6 +776,10 @@ const styles = StyleSheet.create({
   projectActions: {
     flexDirection: 'row',
     alignItems: 'center',
+    padding: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexWrap: 'wrap',
   },
   projectButtons: {
     flexDirection: 'row',

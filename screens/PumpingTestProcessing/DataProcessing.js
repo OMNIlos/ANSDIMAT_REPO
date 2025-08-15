@@ -83,14 +83,12 @@ const FUNCTIONS = {
 
 // Состояние по умолчанию
 const initialState = {
-  selectedFunction: "s-t",
-  selectedPoints: [],
-  lineParams: { k: 0, b: 0 },
-  zoom: { x: 1, y: 1 },
-  pan: { x: 0, y: 0 },
-  isDraggingLine: false,
+  selectedFunction: "s-lg(t)",
+  selectedPoints: {}, // Changed to object: { wellId: [pointIndices] }
+  lineParams: {}, // Changed to object: { wellId: { k, b } }
   showControls: false,
   showExportModal: false,
+  zoomLevel: 1, // Добавляем уровень масштабирования
 };
 
 // Функция селектора журнала (мемоизированная)
@@ -98,7 +96,6 @@ const JournalSelector = React.memo(({
   journals, 
   selectedJournalIdx, 
   onSelectJournal, 
-  onDeleteJournal,
   theme 
 }) => {
   const renderJournal = useCallback(({ item, index }) => (
@@ -140,18 +137,10 @@ const JournalSelector = React.memo(({
       </View>
         </View>
         
-        <IconButton
-          icon="delete"
-          iconColor={index === selectedJournalIdx ? theme.colors.onPrimary : theme.colors.error}
-          size={18}
-          onPress={(e) => {
-            e.stopPropagation();
-            onDeleteJournal(index);
-          }}
-        />
+        {/* Удаление журналов теперь выполняется на главном экране */}
       </TouchableOpacity>
     </Surface>
-  ), [selectedJournalIdx, onSelectJournal, onDeleteJournal, theme]);
+  ), [selectedJournalIdx, onSelectJournal, theme]);
 
     return (
     <Card style={[styles.card, { backgroundColor: theme.colors.surface}]}>
@@ -228,7 +217,7 @@ const FunctionSelector = React.memo(({
 });
 
 // Компонент графика (мемоизированный)
-const Chart = React.memo(({
+const Chart = React.memo(({ 
   points,
   selectedPoints,
   onPointPress,
@@ -236,21 +225,29 @@ const Chart = React.memo(({
   chartBounds,
   selectedFunction,
   theme,
-  chartRef
+  chartRef,
+  colorForPoint,
+  seriesByWell,
+  colorByWellId
 }) => {
   // Используем только реальные данные
   const displayPoints = points;
 
   const func = FUNCTIONS[selectedFunction] || FUNCTIONS["s-t"];
   
-  // Функция для преобразования координат в пиксели (вынесена из SVG)
+  // Фиксированные размеры графика
+  const chartWidth = CHART_WIDTH;
+  const chartHeight = CHART_HEIGHT;
+  const chartPadding = CHART_PADDING;
+  
+  // Функция для преобразования координат в пиксели
   const getXY = useCallback((x, y, bounds) => {
     if (!bounds) return { x: 0, y: 0 };
     
-    const pixelX = ((x - bounds.minX) / (bounds.maxX - bounds.minX)) * (CHART_WIDTH - 2 * CHART_PADDING) + CHART_PADDING;
-    const pixelY = CHART_HEIGHT - CHART_PADDING - ((y - bounds.minY) / (bounds.maxY - bounds.minY)) * (CHART_HEIGHT - 2 * CHART_PADDING);
+    const pixelX = ((x - bounds.minX) / (bounds.maxX - bounds.minX)) * (chartWidth - 2 * chartPadding) + chartPadding;
+    const pixelY = chartHeight - chartPadding - ((y - bounds.minY) / (bounds.maxY - bounds.minY)) * (chartHeight - 2 * chartPadding);
     return { x: pixelX, y: pixelY };
-  }, []);
+  }, [chartWidth, chartHeight, chartPadding]);
 
   // Вычисляем границы данных
   const bounds = useMemo(() => {
@@ -284,30 +281,29 @@ const Chart = React.memo(({
     return null;
   }, [chartBounds, displayPoints]);
 
-    return (
+  return (
     <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}>
       <Card.Content>
         <View style={styles.cardHeader}>
           <MaterialIcons name="show-chart" size={24} color={theme.colors.primary} />
-                    <Text style={[styles.cardTitle, { color: theme.colors.primary }]}>
+          <Text style={[styles.cardTitle, { color: theme.colors.primary }]}>
             {I18n.t("chart")} {func?.name}
-        </Text>
-      </View>
+          </Text>
+        </View>
 
-                <View ref={chartRef} collapsable={false} style={styles.chartContainer}>
+        <View ref={chartRef} collapsable={false} style={styles.chartContainer}>
           <Svg
-            width={CHART_WIDTH}
-            height={CHART_HEIGHT}
+            width={chartWidth}
+            height={chartHeight}
             style={{ backgroundColor: theme.colors.surface, borderRadius: 12 }}
           >
             {(() => {
               if (!bounds) {
-                // Если нет данных, показываем пустой график
                 return (
                   <G>
                     <SvgText
-                      x={CHART_WIDTH / 2}
-                      y={CHART_HEIGHT / 2}
+                      x={chartWidth / 2}
+                      y={chartHeight / 2}
                       fontSize="16"
                       fill={theme.colors.onSurfaceVariant}
                       textAnchor="middle"
@@ -320,8 +316,8 @@ const Chart = React.memo(({
 
               // Функция для преобразования координат в пиксели (внутри SVG)
               function getXY(x, y) {
-                const pixelX = ((x - bounds.minX) / (bounds.maxX - bounds.minX)) * (CHART_WIDTH - 2 * CHART_PADDING) + CHART_PADDING;
-                const pixelY = CHART_HEIGHT - CHART_PADDING - ((y - bounds.minY) / (bounds.maxY - bounds.minY)) * (CHART_HEIGHT - 2 * CHART_PADDING);
+                const pixelX = ((x - bounds.minX) / (bounds.maxX - bounds.minX)) * (chartWidth - 2 * chartPadding) + chartPadding;
+                const pixelY = chartHeight - chartPadding - ((y - bounds.minY) / (bounds.maxY - bounds.minY)) * (chartHeight - 2 * chartPadding);
                 return { x: pixelX, y: pixelY };
               }
 
@@ -346,11 +342,12 @@ const Chart = React.memo(({
                       <Line
                         key={`x-grid-${i}`}
                         x1={pixelX}
-                        y1={CHART_PADDING}
+                        y1={chartPadding}
                         x2={pixelX}
-                        y2={CHART_HEIGHT - CHART_PADDING}
+                        y2={chartHeight - chartPadding}
                         stroke={theme.colors.outline}
                         strokeWidth={1}
+                        opacity={0.5}
                       />
                     );
                   })}
@@ -359,39 +356,40 @@ const Chart = React.memo(({
                     return (
                       <Line
                         key={`y-grid-${i}`}
-                        x1={CHART_PADDING}
+                        x1={chartPadding}
                         y1={pixelY}
-                        x2={CHART_WIDTH - CHART_PADDING}
+                        x2={chartWidth - chartPadding}
                         y2={pixelY}
                         stroke={theme.colors.outline}
                         strokeWidth={1}
+                        opacity={0.5}
                       />
                     );
                   })}
               
                   {/* Оси */}
                   <Line
-                    x1={CHART_PADDING}
-                    y1={CHART_HEIGHT - CHART_PADDING}
-                    x2={CHART_WIDTH - CHART_PADDING}
-                    y2={CHART_HEIGHT - CHART_PADDING}
+                    x1={chartPadding}
+                    y1={chartHeight - chartPadding}
+                    x2={chartWidth - chartPadding}
+                    y2={chartHeight - chartPadding}
                     stroke={theme.colors.onSurface}
                     strokeWidth={2}
                   />
                   <Line
-                    x1={CHART_PADDING}
-                    y1={CHART_HEIGHT - CHART_PADDING}
-                    x2={CHART_PADDING}
-                    y2={CHART_PADDING}
+                    x1={chartPadding}
+                    y1={chartHeight - chartPadding}
+                    x2={chartPadding}
+                    y2={chartPadding}
                     stroke={theme.colors.onSurface}
                     strokeWidth={2}
                   />
               
                   {/* Подписи осей */}
                   <SvgText
-                    x={CHART_WIDTH / 2}
-                    y={CHART_HEIGHT - CHART_PADDING + 36}
-                    fontSize="14"
+                    x={chartWidth / 2}
+                    y={chartHeight - chartPadding + 36}
+                    fontSize={14}
                     fill={theme.colors.onSurface}
                     textAnchor="middle"
                     fontWeight="bold"
@@ -399,13 +397,13 @@ const Chart = React.memo(({
                     {func?.xLabel} 
                   </SvgText>
                   <SvgText
-                    x={CHART_PADDING - 45}
-                    y={CHART_HEIGHT / 2}
-                    fontSize="14"
+                    x={chartPadding - 45}
+                    y={chartHeight / 2}
+                    fontSize={14}
                     fill={theme.colors.onSurface}
                     textAnchor="middle"
                     fontWeight="bold"
-                    transform={`rotate(-90, ${CHART_PADDING - 45}, ${CHART_HEIGHT / 2})`}
+                    transform={`rotate(-90, ${chartPadding - 45}, ${chartHeight / 2})`}
                   >
                     {func?.yLabel}
                   </SvgText>
@@ -417,20 +415,24 @@ const Chart = React.memo(({
                       <G key={`x-tick-${i}`}>
                         <Line
                           x1={pixelX}
-                          y1={CHART_HEIGHT - CHART_PADDING}
+                          y1={chartHeight - chartPadding}
                           x2={pixelX}
-                          y2={CHART_HEIGHT - CHART_PADDING + 5}
+                          y2={chartHeight - chartPadding + 5}
                           stroke={theme.colors.onSurface}
                           strokeWidth={1}
                         />
                         <SvgText
                           x={pixelX}
-                          y={CHART_HEIGHT - CHART_PADDING + 18}
-                          fontSize="11"
+                          y={chartHeight - chartPadding + 18}
+                          fontSize={11}
                           fill={theme.colors.onSurface}
                           textAnchor="middle"
                         >
-                          {x.toFixed(x < 1 ? 2 : x < 10 ? 1 : 0)}
+                          {selectedFunction === 's-lg(t)' || func?.xLabel === 'lg(t)' ? (() => {
+                            const val = Math.pow(10, x);
+                            if (val >= 1) return String(Math.round(val));
+                            return val.toExponential(0);
+                          })() : x.toFixed(x < 1 ? 2 : x < 10 ? 1 : 0)}
                         </SvgText>
                       </G>
                     );
@@ -440,17 +442,17 @@ const Chart = React.memo(({
                     return (
                       <G key={`y-tick-${i}`}>
                         <Line
-                          x1={CHART_PADDING}
+                          x1={chartPadding}
                           y1={pixelY}
-                          x2={CHART_PADDING - 5}
+                          x2={chartPadding - 5}
                           y2={pixelY}
                           stroke={theme.colors.onSurface}
                           strokeWidth={1}
                         />
                         <SvgText
-                          x={CHART_PADDING - 12}
+                          x={chartPadding - 12}
                           y={pixelY + 4}
-                          fontSize="11"
+                          fontSize={11}
                           fill={theme.colors.onSurface}
                           textAnchor="end"
                         >
@@ -465,27 +467,29 @@ const Chart = React.memo(({
                     const xValue = point.t || point.x;
                     const yValue = point.s || point.y;
                     const { x, y } = getXY(xValue, yValue);
-                    const isSelected = selectedPoints.includes(idx);
-                
+                    const wellId = point.wellId || 'main';
+                    const isSelected = selectedPoints[wellId]?.includes(idx);
+                    const pointColor = colorForPoint ? colorForPoint(point, idx) : (isSelected ? "#FF4444" : "#1976D2");
                     return (
                       <G key={idx}>
-                        {/* Видимая точка */}
                         <Circle
                           cx={x}
                           cy={y}
                           r={isSelected ? 7 : 5}
-                          fill={isSelected ? "#FF4444" : "#1976D2"}
-                          stroke={isSelected ? "#FF0000" : "#1565C0"}
+                          fill={pointColor}
+                          stroke={isSelected ? "#FF0000" : pointColor}
                           strokeWidth={isSelected ? 2 : 1}
                         />
                       </G>
                     );
                   })}
 
-                  {/* Линия тренда - проходит через весь график */}
-                  {selectedPoints.length === 2 && (() => {
-                    const point1 = displayPoints[selectedPoints[0]];
-                    const point2 = displayPoints[selectedPoints[1]];
+                  {/* Множественные линии тренда */}
+                  {Object.entries(selectedPoints).map(([wellId, pointIndices]) => {
+                    if (pointIndices.length !== 2) return null;
+                    
+                    const point1 = displayPoints[pointIndices[0]];
+                    const point2 = displayPoints[pointIndices[1]];
                     
                     if (!point1 || !point2) return null;
               
@@ -494,56 +498,44 @@ const Chart = React.memo(({
                     const x2Value = point2.t || point2.x;
                     const y2Value = point2.s || point2.y;
               
-                    // Проверяем, что точки разные
                     if (x1Value === x2Value && y1Value === y2Value) return null;
                     
-                    // Вычисляем параметры прямой y = kx + b
                     const k = (y2Value - y1Value) / (x2Value - x1Value);
                     const b = y1Value - k * x1Value;
                     
-                    // Находим точки пересечения с границами графика
                     const leftY = k * bounds.minX + b;
                     const rightY = k * bounds.maxX + b;
                     
-                    // Проверяем, пересекает ли линия график
                     const topX = (bounds.maxY - b) / k;
                     const bottomX = (bounds.minY - b) / k;
                     
                     let startX, startY, endX, endY;
                     
-                    // Определяем точки начала и конца линии
                     if (k === 0) {
-                      // Горизонтальная линия
                       startX = bounds.minX;
                       startY = y1Value;
                       endX = bounds.maxX;
                       endY = y1Value;
                     } else if (!isFinite(k)) {
-                      // Вертикальная линия
                       startX = x1Value;
                       startY = bounds.minY;
                       endX = x1Value;
                       endY = bounds.maxY;
                     } else {
-                      // Обычная линия - находим пересечения с границами
                       const intersections = [];
                       
-                      // Левая граница
                       if (leftY >= bounds.minY && leftY <= bounds.maxY) {
                         intersections.push({ x: bounds.minX, y: leftY });
                       }
                       
-                      // Правая граница
                       if (rightY >= bounds.minY && rightY <= bounds.maxY) {
                         intersections.push({ x: bounds.maxX, y: rightY });
                       }
                       
-                      // Верхняя граница
                       if (topX >= bounds.minX && topX <= bounds.maxX) {
                         intersections.push({ x: topX, y: bounds.maxY });
                       }
                       
-                      // Нижняя граница
                       if (bottomX >= bounds.minX && bottomX <= bounds.maxX) {
                         intersections.push({ x: bottomX, y: bounds.minY });
                       }
@@ -554,7 +546,6 @@ const Chart = React.memo(({
                         endX = intersections[1].x;
                         endY = intersections[1].y;
                       } else {
-                        // Если не нашли пересечений, используем исходные точки
                         startX = x1Value;
                         startY = y1Value;
                         endX = x2Value;
@@ -564,19 +555,21 @@ const Chart = React.memo(({
                     
                     const { x: x1, y: y1 } = getXY(startX, startY);
                     const { x: x2, y: y2 } = getXY(endX, endY);
+                    const lineColor = colorByWellId?.[wellId] || "#FF6B35";
               
                     return (
                       <Line
+                        key={`trend-${wellId}`}
                         x1={x1}
                         y1={y1}
                         x2={x2}
                         y2={y2}
-                        stroke="#FF6B35"
+                        stroke={lineColor}
                         strokeWidth={3}
                         opacity={0.9}
                       />
                     );
-                  })()}
+                  })}
                 </G>
               );
             })()}
@@ -625,9 +618,8 @@ export default function DataProcessing({ route }) {
   const [journals, setJournals] = useState([]);
   const [selectedJournalIdx, setSelectedJournalIdx] = useState(0);
   const [state, setState] = useState(initialState);
-  const [zoom, setZoom] = useState({ x: 1, y: 1 });
-  const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isLoading, setIsLoading] = useState(true);
+  const [visibleWells, setVisibleWells] = useState({});
 
   // Мемоизированные вычисления
   const journal = useMemo(
@@ -648,36 +640,55 @@ export default function DataProcessing({ route }) {
   );
 
   // Обработка точек данных (оптимизированная)
-  const points = useMemo(() => {
-    if (!journal?.dataRows || !currentFunction) return [];
-
-    const processedPoints = journal.dataRows
-      .filter(row => row.t && row.s && !isNaN(row.t) && !isNaN(row.s))
-      .map(row => {
-        const t = parseFloat(row.t);
-        const s = parseFloat(row.s);
-        
-        if (t <= 0 || s <= 0) return null;
-        
-        const x = currentFunction.xTransform(t);
-        const y = currentFunction.yTransform(s);
-        
-        if (!isFinite(x) || !isFinite(y) || x === null || y === null) return null;
-        
-        return { t, s, x, y };
-      })
-      .filter(Boolean);
-
-    // Ограничиваем количество точек для производительности
-    return processedPoints.slice(0, 500);
+  const pointsByWell = useMemo(() => {
+    if (!journal?.dataRows || !currentFunction) return {};
+    const grouped = {};
+    journal.dataRows.forEach(row => {
+      if (!row || row.t == null) return;
+      const t = parseFloat(row.t);
+      const s = parseFloat(row.s);
+      if (!isFinite(t) || t <= 0 || !isFinite(s) || s <= 0) return;
+      const x = currentFunction.xTransform(t);
+      const y = currentFunction.yTransform(s);
+      if (!isFinite(x) || !isFinite(y) || x == null || y == null) return;
+      const wellId = row.wellId || 'main';
+      if (!grouped[wellId]) grouped[wellId] = [];
+      grouped[wellId].push({ t, s, x, y, wellId, wellName: row.wellName || (wellId === 'main' ? 'Опытная' : String(wellId)) });
+    });
+    // Ограничим до 500 на скважину
+    Object.keys(grouped).forEach(k => { grouped[k] = grouped[k].slice(0, 500); });
+    return grouped;
   }, [journal?.dataRows, currentFunction]);
+
+  const allPoints = useMemo(() => {
+    const result = [];
+    Object.keys(pointsByWell).forEach((wellId) => {
+      if (visibleWells[wellId] === false) return;
+      result.push(...pointsByWell[wellId]);
+    });
+    return result;
+  }, [pointsByWell, visibleWells]);
+
+  // Цвета по скважинам
+  const palette = ["#1976D2", "#D32F2F", "#388E3C", "#F57C00", "#7B1FA2", "#0097A7", "#C2185B", "#5D4037"]; 
+  const wellIds = useMemo(() => Object.keys(pointsByWell), [pointsByWell]);
+  const colorByWellId = useMemo(() => {
+    const map = {};
+    wellIds.forEach((id, idx) => { map[id] = palette[idx % palette.length]; });
+    return map;
+  }, [wellIds]);
+  function getColorForIndex(idx) { return palette[idx % palette.length]; }
+  const colorForPoint = useCallback((p) => {
+    const id = p?.wellId || 'main';
+    return colorByWellId[id] || palette[0];
+  }, [colorByWellId]);
 
   // Границы графика (мемоизированные)
   const chartBounds = useMemo(() => {
-    if (points.length === 0) return null;
+    if (allPoints.length === 0) return null;
 
-    const xs = points.map(p => p.x);
-    const ys = points.map(p => p.y);
+    const xs = allPoints.map(p => p.x);
+    const ys = allPoints.map(p => p.y);
     
     const minX = Math.min(...xs);
     const maxX = Math.max(...xs);
@@ -689,31 +700,40 @@ export default function DataProcessing({ route }) {
 
     const padding = 0.1;
     
-    // Базовые границы с отступами
-    const baseMinX = minX - xRange * padding;
-    const baseMaxX = maxX + xRange * padding;
-    const baseMinY = minY - yRange * padding;
-    const baseMaxY = maxY + yRange * padding;
-    
-    // Применяем пан
-    const pannedMinX = baseMinX + pan.x;
-    const pannedMaxX = baseMaxX + pan.x;
-    const pannedMinY = baseMinY + pan.y;
-    const pannedMaxY = baseMaxY + pan.y;
-    
-    // Применяем зум
-    const xCenter = (pannedMinX + pannedMaxX) / 2;
-    const yCenter = (pannedMinY + pannedMaxY) / 2;
-    const xRangeZoomed = (pannedMaxX - pannedMinX) / zoom.x;
-    const yRangeZoomed = (pannedMaxY - pannedMinY) / zoom.y;
+    // Применяем масштабирование
+    const zoomFactor = 1 / state.zoomLevel;
+    const xPadding = xRange * padding * zoomFactor;
+    const yPadding = yRange * padding * zoomFactor;
     
     return {
-      zoomedMinX: xCenter - xRangeZoomed / 2,
-      zoomedMaxX: xCenter + xRangeZoomed / 2,
-      zoomedMinY: yCenter - yRangeZoomed / 2,
-      zoomedMaxY: yCenter + yRangeZoomed / 2,
+      zoomedMinX: minX - xPadding,
+      zoomedMaxX: maxX + xPadding,
+      zoomedMinY: minY - yPadding,
+      zoomedMaxY: maxY + yPadding,
     };
-  }, [points, pan, zoom]);
+  }, [allPoints, state.zoomLevel]);
+
+  // Функции управления масштабом
+  const handleZoomIn = useCallback(() => {
+    setState(prev => ({
+      ...prev,
+      zoomLevel: Math.min(prev.zoomLevel * 1.2, 5) // Максимум 5x
+    }));
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    setState(prev => ({
+      ...prev,
+      zoomLevel: Math.max(prev.zoomLevel / 1.2, 0.2) // Минимум 0.2x
+    }));
+  }, []);
+
+  const handleResetZoom = useCallback(() => {
+    setState(prev => ({
+      ...prev,
+      zoomLevel: 1
+    }));
+  }, []);
 
   // Загрузка активного проекта
   useEffect(() => {
@@ -753,9 +773,23 @@ export default function DataProcessing({ route }) {
       }
       
       setActiveProject(project);
-      setJournals(project.journals || []);
+      // Backward compatibility: если journals есть и не пуст, используем их; иначе формируем один журнал из полей проекта
+      const projectAsJournal = {
+        name: project.name,
+        testType: project.testType || 'Откачка/Восстановление',
+        layerType: project.layerType || 'напорный',
+        dataRows: project.dataRows || [],
+        dataType: project.dataType || 's-t',
+        observationWells: project.observationWells || [],
+      };
+      const js = (Array.isArray(project.journals) && project.journals.length > 0) ? project.journals : [projectAsJournal];
+      setJournals(js);
       setSelectedJournalIdx(0);
-      setState(prev => ({ ...prev, selectedPoints: [] }));
+      // Инициализируем видимость скважин: все видимы по умолчанию
+      const wells = {};
+      (project.dataRows || []).forEach(r => { wells[r.wellId || 'main'] = true; });
+      setVisibleWells(wells);
+      setState(prev => ({ ...prev, selectedPoints: {}, lineParams: {} }));
       setIsLoading(false);
     } catch (error) {
       console.error("Error loading active project:", error);
@@ -768,66 +802,32 @@ export default function DataProcessing({ route }) {
   // Обработчики событий
   const handleSelectJournal = useCallback((index) => {
     setSelectedJournalIdx(index);
-    setState(prev => ({ ...prev, selectedPoints: [], lineParams: { k: 0, b: 0 } }));
+    setState(prev => ({ ...prev, selectedPoints: {}, lineParams: {} }));
   }, []);
 
-  const handleDeleteJournal = useCallback((journalIndex) => {
-    Alert.alert(
-      I18n.t("deleteJournal"),
-      I18n.t("deleteJournalConfirm", { name: journals[journalIndex]?.name || I18n.t("journal") }),
-      [
-        { text: I18n.t("cancel"), style: "cancel" },
-        {
-          text: I18n.t("delete"),
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const updatedJournals = journals.filter((_, idx) => idx !== journalIndex);
-              const updatedProject = { ...activeProject, journals: updatedJournals };
-              
-              const projectsRaw = await AsyncStorage.getItem("pumping_projects");
-              const projects = JSON.parse(projectsRaw);
-              const projectIndex = projects.findIndex(p => String(p.id) === String(activeProject.id));
-              
-              projects[projectIndex] = updatedProject;
-              await AsyncStorage.setItem("pumping_projects", JSON.stringify(projects));
-              
-              setActiveProject(updatedProject);
-              setJournals(updatedJournals);
-              
-              if (selectedJournalIdx >= updatedJournals.length) {
-                setSelectedJournalIdx(Math.max(0, updatedJournals.length - 1));
-              }
-              
-              setState(prev => ({ ...prev, selectedPoints: [] }));
-              Alert.alert(I18n.t("success"), I18n.t("journalDeleted"));
-            } catch (error) {
-              Alert.alert(I18n.t("error"), I18n.t("exportError"));
-            }
-          },
-        },
-      ]
-    );
-  }, [journals, activeProject, selectedJournalIdx]);
+  // Удаление журналов перенесено на главный экран
 
   const handleSelectFunction = useCallback((func) => {
     setState(prev => ({ 
       ...prev, 
       selectedFunction: func, 
-      selectedPoints: [], 
-      lineParams: { k: 0, b: 0 } 
+      selectedPoints: {}, 
+      lineParams: {} 
     }));
   }, []);
 
   const handlePointPress = useCallback((idx) => {
     setState(prev => {
-      const isSelected = prev.selectedPoints.includes(idx);
+      const point = allPoints[idx];
+      const wellId = point?.wellId || 'main';
+      const wellSelectedPoints = prev.selectedPoints[wellId] || [];
+      const isSelected = wellSelectedPoints.includes(idx);
       let newSelectedPoints;
       
       if (isSelected) {
-        newSelectedPoints = prev.selectedPoints.filter(i => i !== idx);
-      } else if (prev.selectedPoints.length < 2) {
-        newSelectedPoints = [...prev.selectedPoints, idx];
+        newSelectedPoints = wellSelectedPoints.filter(i => i !== idx);
+      } else if (wellSelectedPoints.length < 2) {
+        newSelectedPoints = [...wellSelectedPoints, idx];
       } else {
         newSelectedPoints = [idx];
       }
@@ -835,8 +835,8 @@ export default function DataProcessing({ route }) {
       // Пересчитываем параметры линии для двух точек
       let newLineParams = { k: 0, b: 0 };
       if (newSelectedPoints.length === 2) {
-        const p1 = points[newSelectedPoints[0]];
-        const p2 = points[newSelectedPoints[1]];
+        const p1 = allPoints[newSelectedPoints[0]];
+        const p2 = allPoints[newSelectedPoints[1]];
         if (p1 && p2) {
           const dx = p2.x - p1.x;
           if (Math.abs(dx) > 1e-10) {
@@ -849,12 +849,12 @@ export default function DataProcessing({ route }) {
       
       return {
         ...prev,
-        selectedPoints: newSelectedPoints,
-        lineParams: newLineParams,
+        selectedPoints: { ...prev.selectedPoints, [wellId]: newSelectedPoints },
+        lineParams: { ...prev.lineParams, [wellId]: newLineParams },
         isDraggingLine: newSelectedPoints.length === 2
       };
     });
-  }, [points]);
+  }, [allPoints]);
 
   const handleSaveChart = useCallback(async () => {
     try {
@@ -874,22 +874,8 @@ export default function DataProcessing({ route }) {
     }
   }, []);
 
-  // Обработчики масштабирования
-  const handleZoomIn = useCallback(() => {
-    setZoom(prev => ({ x: prev.x * 1.2, y: prev.y * 1.2 }));
-  }, []);
-
-  const handleZoomOut = useCallback(() => {
-    setZoom(prev => ({ x: prev.x / 1.2, y: prev.y / 1.2 }));
-  }, []);
-
-  const handleResetZoom = useCallback(() => {
-    setZoom({ x: 1, y: 1 });
-    setPan({ x: 0, y: 0 });
-  }, []);
-
   // Проверяем наличие данных
-  const hasData = points.length > 0 && chartBounds;
+  const hasData = allPoints.length > 0 && chartBounds;
 
   // Проверка состояний
   if (isLoading) {
@@ -934,7 +920,7 @@ export default function DataProcessing({ route }) {
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {/* Заголовок проекта */}
-      <Surface style={[styles.headerCard, { backgroundColor: theme.colors.d4d4d4 }]}>
+      <Surface style={[styles.headerCard, { backgroundColor: theme.colors.surfaceVariant }]}>
         <View style={styles.headerContent}>
           <MaterialCommunityIcons name="chart-line" size={32} color={theme.colors.primary} />
           <View style={styles.headerText}>
@@ -948,14 +934,7 @@ export default function DataProcessing({ route }) {
         </View>
       </Surface>
 
-      {/* Селектор журналов */}
-      <JournalSelector
-        journals={journals}
-        selectedJournalIdx={selectedJournalIdx}
-        onSelectJournal={handleSelectJournal}
-        onDeleteJournal={handleDeleteJournal}
-        theme={theme}
-      />
+      {/* Селектор журналов убран: журнал = проект */}
 
       {/* Селектор функций */}
       <FunctionSelector
@@ -965,13 +944,39 @@ export default function DataProcessing({ route }) {
         theme={theme}
       />
 
+      {/* Легенда скважин */}
+      {Object.keys(pointsByWell).length > 0 && (
+      <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}> 
+          <Card.Content>
+            <View style={styles.cardHeader}>
+              <MaterialIcons name="legend-toggle" size={24} color={theme.colors.primary} />
+              <Text style={[styles.cardTitle, { color: theme.colors.primary }]}>Скважины</Text>
+            </View>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {Object.keys(pointsByWell).map((wellId, idx) => (
+                <Chip
+                  key={wellId}
+                  selected={visibleWells[wellId] !== false}
+                  onPress={() => setVisibleWells(prev => ({ ...prev, [wellId]: !(prev[wellId] !== false) }))}
+                  style={{ marginRight: 8, marginBottom: 8, backgroundColor: theme.colors.surface }}
+                  textStyle={{ color: theme.colors.onSurface }}
+                  icon={() => <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: getColorForIndex(idx) }} />}
+                >
+                  {pointsByWell[wellId]?.[0]?.wellName || String(wellId)}
+                </Chip>
+              ))}
+            </View>
+          </Card.Content>
+      </Card>
+      )}
+
       {/* Управление масштабом */}
       <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}>
         <Card.Content>
           <View style={styles.cardHeader}>
             <MaterialIcons name="zoom-in" size={24} color={theme.colors.primary} />
             <Text style={[styles.cardTitle, { color: theme.colors.primary }]}>
-              {I18n.t("scale")}
+              Масштаб графика
             </Text>
           </View>
           
@@ -981,32 +986,39 @@ export default function DataProcessing({ route }) {
               icon="magnify-plus"
               onPress={handleZoomIn}
               style={styles.zoomButton}
+              disabled={state.zoomLevel >= 5}
             >
-              {I18n.t("zoomIn")}
+              Увеличить
             </Button>
             <Button
               mode="outlined"
               icon="magnify-minus"
               onPress={handleZoomOut}
               style={styles.zoomButton}
+              disabled={state.zoomLevel <= 0.2}
             >
-              {I18n.t("zoomOut")}
+              Уменьшить
             </Button>
             <Button
               mode="outlined"
               icon="home"
               onPress={handleResetZoom}
               style={styles.zoomButton}
+              disabled={state.zoomLevel === 1}
             >
-              {I18n.t("reset")}
+              Сбросить
             </Button>
           </View>
+          
+          <Text style={[styles.zoomInfo, { color: theme.colors.onSurfaceVariant }]}>
+            Текущий масштаб: {state.zoomLevel.toFixed(1)}x
+          </Text>
         </Card.Content>
       </Card>
 
       {/* График */}
       <Chart
-        points={points}
+        points={allPoints}
         selectedPoints={state.selectedPoints}
         onPointPress={handlePointPress}
         lineParams={state.lineParams}
@@ -1014,44 +1026,48 @@ export default function DataProcessing({ route }) {
         selectedFunction={state.selectedFunction}
         theme={theme}
         chartRef={chartRef}
+        colorForPoint={colorForPoint}
+        seriesByWell={pointsByWell}
+        colorByWellId={colorByWellId}
       />
 
       {/* Результаты анализа */}
-      {state.selectedPoints.length === 2 && (
+      {Object.keys(state.lineParams).length > 0 && (
         <Card style={[styles.card, { backgroundColor: theme.colors.secondaryContainer }]}>
           <Card.Content>
             <View style={styles.cardHeader}>
               <MaterialIcons name="analytics" size={24} color={theme.colors.secondary} />
               <Text style={[styles.cardTitle, { color: theme.colors.secondary }]}>
                 {I18n.t("results")}
-      </Text>
+              </Text>
             </View>
             
             <View style={styles.resultGrid}>
-              <View style={styles.resultItem}>
-                <Text style={[styles.resultLabel, { color: theme.colors.onSecondaryContainer }]}>
-                  {I18n.t("slope")}
-                </Text>
-                <Text style={[styles.resultValue, { color: theme.colors.secondary }]}>
-                  {state.lineParams.k.toFixed(4)}
-                </Text>
-              </View>
-              
-              <View style={styles.resultItem}>
-                <Text style={[styles.resultLabel, { color: theme.colors.onSecondaryContainer }]}>
-                  {I18n.t("intercept")}
-                </Text>
-                <Text style={[styles.resultValue, { color: theme.colors.secondary }]}>
-                  {state.lineParams.b.toFixed(4)}
-                </Text>
-              </View>
+              {Object.entries(state.lineParams).map(([wellId, params]) => (
+                <View key={wellId} style={[styles.resultItem, { 
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.outline 
+                }]}>
+                  <Text style={[styles.resultLabel, { color: theme.colors.onSecondaryContainer }]}>
+                    {pointsByWell[wellId]?.[0]?.wellName || String(wellId)}
+                  </Text>
+                  <Text style={[styles.resultValue, { color: theme.colors.secondary }]}>
+                    k = {params.k.toFixed(4)}
+                  </Text>
+                  <Text style={[styles.resultValue, { color: theme.colors.secondary }]}>
+                    b = {params.b.toFixed(4)}
+                  </Text>
+                </View>
+              ))}
             </View>
             
             <Divider style={{ marginVertical: 12 }} />
             
-            <Text style={[styles.formula, { color: theme.colors.onSecondaryContainer }]}>
-              {currentFunction?.yLabel} = {state.lineParams.k.toFixed(4)} × {currentFunction?.xLabel} + {state.lineParams.b.toFixed(4)}
-            </Text>
+            {Object.entries(state.lineParams).map(([wellId, params]) => (
+              <Text key={wellId} style={[styles.formula, { color: theme.colors.onSecondaryContainer }]}>
+                {pointsByWell[wellId]?.[0]?.wellName || String(wellId)}: {currentFunction?.yLabel} = {params.k.toFixed(4)} × {currentFunction?.xLabel} + {params.b.toFixed(4)}
+              </Text>
+            ))}
           </Card.Content>
         </Card>
       )}
@@ -1212,12 +1228,16 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   resultGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+    flexDirection: 'column',
+    gap: 16,
     marginBottom: 12,
   },
   resultItem: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
   },
   resultLabel: {
     fontSize: 14,
@@ -1251,10 +1271,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     gap: 8,
+    marginTop: 16,
+    marginBottom: 12,
   },
   zoomButton: {
     flex: 1,
     borderRadius: 8,
   },
-
+  zoomInfo: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 8,
+  },
 });
