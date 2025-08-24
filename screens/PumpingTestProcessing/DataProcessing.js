@@ -8,15 +8,13 @@ import {
   Alert,
   Dimensions,
   ScrollView,
-  Pressable,
+  ActivityIndicator,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import Svg, { Line, Circle, G, Text as SvgText, Rect } from "react-native-svg";
 import { useFocusEffect } from "@react-navigation/native";
 import I18n from "../../Localization";
 import { LanguageContext } from "../../LanguageContext";
 import { 
-  TextInput, 
   useTheme, 
   Card, 
   Surface, 
@@ -24,71 +22,28 @@ import {
   Chip,
   IconButton,
   Divider,
-  Modal,
-  Portal
 } from "react-native-paper";
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
-import Slider from "@react-native-community/slider";
 import * as MediaLibrary from "expo-media-library";
 import { captureRef } from "react-native-view-shot";
 
-const { width } = Dimensions.get("window");
-const CHART_WIDTH = width - 32;
-const CHART_HEIGHT = 280;
-const CHART_PADDING = 60;
+// Import components and utils
 
-// Функции преобразования координат (оптимизированные)
-const FUNCTIONS = {
-  "s-t": {
-    name: "s-t",
-    xTransform: (t) => t,
-    yTransform: (s) => s,
-    xLabel: "t",
-    yLabel: "s",
-    xUnit: "мин",
-    yUnit: "м",
-    type: "s-t",
-  },
-  "s-√t": {
-    name: "s-√t",
-    xTransform: (t) => Math.sqrt(Math.max(0, t)),
-    yTransform: (s) => s,
-    xLabel: "√t",
-    yLabel: "s",
-    xUnit: "мин¹/²",
-    yUnit: "м",
-    type: "s-t",
-  },
-  "lg(s)-lg(t)": {
-    name: "lg(s)-lg(t)",
-    xTransform: (t) => t > 0 ? Math.log10(t) : null,
-    yTransform: (s) => s > 0 ? Math.log10(s) : null,
-    xLabel: "lg(t)",
-    yLabel: "lg(s)",
-    xUnit: "",
-    yUnit: "",
-    type: "s-t",
-  },
-  "s-lg(t)": {
-    name: "s-log(t)",
-    xTransform: (t) => t > 0 ? Math.log10(t) : null,
-    yTransform: (s) => s,
-    xLabel: "lg(t)",
-    yLabel: "s",
-    xUnit: "lg(мин)",
-    yUnit: "м",
-    type: "s-t",
-  },
-};
+import ChartModal from './components/ChartModal';
+import { CHART_FUNCTIONS, WELL_COLORS, CHART_CONFIG } from './utils/constants';
+import { debounce } from './utils/helpers';
+
+const { width } = Dimensions.get("window");
+// Update chart config dynamically
+CHART_CONFIG.WIDTH = width - 32;
 
 // Состояние по умолчанию
 const initialState = {
-  selectedFunction: "s-lg(t)",
-  selectedPoints: {}, // Changed to object: { wellId: [pointIndices] }
-  lineParams: {}, // Changed to object: { wellId: { k, b } }
+  selectedFunction: "", // Будет установлено после загрузки данных
+  selectedPoints: {}, // Object: { wellId: [pointIndices] }
+  lineParams: {}, // Object: { wellId: { k, b } }
   showControls: false,
   showExportModal: false,
-  zoomLevel: 1, // Добавляем уровень масштабирования
 };
 
 // Функция селектора журнала (мемоизированная)
@@ -119,7 +74,7 @@ const JournalSelector = React.memo(({
           <MaterialCommunityIcons 
             name="water-well" 
             size={20} 
-            color={index === selectedJournalIdx ? theme.colors.text : theme.colors.primary} 
+            color={index === selectedJournalIdx ? theme.colors.onPrimary : theme.colors.primary} 
           />
           <View style={styles.journalText}>
             <Text style={[
@@ -189,7 +144,7 @@ const FunctionSelector = React.memo(({
         color: selectedFunction === item ? theme.colors.onPrimary : theme.colors.onSurface
       }}
     >
-      {FUNCTIONS[item]?.name || item}
+      {CHART_FUNCTIONS[item]?.name || item}
     </Chip>
   ), [selectedFunction, onSelectFunction, theme]);
 
@@ -216,393 +171,6 @@ const FunctionSelector = React.memo(({
   );
 });
 
-// Компонент графика (мемоизированный)
-const Chart = React.memo(({ 
-  points,
-  selectedPoints,
-  onPointPress,
-  lineParams,
-  chartBounds,
-  selectedFunction,
-  theme,
-  chartRef,
-  colorForPoint,
-  seriesByWell,
-  colorByWellId
-}) => {
-  // Используем только реальные данные
-  const displayPoints = points;
-
-  const func = FUNCTIONS[selectedFunction] || FUNCTIONS["s-t"];
-  
-  // Фиксированные размеры графика
-  const chartWidth = CHART_WIDTH;
-  const chartHeight = CHART_HEIGHT;
-  const chartPadding = CHART_PADDING;
-  
-  // Функция для преобразования координат в пиксели
-  const getXY = useCallback((x, y, bounds) => {
-    if (!bounds) return { x: 0, y: 0 };
-    
-    const pixelX = ((x - bounds.minX) / (bounds.maxX - bounds.minX)) * (chartWidth - 2 * chartPadding) + chartPadding;
-    const pixelY = chartHeight - chartPadding - ((y - bounds.minY) / (bounds.maxY - bounds.minY)) * (chartHeight - 2 * chartPadding);
-    return { x: pixelX, y: pixelY };
-  }, [chartWidth, chartHeight, chartPadding]);
-
-  // Вычисляем границы данных
-  const bounds = useMemo(() => {
-    if (chartBounds) {
-      return {
-        minX: chartBounds.zoomedMinX,
-        maxX: chartBounds.zoomedMaxX,
-        minY: chartBounds.zoomedMinY,
-        maxY: chartBounds.zoomedMaxY,
-      };
-    } else if (displayPoints.length > 0) {
-      const xValues = displayPoints.map(p => p.t || p.x);
-      const yValues = displayPoints.map(p => p.s || p.y);
-      
-      const rawMinX = Math.min(...xValues);
-      const rawMaxX = Math.max(...xValues);
-      const rawMinY = Math.min(...yValues);
-      const rawMaxY = Math.max(...yValues);
-      
-      const xRange = rawMaxX - rawMinX || 1;
-      const yRange = rawMaxY - rawMinY || 1;
-      const padding = 0.1;
-      
-      return {
-        minX: rawMinX - xRange * padding,
-        maxX: rawMaxX + xRange * padding,
-        minY: rawMinY - yRange * padding,
-        maxY: rawMaxY + yRange * padding,
-      };
-    }
-    return null;
-  }, [chartBounds, displayPoints]);
-
-  return (
-    <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}>
-      <Card.Content>
-        <View style={styles.cardHeader}>
-          <MaterialIcons name="show-chart" size={24} color={theme.colors.primary} />
-          <Text style={[styles.cardTitle, { color: theme.colors.primary }]}>
-            {I18n.t("chart")} {func?.name}
-          </Text>
-        </View>
-
-        <View ref={chartRef} collapsable={false} style={styles.chartContainer}>
-          <Svg
-            width={chartWidth}
-            height={chartHeight}
-            style={{ backgroundColor: theme.colors.surface, borderRadius: 12 }}
-          >
-            {(() => {
-              if (!bounds) {
-                return (
-                  <G>
-                    <SvgText
-                      x={chartWidth / 2}
-                      y={chartHeight / 2}
-                      fontSize="16"
-                      fill={theme.colors.onSurfaceVariant}
-                      textAnchor="middle"
-                    >
-                      {I18n.t("noData")}
-                    </SvgText>
-                  </G>
-                );
-              }
-
-              // Функция для преобразования координат в пиксели (внутри SVG)
-              function getXY(x, y) {
-                const pixelX = ((x - bounds.minX) / (bounds.maxX - bounds.minX)) * (chartWidth - 2 * chartPadding) + chartPadding;
-                const pixelY = chartHeight - chartPadding - ((y - bounds.minY) / (bounds.maxY - bounds.minY)) * (chartHeight - 2 * chartPadding);
-                return { x: pixelX, y: pixelY };
-              }
-
-              // Генерация делений осей
-              const tickCount = 5;
-              const xTicks = [];
-              const yTicks = [];
-
-              for (let i = 0; i <= tickCount; i++) {
-                const x = bounds.minX + (bounds.maxX - bounds.minX) * (i / tickCount);
-                const y = bounds.minY + (bounds.maxY - bounds.minY) * (i / tickCount);
-                xTicks.push(x);
-                yTicks.push(y);
-              }
-
-              return (
-                <G>
-                  {/* Сетка */}
-                  {xTicks.map((x, i) => {
-                    const pixelX = getXY(x, bounds.minY).x;
-                    return (
-                      <Line
-                        key={`x-grid-${i}`}
-                        x1={pixelX}
-                        y1={chartPadding}
-                        x2={pixelX}
-                        y2={chartHeight - chartPadding}
-                        stroke={theme.colors.outline}
-                        strokeWidth={1}
-                        opacity={0.5}
-                      />
-                    );
-                  })}
-                  {yTicks.map((y, i) => {
-                    const pixelY = getXY(bounds.minX, y).y;
-                    return (
-                      <Line
-                        key={`y-grid-${i}`}
-                        x1={chartPadding}
-                        y1={pixelY}
-                        x2={chartWidth - chartPadding}
-                        y2={pixelY}
-                        stroke={theme.colors.outline}
-                        strokeWidth={1}
-                        opacity={0.5}
-                      />
-                    );
-                  })}
-              
-                  {/* Оси */}
-                  <Line
-                    x1={chartPadding}
-                    y1={chartHeight - chartPadding}
-                    x2={chartWidth - chartPadding}
-                    y2={chartHeight - chartPadding}
-                    stroke={theme.colors.onSurface}
-                    strokeWidth={2}
-                  />
-                  <Line
-                    x1={chartPadding}
-                    y1={chartHeight - chartPadding}
-                    x2={chartPadding}
-                    y2={chartPadding}
-                    stroke={theme.colors.onSurface}
-                    strokeWidth={2}
-                  />
-              
-                  {/* Подписи осей */}
-                  <SvgText
-                    x={chartWidth / 2}
-                    y={chartHeight - chartPadding + 36}
-                    fontSize={14}
-                    fill={theme.colors.onSurface}
-                    textAnchor="middle"
-                    fontWeight="bold"
-                  >
-                    {func?.xLabel} 
-                  </SvgText>
-                  <SvgText
-                    x={chartPadding - 45}
-                    y={chartHeight / 2}
-                    fontSize={14}
-                    fill={theme.colors.onSurface}
-                    textAnchor="middle"
-                    fontWeight="bold"
-                    transform={`rotate(-90, ${chartPadding - 45}, ${chartHeight / 2})`}
-                  >
-                    {func?.yLabel}
-                  </SvgText>
-
-                  {/* Деления осей */}
-                  {xTicks.map((x, i) => {
-                    const pixelX = getXY(x, bounds.minY).x;
-                    return (
-                      <G key={`x-tick-${i}`}>
-                        <Line
-                          x1={pixelX}
-                          y1={chartHeight - chartPadding}
-                          x2={pixelX}
-                          y2={chartHeight - chartPadding + 5}
-                          stroke={theme.colors.onSurface}
-                          strokeWidth={1}
-                        />
-                        <SvgText
-                          x={pixelX}
-                          y={chartHeight - chartPadding + 18}
-                          fontSize={11}
-                          fill={theme.colors.onSurface}
-                          textAnchor="middle"
-                        >
-                          {selectedFunction === 's-lg(t)' || func?.xLabel === 'lg(t)' ? (() => {
-                            const val = Math.pow(10, x);
-                            if (val >= 1) return String(Math.round(val));
-                            return val.toExponential(0);
-                          })() : x.toFixed(x < 1 ? 2 : x < 10 ? 1 : 0)}
-                        </SvgText>
-                      </G>
-                    );
-                  })}
-                  {yTicks.map((y, i) => {
-                    const pixelY = getXY(bounds.minX, y).y;
-                    return (
-                      <G key={`y-tick-${i}`}>
-                        <Line
-                          x1={chartPadding}
-                          y1={pixelY}
-                          x2={chartPadding - 5}
-                          y2={pixelY}
-                          stroke={theme.colors.onSurface}
-                          strokeWidth={1}
-                        />
-                        <SvgText
-                          x={chartPadding - 12}
-                          y={pixelY + 4}
-                          fontSize={11}
-                          fill={theme.colors.onSurface}
-                          textAnchor="end"
-                        >
-                          {y.toFixed(y < 1 ? 2 : y < 10 ? 1 : 0)}
-                        </SvgText>
-                      </G>
-                    );
-                  })}
-              
-                  {/* Точки */}
-                  {displayPoints.map((point, idx) => {
-                    const xValue = point.t || point.x;
-                    const yValue = point.s || point.y;
-                    const { x, y } = getXY(xValue, yValue);
-                    const wellId = point.wellId || 'main';
-                    const isSelected = selectedPoints[wellId]?.includes(idx);
-                    const pointColor = colorForPoint ? colorForPoint(point, idx) : (isSelected ? "#FF4444" : "#1976D2");
-                    return (
-                      <G key={idx}>
-                        <Circle
-                          cx={x}
-                          cy={y}
-                          r={isSelected ? 7 : 5}
-                          fill={pointColor}
-                          stroke={isSelected ? "#FF0000" : pointColor}
-                          strokeWidth={isSelected ? 2 : 1}
-                        />
-                      </G>
-                    );
-                  })}
-
-                  {/* Множественные линии тренда */}
-                  {Object.entries(selectedPoints).map(([wellId, pointIndices]) => {
-                    if (pointIndices.length !== 2) return null;
-                    
-                    const point1 = displayPoints[pointIndices[0]];
-                    const point2 = displayPoints[pointIndices[1]];
-                    
-                    if (!point1 || !point2) return null;
-              
-                    const x1Value = point1.t || point1.x;
-                    const y1Value = point1.s || point1.y;
-                    const x2Value = point2.t || point2.x;
-                    const y2Value = point2.s || point2.y;
-              
-                    if (x1Value === x2Value && y1Value === y2Value) return null;
-                    
-                    const k = (y2Value - y1Value) / (x2Value - x1Value);
-                    const b = y1Value - k * x1Value;
-                    
-                    const leftY = k * bounds.minX + b;
-                    const rightY = k * bounds.maxX + b;
-                    
-                    const topX = (bounds.maxY - b) / k;
-                    const bottomX = (bounds.minY - b) / k;
-                    
-                    let startX, startY, endX, endY;
-                    
-                    if (k === 0) {
-                      startX = bounds.minX;
-                      startY = y1Value;
-                      endX = bounds.maxX;
-                      endY = y1Value;
-                    } else if (!isFinite(k)) {
-                      startX = x1Value;
-                      startY = bounds.minY;
-                      endX = x1Value;
-                      endY = bounds.maxY;
-                    } else {
-                      const intersections = [];
-                      
-                      if (leftY >= bounds.minY && leftY <= bounds.maxY) {
-                        intersections.push({ x: bounds.minX, y: leftY });
-                      }
-                      
-                      if (rightY >= bounds.minY && rightY <= bounds.maxY) {
-                        intersections.push({ x: bounds.maxX, y: rightY });
-                      }
-                      
-                      if (topX >= bounds.minX && topX <= bounds.maxX) {
-                        intersections.push({ x: topX, y: bounds.maxY });
-                      }
-                      
-                      if (bottomX >= bounds.minX && bottomX <= bounds.maxX) {
-                        intersections.push({ x: bottomX, y: bounds.minY });
-                      }
-                      
-                      if (intersections.length >= 2) {
-                        startX = intersections[0].x;
-                        startY = intersections[0].y;
-                        endX = intersections[1].x;
-                        endY = intersections[1].y;
-                      } else {
-                        startX = x1Value;
-                        startY = y1Value;
-                        endX = x2Value;
-                        endY = y2Value;
-                      }
-                    }
-                    
-                    const { x: x1, y: y1 } = getXY(startX, startY);
-                    const { x: x2, y: y2 } = getXY(endX, endY);
-                    const lineColor = colorByWellId?.[wellId] || "#FF6B35";
-              
-                    return (
-                      <Line
-                        key={`trend-${wellId}`}
-                        x1={x1}
-                        y1={y1}
-                        x2={x2}
-                        y2={y2}
-                        stroke={lineColor}
-                        strokeWidth={3}
-                        opacity={0.9}
-                      />
-                    );
-                  })}
-                </G>
-              );
-            })()}
-          </Svg>
-          
-          {/* TouchableOpacity элементы поверх SVG для нажатий */}
-          {bounds && displayPoints.map((point, idx) => {
-            const xValue = point.t || point.x;
-            const yValue = point.s || point.y;
-            const { x, y } = getXY(xValue, yValue, bounds);
-            
-            return (
-              <TouchableOpacity
-                key={`touchable-${idx}`}
-                style={{
-                  position: 'absolute',
-                  left: x - 15,
-                  top: y - 15,
-                  width: 30,
-                  height: 30,
-                  backgroundColor: 'transparent',
-                }}
-                onPress={() => onPointPress && onPointPress(idx)}
-                activeOpacity={0.7}
-              />
-            );
-          })}
-        </View>
-      </Card.Content>
-    </Card>
-  );
-});
-
 // Основной компонент
 export default function DataProcessing({ route }) {
   const theme = useTheme();
@@ -620,6 +188,7 @@ export default function DataProcessing({ route }) {
   const [state, setState] = useState(initialState);
   const [isLoading, setIsLoading] = useState(true);
   const [visibleWells, setVisibleWells] = useState({});
+  const [showChartModal, setShowChartModal] = useState(false);
 
   // Мемоизированные вычисления
   const journal = useMemo(
@@ -630,12 +199,22 @@ export default function DataProcessing({ route }) {
   const dataType = useMemo(() => journal?.dataType || "s-t", [journal]);
   
   const availableFunctions = useMemo(
-    () => Object.keys(FUNCTIONS).filter(key => FUNCTIONS[key].type === dataType),
+    () => Object.keys(CHART_FUNCTIONS).filter(key => CHART_FUNCTIONS[key].type === dataType),
     [dataType]
   );
 
   const currentFunction = useMemo(
-    () => FUNCTIONS[state.selectedFunction] || FUNCTIONS[availableFunctions[0]],
+    () => {
+      // Проверяем, что выбранная функция доступна для текущего типа данных
+      if (availableFunctions.length === 0) return null;
+      
+      // Если выбранная функция не подходит для текущего типа данных, берем первую доступную
+      if (availableFunctions.includes(state.selectedFunction)) {
+        return CHART_FUNCTIONS[state.selectedFunction];
+      }
+      
+      return CHART_FUNCTIONS[availableFunctions[0]];
+    },
     [state.selectedFunction, availableFunctions]
   );
 
@@ -670,76 +249,14 @@ export default function DataProcessing({ route }) {
   }, [pointsByWell, visibleWells]);
 
   // Цвета по скважинам
-  const palette = ["#1976D2", "#D32F2F", "#388E3C", "#F57C00", "#7B1FA2", "#0097A7", "#C2185B", "#5D4037"]; 
   const wellIds = useMemo(() => Object.keys(pointsByWell), [pointsByWell]);
   const colorByWellId = useMemo(() => {
     const map = {};
-    wellIds.forEach((id, idx) => { map[id] = palette[idx % palette.length]; });
+    wellIds.forEach((id, idx) => { map[id] = WELL_COLORS[idx % WELL_COLORS.length]; });
     return map;
   }, [wellIds]);
-  function getColorForIndex(idx) { return palette[idx % palette.length]; }
-  const colorForPoint = useCallback((p) => {
-    const id = p?.wellId || 'main';
-    return colorByWellId[id] || palette[0];
-  }, [colorByWellId]);
-
-  // Границы графика (мемоизированные)
-  const chartBounds = useMemo(() => {
-    if (allPoints.length === 0) return null;
-
-    const xs = allPoints.map(p => p.x);
-    const ys = allPoints.map(p => p.y);
-    
-    const minX = Math.min(...xs);
-    const maxX = Math.max(...xs);
-    const minY = Math.min(...ys);
-    const maxY = Math.max(...ys);
-
-    const xRange = maxX - minX || 1;
-    const yRange = maxY - minY || 1;
-
-    const padding = 0.1;
-    
-    // Применяем масштабирование
-    const zoomFactor = 1 / state.zoomLevel;
-    const xPadding = xRange * padding * zoomFactor;
-    const yPadding = yRange * padding * zoomFactor;
-    
-    return {
-      zoomedMinX: minX - xPadding,
-      zoomedMaxX: maxX + xPadding,
-      zoomedMinY: minY - yPadding,
-      zoomedMaxY: maxY + yPadding,
-    };
-  }, [allPoints, state.zoomLevel]);
-
-  // Функции управления масштабом
-  const handleZoomIn = useCallback(() => {
-    setState(prev => ({
-      ...prev,
-      zoomLevel: Math.min(prev.zoomLevel * 1.2, 5) // Максимум 5x
-    }));
-  }, []);
-
-  const handleZoomOut = useCallback(() => {
-    setState(prev => ({
-      ...prev,
-      zoomLevel: Math.max(prev.zoomLevel / 1.2, 0.2) // Минимум 0.2x
-    }));
-  }, []);
-
-  const handleResetZoom = useCallback(() => {
-    setState(prev => ({
-      ...prev,
-      zoomLevel: 1
-    }));
-  }, []);
 
   // Загрузка активного проекта
-  useEffect(() => {
-    loadActiveProject();
-  }, [loadActiveProject]);
-
   const loadActiveProject = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -799,13 +316,27 @@ export default function DataProcessing({ route }) {
     }
   }, [projectId]);
 
+  useEffect(() => {
+    loadActiveProject();
+  }, [loadActiveProject]);
+
+  // Обновляем выбранную функцию когда становятся доступны функции
+  useEffect(() => {
+    if (availableFunctions.length > 0 && !state.selectedFunction) {
+      // Устанавливаем s-lg(t) как тип графика по умолчанию
+      const defaultFunction = availableFunctions.find(f => f === 's-lg(t)') || availableFunctions[0];
+      setState(prev => ({
+        ...prev,
+        selectedFunction: defaultFunction
+      }));
+    }
+  }, [availableFunctions, state.selectedFunction]);
+
   // Обработчики событий
   const handleSelectJournal = useCallback((index) => {
     setSelectedJournalIdx(index);
     setState(prev => ({ ...prev, selectedPoints: {}, lineParams: {} }));
   }, []);
-
-  // Удаление журналов перенесено на главный экран
 
   const handleSelectFunction = useCallback((func) => {
     setState(prev => ({ 
@@ -819,46 +350,80 @@ export default function DataProcessing({ route }) {
   const handlePointPress = useCallback((idx) => {
     setState(prev => {
       const point = allPoints[idx];
+      if (!point) return prev; // Защита от undefined
+      
       const wellId = point?.wellId || 'main';
-      const wellSelectedPoints = prev.selectedPoints[wellId] || [];
-      const isSelected = wellSelectedPoints.includes(idx);
+      
+      // Создаем структуру для выбранных точек по скважинам, если её еще нет
+      const selectedPointsByWell = { ...prev.selectedPoints };
+      if (!selectedPointsByWell[wellId]) {
+        selectedPointsByWell[wellId] = [];
+      }
+      
+      // Получаем текущие выбранные точки для этой скважины
+      const currentSelectedPoints = [...(selectedPointsByWell[wellId] || [])];
+      
+      // Проверяем, выбрана ли уже эта точка
+      const isSelected = currentSelectedPoints.includes(idx);
+      
       let newSelectedPoints;
       
       if (isSelected) {
-        newSelectedPoints = wellSelectedPoints.filter(i => i !== idx);
-      } else if (wellSelectedPoints.length < 2) {
-        newSelectedPoints = [...wellSelectedPoints, idx];
+        // Убираем точку из выбранных
+        newSelectedPoints = currentSelectedPoints.filter(i => i !== idx);
+      } else if (currentSelectedPoints.length < 2) {
+        // Добавляем точку (не более 2-х точек на скважину)
+        newSelectedPoints = [...currentSelectedPoints, idx];
       } else {
-        newSelectedPoints = [idx];
+        // Заменяем первую точку на новую
+        newSelectedPoints = [currentSelectedPoints[1], idx];
       }
       
-      // Пересчитываем параметры линии для двух точек
-      let newLineParams = { k: 0, b: 0 };
+      // Обновляем выбранные точки для этой скважины
+      selectedPointsByWell[wellId] = newSelectedPoints;
+      
+      // Пересчитываем параметры линии для двух точек этой скважины
+      const lineParamsByWell = { ...prev.lineParams };
+      
       if (newSelectedPoints.length === 2) {
         const p1 = allPoints[newSelectedPoints[0]];
         const p2 = allPoints[newSelectedPoints[1]];
+        
         if (p1 && p2) {
           const dx = p2.x - p1.x;
           if (Math.abs(dx) > 1e-10) {
             const k = (p2.y - p1.y) / dx;
             const b = p1.y - k * p1.x;
-            newLineParams = { k, b };
+            
+            // Используем цвет скважины для линии
+            const color = colorByWellId[wellId] || WELL_COLORS[0];
+            
+            lineParamsByWell[wellId] = { k, b, color };
+            
+
           }
         }
+      } else {
+        // Если выбрано меньше двух точек, удаляем параметры линии
+        delete lineParamsByWell[wellId];
       }
       
       return {
         ...prev,
-        selectedPoints: { ...prev.selectedPoints, [wellId]: newSelectedPoints },
-        lineParams: { ...prev.lineParams, [wellId]: newLineParams },
-        isDraggingLine: newSelectedPoints.length === 2
+        selectedPoints: selectedPointsByWell,
+        lineParams: lineParamsByWell
       };
     });
-  }, [allPoints]);
+  }, [allPoints, colorByWellId]);
 
   const handleSaveChart = useCallback(async () => {
     try {
-      const uri = await captureRef(chartRef, { format: "png", quality: 1 });
+      if (!chartRef || !chartRef.current) {
+        Alert.alert(I18n.t("error"), "График не найден");
+        return;
+      }
+
+      // Запрашиваем разрешения
       const { status } = await MediaLibrary.requestPermissionsAsync();
       
       if (status !== "granted") {
@@ -866,24 +431,41 @@ export default function DataProcessing({ route }) {
         return;
       }
       
+      // Делаем снимок с максимальным качеством
+      const uri = await captureRef(chartRef, { 
+        format: "png", 
+        quality: 1,
+        result: 'file' 
+      });
+      
+      // Сохраняем в галерею
       const asset = await MediaLibrary.createAssetAsync(uri);
-      await MediaLibrary.createAlbumAsync("Ansdimat", asset, false);
+      
+      // Создаем или находим альбом и добавляем в него
+      const album = await MediaLibrary.getAlbumAsync("Ansdimat");
+      if (album) {
+        await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
+      } else {
+        await MediaLibrary.createAlbumAsync("Ansdimat", asset, false);
+      }
+      
       Alert.alert(I18n.t("success"), I18n.t("chartSavedSuccess"));
     } catch (error) {
+      // Ошибка сохранения графика
       Alert.alert(I18n.t("error"), I18n.t("chartSaveError"));
     }
-  }, []);
+  }, [chartRef]);
 
   // Проверяем наличие данных
-  const hasData = allPoints.length > 0 && chartBounds;
+  const hasData = allPoints.length > 0;
 
   // Проверка состояний
   if (isLoading) {
     return (
-      <View style={styles.centerContainer}>
-        <MaterialCommunityIcons name="loading" size={64} color={theme.colors.outline} />
+      <View style={[styles.centerContainer, { backgroundColor: theme.colors.background }]}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
         <Text style={[styles.emptyTitle, { color: theme.colors.onSurface }]}>
-          Загрузка проекта...
+          {I18n.t("loading")}...
         </Text>
       </View>
     );
@@ -891,7 +473,7 @@ export default function DataProcessing({ route }) {
 
   if (!activeProject) {
     return (
-      <View style={styles.centerContainer}>
+      <View style={[styles.centerContainer, { backgroundColor: theme.colors.background }]}>
         <MaterialCommunityIcons name="folder-open" size={64} color={theme.colors.outline} />
         <Text style={[styles.emptyTitle, { color: theme.colors.onSurface }]}>
           {I18n.t("noActiveProject")}
@@ -905,7 +487,7 @@ export default function DataProcessing({ route }) {
 
   if (!journals || journals.length === 0) {
     return (
-      <View style={{...styles.centerContainer, backgroundColor: theme.colors.surface}}>
+      <View style={[styles.centerContainer, { backgroundColor: theme.colors.background }]}>
         <MaterialCommunityIcons name="book-plus" size={64} color={theme.colors.outline} />
         <Text style={[styles.emptyTitle, { color: theme.colors.onSurface }]}>
           {I18n.t("noJournals")}
@@ -918,16 +500,17 @@ export default function DataProcessing({ route }) {
   }
 
   return (
+    <>
     <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {/* Заголовок проекта */}
-      <Surface style={[styles.headerCard, { backgroundColor: theme.colors.surfaceVariant }]}>
+      <Surface style={[styles.headerCard, { backgroundColor: theme.colors.primary }]} elevation={4}>
         <View style={styles.headerContent}>
-          <MaterialCommunityIcons name="chart-line" size={32} color={theme.colors.primary} />
+          <MaterialCommunityIcons name="chart-line" size={32} color={theme.colors.onPrimary} />
           <View style={styles.headerText}>
-            <Text style={[styles.headerTitle, { color: theme.colors.primary }]}>
+            <Text style={[styles.headerTitle, { color: theme.colors.onPrimary }]}>
               {I18n.t("processingTitle")}
             </Text>
-            <Text style={[styles.headerSubtitle, { color: theme.colors.primary }]}>
+            <Text style={[styles.headerSubtitle, { color: theme.colors.onPrimary }]}>
               {I18n.t("project")}: {activeProject.name}
             </Text>
           </View>
@@ -950,17 +533,50 @@ export default function DataProcessing({ route }) {
           <Card.Content>
             <View style={styles.cardHeader}>
               <MaterialIcons name="legend-toggle" size={24} color={theme.colors.primary} />
-              <Text style={[styles.cardTitle, { color: theme.colors.primary }]}>Скважины</Text>
+              <Text style={[styles.cardTitle, { color: theme.colors.primary }]}>
+                {I18n.t("observationWells")}
+              </Text>
             </View>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
               {Object.keys(pointsByWell).map((wellId, idx) => (
                 <Chip
                   key={wellId}
                   selected={visibleWells[wellId] !== false}
-                  onPress={() => setVisibleWells(prev => ({ ...prev, [wellId]: !(prev[wellId] !== false) }))}
-                  style={{ marginRight: 8, marginBottom: 8, backgroundColor: theme.colors.surface }}
+                  onPress={() => {
+                    // Обновляем видимость скважины
+                    setVisibleWells(prev => {
+                      const newVisibility = !(prev[wellId] !== false);
+                      
+                      // Если скважина стала невидимой, удаляем её линию тренда
+                      if (newVisibility === false) {
+                        setState(prevState => {
+                          const newLineParams = { ...prevState.lineParams };
+                          delete newLineParams[wellId];
+                          return {
+                            ...prevState,
+                            lineParams: newLineParams
+                          };
+                        });
+                      }
+                      
+                      return { ...prev, [wellId]: newVisibility };
+                    });
+                  }}
+                  style={{ 
+                    backgroundColor: visibleWells[wellId] !== false ? theme.colors.primaryContainer : theme.colors.surface,
+                    borderColor: theme.colors.outline,
+                    borderWidth: 1,
+                  }}
                   textStyle={{ color: theme.colors.onSurface }}
-                  icon={() => <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: getColorForIndex(idx) }} />}
+                  icon={() => (
+                    <View style={{ 
+                      width: 12, 
+                      height: 12, 
+                      borderRadius: 6, 
+                      backgroundColor: colorByWellId[wellId],
+                      marginRight: 4,
+                    }} />
+                  )}
                 >
                   {pointsByWell[wellId]?.[0]?.wellName || String(wellId)}
                 </Chip>
@@ -970,66 +586,35 @@ export default function DataProcessing({ route }) {
       </Card>
       )}
 
-      {/* Управление масштабом */}
-      <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}>
-        <Card.Content>
-          <View style={styles.cardHeader}>
-            <MaterialIcons name="zoom-in" size={24} color={theme.colors.primary} />
-            <Text style={[styles.cardTitle, { color: theme.colors.primary }]}>
-              Масштаб графика
-            </Text>
-          </View>
-          
-          <View style={styles.zoomControls}>
-            <Button
-              mode="outlined"
-              icon="magnify-plus"
-              onPress={handleZoomIn}
-              style={styles.zoomButton}
-              disabled={state.zoomLevel >= 5}
-            >
-              Увеличить
-            </Button>
-            <Button
-              mode="outlined"
-              icon="magnify-minus"
-              onPress={handleZoomOut}
-              style={styles.zoomButton}
-              disabled={state.zoomLevel <= 0.2}
-            >
-              Уменьшить
-            </Button>
-            <Button
-              mode="outlined"
-              icon="home"
-              onPress={handleResetZoom}
-              style={styles.zoomButton}
-              disabled={state.zoomLevel === 1}
-            >
-              Сбросить
-            </Button>
-          </View>
-          
-          <Text style={[styles.zoomInfo, { color: theme.colors.onSurfaceVariant }]}>
-            Текущий масштаб: {state.zoomLevel.toFixed(1)}x
-          </Text>
-        </Card.Content>
-      </Card>
-
-      {/* График */}
-      <Chart
-        points={allPoints}
-        selectedPoints={state.selectedPoints}
-        onPointPress={handlePointPress}
-        lineParams={state.lineParams}
-        chartBounds={chartBounds}
-        selectedFunction={state.selectedFunction}
-        theme={theme}
-        chartRef={chartRef}
-        colorForPoint={colorForPoint}
-        seriesByWell={pointsByWell}
-        colorByWellId={colorByWellId}
-      />
+      {/* Кнопка открытия графика */}
+      {hasData && currentFunction && (
+        <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+          <Card.Content>
+            <View style={styles.cardHeader}>
+              <MaterialIcons name="timeline" size={24} color={theme.colors.primary} />
+              <Text style={[styles.cardTitle, { color: theme.colors.primary }]}>
+                {I18n.t("chart")} • {allPoints.length} точек
+              </Text>
+            </View>
+            
+            <View style={styles.chartButtonContainer}>
+              <Button
+                mode="contained"
+                icon="fullscreen"
+                onPress={() => setShowChartModal(true)}
+                style={[styles.chartButton, { backgroundColor: theme.colors.primary }]}
+                labelStyle={{ color: theme.colors.onPrimary }}
+              >
+                Открыть график для анализа
+              </Button>
+              
+              <Text style={[styles.chartDescription, { color: theme.colors.onSurfaceVariant }]}>
+                График {currentFunction?.name || 'данных'} с возможностью выбора точек для построения линии тренда
+              </Text>
+            </View>
+          </Card.Content>
+        </Card>
+      )}
 
       {/* Результаты анализа */}
       {Object.keys(state.lineParams).length > 0 && (
@@ -1043,31 +628,66 @@ export default function DataProcessing({ route }) {
             </View>
             
             <View style={styles.resultGrid}>
-              {Object.entries(state.lineParams).map(([wellId, params]) => (
-                <View key={wellId} style={[styles.resultItem, { 
-                  backgroundColor: theme.colors.surface,
-                  borderColor: theme.colors.outline 
-                }]}>
-                  <Text style={[styles.resultLabel, { color: theme.colors.onSecondaryContainer }]}>
-                    {pointsByWell[wellId]?.[0]?.wellName || String(wellId)}
-                  </Text>
-                  <Text style={[styles.resultValue, { color: theme.colors.secondary }]}>
-                    k = {params.k.toFixed(4)}
-                  </Text>
-                  <Text style={[styles.resultValue, { color: theme.colors.secondary }]}>
-                    b = {params.b.toFixed(4)}
-                  </Text>
-                </View>
-              ))}
+              {Object.entries(state.lineParams).map(([groupId, params]) => {
+                if (!params.k && !params.b) return null;
+                
+                // Получаем информацию о выбранных точках
+                const selectedIndices = state.selectedPoints[groupId] || [];
+                const selectedPointsInfo = selectedIndices.map(idx => {
+                  const point = allPoints[idx];
+                  return `${point?.wellName || 'Скважина'} (${point?.x?.toFixed(2)}, ${point?.y?.toFixed(2)})`;
+                }).join(' ↔ ');
+                
+                return (
+                  <View key={groupId} style={[styles.resultItem, { 
+                    backgroundColor: theme.colors.surface,
+                    borderColor: theme.colors.primary
+                  }]}>
+                    <View style={styles.resultHeader}>
+                      <View style={{ 
+                        width: 16, 
+                        height: 16, 
+                        borderRadius: 8, 
+                        backgroundColor: theme.colors.primary,
+                        marginRight: 8,
+                      }} />
+                      <Text style={[styles.resultLabel, { color: theme.colors.onSecondaryContainer }]}>
+                        Линия тренда
+                      </Text>
+                    </View>
+                    <View style={styles.resultValues}>
+                      <Text style={[styles.resultValue, { color: theme.colors.secondary }]}>
+                        k = {params.k.toFixed(4)}
+                      </Text>
+                      <Text style={[styles.resultValue, { color: theme.colors.secondary }]}>
+                        b = {params.b.toFixed(4)}
+                      </Text>
+                    </View>
+                    <Text style={[styles.resultPoints, { color: theme.colors.onSurfaceVariant }]}>
+                      {selectedPointsInfo}
+                    </Text>
+                  </View>
+                );
+              })}
             </View>
             
             <Divider style={{ marginVertical: 12 }} />
             
-            {Object.entries(state.lineParams).map(([wellId, params]) => (
-              <Text key={wellId} style={[styles.formula, { color: theme.colors.onSecondaryContainer }]}>
-                {pointsByWell[wellId]?.[0]?.wellName || String(wellId)}: {currentFunction?.yLabel} = {params.k.toFixed(4)} × {currentFunction?.xLabel} + {params.b.toFixed(4)}
-              </Text>
-            ))}
+            <View style={styles.formulaContainer}>
+              {Object.entries(state.lineParams).map(([groupId, params]) => {
+                if (!params.k && !params.b) return null;
+                return (
+                  <View key={groupId} style={styles.formulaItem}>
+                    <Text style={[styles.formula, { color: theme.colors.onSecondaryContainer }]}>
+                      Уравнение линии тренда:
+                    </Text>
+                    <Text style={[styles.formula, { color: theme.colors.onSecondaryContainer, fontFamily: 'monospace' }]}>
+                      {currentFunction?.yLabel} = {params.k.toFixed(4)} × {currentFunction?.xLabel} + {params.b.toFixed(4)}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
           </Card.Content>
         </Card>
       )}
@@ -1108,13 +728,28 @@ export default function DataProcessing({ route }) {
       {/* Отступ снизу */}
       <View style={{ height: 100 }} />
     </ScrollView>
+
+    {/* Модальное окно графика */}
+    {currentFunction && (
+      <ChartModal
+        visible={showChartModal}
+        onClose={() => setShowChartModal(false)}
+        points={allPoints}
+        selectedPoints={state.selectedPoints}
+        onPointPress={handlePointPress}
+        lineParams={state.lineParams}
+        selectedFunction={currentFunction}
+        colorByWellId={colorByWellId}
+        pointsByWell={pointsByWell}
+      />
+    )}
+  </>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
   },
   centerContainer: {
     flex: 1,
@@ -1124,8 +759,8 @@ const styles = StyleSheet.create({
   },
   headerCard: {
     marginBottom: 16,
-    borderRadius: 16,
-    elevation: 2,
+    borderRadius: 0,
+    paddingTop: 8,
   },
   headerContent: {
     flexDirection: 'row',
@@ -1143,12 +778,13 @@ const styles = StyleSheet.create({
   },
   headerSubtitle: {
     fontSize: 16,
-    opacity: 0.8,
+    opacity: 0.9,
   },
   card: {
+    marginHorizontal: 16,
     marginBottom: 16,
     borderRadius: 12,
-    elevation: 0,
+    elevation: 2,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -1200,21 +836,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
     borderWidth: 1,
   },
-  chartContainer: {
-    alignItems: 'center',
-    marginVertical: 16,
-    width: '100%',
-    height: 300,
-  },
-  emptyChart: {
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyText: {
-    fontSize: 16,
-    marginTop: 12,
-    textAlign: 'center',
-  },
   emptyTitle: {
     fontSize: 20,
     fontWeight: '600',
@@ -1229,30 +850,45 @@ const styles = StyleSheet.create({
   },
   resultGrid: {
     flexDirection: 'column',
-    gap: 16,
-    marginBottom: 12,
+    gap: 12,
   },
   resultItem: {
-    alignItems: 'flex-start',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    padding: 16,
     borderRadius: 8,
-    borderWidth: 1,
+    borderWidth: 2,
+  },
+  resultHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   resultLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 4,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  resultValues: {
+    flexDirection: 'column',
+    gap: 8,
   },
   resultValue: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
   },
+  resultPoints: {
+    fontSize: 12,
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+  formulaContainer: {
+    gap: 8,
+  },
+  formulaItem: {
+    gap: 4,
+  },
   formula: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '500',
     textAlign: 'center',
-    fontFamily: 'monospace',
   },
   actionButtons: {
     flexDirection: 'row',
@@ -1267,20 +903,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22,
   },
-  zoomControls: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    gap: 8,
+  chartButtonContainer: {
     marginTop: 16,
-    marginBottom: 12,
+    alignItems: 'center',
+    gap: 12,
   },
-  zoomButton: {
-    flex: 1,
-    borderRadius: 8,
+  chartButton: {
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 24,
   },
-  zoomInfo: {
+  chartDescription: {
     fontSize: 14,
     textAlign: 'center',
-    marginTop: 8,
+    lineHeight: 20,
   },
 });

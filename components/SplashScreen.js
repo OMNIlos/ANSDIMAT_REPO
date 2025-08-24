@@ -52,7 +52,7 @@ export default function SplashScreen({ onFinish }) {
           {/* Логотип приложения */}
           <Image
             source={require('../assets/splash.png')}
-            style={{ width: 120, height: 120, borderRadius: 18 }}
+            style={{ width: 120, height: 120, borderRadius: 25 }}
             resizeMode="contain"
           />
         </View>

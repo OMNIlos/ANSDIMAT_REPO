@@ -1,4 +1,4 @@
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,36 +10,49 @@ import {
   Modal,
   Platform,
   StatusBar,
-  FlatList,
-  Pressable,
+  KeyboardAvoidingView,
+  ActivityIndicator,
+  SafeAreaView,
 } from 'react-native';
-import { useTheme, Card, Surface } from 'react-native-paper';
+import { useTheme, Card, Surface, Button, Chip } from 'react-native-paper';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import I18n from '../../Localization';
 import { LanguageContext } from '../../LanguageContext';
 
-const STEPS = {
-  BASIC_PARAMETERS: 0,
-  PROCESSING_SETUP: 1,
-  OBSERVATION_JOURNAL: 2,
-  DISTANCES: 3,
-};
+// Импорт компонентов и утилит
+import UnifiedMeasurementsModal from './components/UnifiedMeasurementsModal';
+import SingleWellMeasurementsModal from './components/SingleWellMeasurementsModal';
+import { 
+  WIZARD_STEPS, 
+  FLOW_RATE_UNITS,
+  AQUIFER_TYPES,
+  OFR_TYPES 
+} from './utils/constants';
+import {
+  convertMeasurementsToDataRows,
+  generateId,
+  debounce,
+  validateTimeSequence,
+} from './utils/helpers';
 
 const STEP_TITLES = {
-  [STEPS.BASIC_PARAMETERS]: I18n.t('basicParameters'),
-  [STEPS.PROCESSING_SETUP]: I18n.t('processingTypeSelection') || 'Выбор типа обработки',
-  [STEPS.OBSERVATION_JOURNAL]: I18n.t('observationJournalStep'),
-  [STEPS.DISTANCES]: I18n.t('distancesBetweenWells'),
+  [WIZARD_STEPS.BASIC_PARAMETERS]: I18n.t('basicParameters'),
+  [WIZARD_STEPS.PROCESSING_SETUP]: 'Данные понижений',
+  [WIZARD_STEPS.OBSERVATION_JOURNAL]: 'Обзор проекта',
 };
 
 export default function NewWizard({ navigation, route }) {
   const { locale } = useContext(LanguageContext);
   const theme = useTheme();
-  const [currentStep, setCurrentStep] = useState(STEPS.BASIC_PARAMETERS);
+  const [currentStep, setCurrentStep] = useState(WIZARD_STEPS.BASIC_PARAMETERS);
   const [activeProject, setActiveProject] = useState(null);
   const [errors, setErrors] = useState({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [showUnifiedMeasurements, setShowUnifiedMeasurements] = useState(false);
+  const [showSingleWellMeasurements, setShowSingleWellMeasurements] = useState(false);
+  const [selectedWellForMeasurements, setSelectedWellForMeasurements] = useState(null);
   
   const [wizardData, setWizardData] = useState({
     // Основные параметры
@@ -84,20 +97,21 @@ export default function NewWizard({ navigation, route }) {
 
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [datePickerType, setDatePickerType] = useState('pumping');
-  const [showMeasurementsFor, setShowMeasurementsFor] = useState(null);
-  const [measurementType, setMeasurementType] = useState('pumping'); // 'pumping' or 'recovery'
+  const [showDateTimeModal, setShowDateTimeModal] = useState(false);
+  const [currentEditingDateTime, setCurrentEditingDateTime] = useState(null);
   const [showFlowRateUnits, setShowFlowRateUnits] = useState(false);
-
-  const flowRateUnits = [
-    'м³/сут',
-    'м³/час',
-    'м³/мин',
-    'л/с',
-    'л/мин',
-    'л/час',
-    'm³/h',
-    'l/day',
-  ];
+  
+  // Оптимизированные обновления с debounce
+  const debouncedSaveWizardData = useCallback(
+    debounce(async (data) => {
+      try {
+        await AsyncStorage.setItem('wizard_temp_data', JSON.stringify(data));
+      } catch (error) {
+        console.error('Error saving wizard data:', error);
+      }
+    }, 1000),
+    []
+  );
 
   useEffect(() => {
     const projectId = route?.params?.projectId;
@@ -246,25 +260,19 @@ export default function NewWizard({ navigation, route }) {
     }
   }
 
-  async function saveWizardData() {
-    try {
-      await AsyncStorage.setItem('wizard_temp_data', JSON.stringify(wizardData));
-    } catch (error) {
-      console.error('Error saving wizard data:', error);
-    }
-  }
+  const updateData = useCallback((key, value) => {
+    setWizardData(prev => {
+      const newData = { ...prev, [key]: value };
+      debouncedSaveWizardData(newData);
+      return newData;
+    });
+  }, [debouncedSaveWizardData]);
 
-  const updateData = (key, value) => {
-    const newData = { ...wizardData, [key]: value };
-    setWizardData(newData);
-    saveWizardData();
-  };
-
-  const validateStep = (step) => {
+  const validateStep = useCallback((step) => {
     const newErrors = {};
     
     switch (step) {
-      case STEPS.BASIC_PARAMETERS:
+      case WIZARD_STEPS.BASIC_PARAMETERS:
         if (!wizardData.wellName.trim()) {
           newErrors.wellName = 'Введите название скважины';
         }
@@ -292,7 +300,7 @@ export default function NewWizard({ navigation, route }) {
           newErrors.layerType = 'Выберите тип водоносного горизонта';
         }
         break;
-      case STEPS.PROCESSING_SETUP:
+      case WIZARD_STEPS.PROCESSING_SETUP:
         if (!wizardData.pumpingSelected && !wizardData.recoverySelected) {
           newErrors.processingTypes = 'Выберите хотя бы один тип обработки';
         }
@@ -302,14 +310,20 @@ export default function NewWizard({ navigation, route }) {
         if (wizardData.recoverySelected && !wizardData.recoveryStartDate) {
           newErrors.recoveryStartDate = 'Укажите дату начала восстановления';
         }
+        // Наблюдательные скважины теперь опциональны
+        // Проверяем расстояния для существующих наблюдательных скважин
+        wizardData.observationWells.filter(w => String(w.id) !== '1').forEach(well => {
+          const distance = wizardData.distances[well.id];
+          if (!distance || distance.trim() === '') {
+            newErrors[`distance_${well.id}`] = 'Введите расстояние';
+          } else if (isNaN(parseFloat(distance))) {
+            newErrors[`distance_${well.id}`] = 'Введите числовое значение';
+          }
+        });
         break;
         
-      case STEPS.OBSERVATION_JOURNAL:
-        // Проверяем, что есть хотя бы одна наблюдательная скважина
-        if (!wizardData.observationWells || wizardData.observationWells.length === 0) {
-          newErrors.wells = 'Добавьте хотя бы одну наблюдательную скважину';
-        }
-        // Валидация порядков времени в текущих измерениях
+      case WIZARD_STEPS.OBSERVATION_JOURNAL:
+        // Валидация порядков времени в измерениях
         wizardData.observationWells.forEach(well => {
           ['pumping', 'recovery'].forEach(type => {
             const list = wizardData.measurements[well.id]?.[type] || [];
@@ -324,68 +338,53 @@ export default function NewWizard({ navigation, route }) {
           });
         });
         break;
-        
-      case STEPS.DISTANCES:
-        wizardData.observationWells.forEach(well => {
-          const distance = wizardData.distances[well.id];
-          if (!distance || distance.trim() === '') {
-            newErrors[`distance_${well.id}`] = 'Введите расстояние';
-          } else if (isNaN(parseFloat(distance))) {
-            newErrors[`distance_${well.id}`] = 'Введите числовое значение';
-          }
-        });
-        break;
     }
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
+  }, [wizardData]);
 
-  const nextStep = () => {
+  const nextStep = useCallback(() => {
     if (validateStep(currentStep)) {
-      if (currentStep < STEPS.DISTANCES) {
+      if (currentStep < WIZARD_STEPS.OBSERVATION_JOURNAL) {
         setCurrentStep(currentStep + 1);
       }
     }
-  };
+  }, [currentStep, validateStep]);
 
-  const prevStep = () => {
-    if (currentStep > STEPS.BASIC_PARAMETERS) {
+  const prevStep = useCallback(() => {
+    if (currentStep > WIZARD_STEPS.BASIC_PARAMETERS) {
       setCurrentStep(currentStep - 1);
     }
-  };
+  }, [currentStep]);
 
-  const addObservationWell = () => {
+  const addObservationWell = useCallback(() => {
     const newWell = {
-      id: Date.now().toString(),
+      id: generateId(),
       name: `Скв. ${String.fromCharCode(65 + wizardData.observationWells.length)}`,
       active: true
     };
     
-    const updatedWells = [...wizardData.observationWells, newWell];
-    const updatedMeasurements = {
-      ...wizardData.measurements,
-      [newWell.id]: {
-        pumping: [{ id: 1, time: '', drawdown: '', date: new Date() }],
-        recovery: [{ id: 1, time: '', drawdown: '', date: new Date() }]
-      }
-    };
-    const updatedDistances = {
-      ...wizardData.distances,
-      [newWell.id]: ''
-    };
-    
     setWizardData(prev => ({
       ...prev,
-      observationWells: updatedWells,
-      measurements: updatedMeasurements,
-      distances: updatedDistances
+      observationWells: [...prev.observationWells, newWell],
+      measurements: {
+        ...prev.measurements,
+        [newWell.id]: {
+          pumping: [{ id: generateId(), time: '', timeUnit: 'мин', drawdown: '', date: new Date() }],
+          recovery: [{ id: generateId(), time: '', timeUnit: 'мин', drawdown: '', date: new Date() }]
+        }
+      },
+      distances: {
+        ...prev.distances,
+        [newWell.id]: ''
+      }
     }));
-  };
+  }, [wizardData.observationWells.length]);
 
-  const addMeasurement = (wellId, type, insertAfterId = null) => {
+  const addMeasurement = useCallback((wellId, type, insertAfterIndex = null) => {
     const newMeasurement = {
-      id: Date.now().toString(),
+      id: generateId(),
       time: '',
       timeUnit: 'мин',
       drawdown: '',
@@ -393,15 +392,15 @@ export default function NewWizard({ navigation, route }) {
     };
     
     setWizardData(prev => {
-      const list = prev.measurements[wellId][type] || [];
+      const list = prev.measurements[wellId]?.[type] || [];
       let newList;
-      if (insertAfterId) {
-        const idx = list.findIndex(m => String(m.id) === String(insertAfterId));
-        if (idx >= 0) {
-          newList = [...list.slice(0, idx + 1), newMeasurement, ...list.slice(idx + 1)];
-        } else newList = [...list, newMeasurement];
-      } else newList = [...list, newMeasurement];
-      return ({
+      if (insertAfterIndex !== null && insertAfterIndex >= 0) {
+        newList = [...list.slice(0, insertAfterIndex + 1), newMeasurement, ...list.slice(insertAfterIndex + 1)];
+      } else {
+        newList = [...list, newMeasurement];
+      }
+      
+      return {
         ...prev,
         measurements: {
           ...prev.measurements,
@@ -410,118 +409,73 @@ export default function NewWizard({ navigation, route }) {
             [type]: newList
           }
         }
-      });
+      };
     });
-  };
+  }, []);
 
-  const deleteMeasurement = (wellId, type, measurementId) => {
-    setWizardData(prev => ({
-      ...prev,
-      measurements: {
-        ...prev.measurements,
-        [wellId]: {
-          ...prev.measurements[wellId],
-          [type]: prev.measurements[wellId][type].filter(m => m.id !== measurementId)
+  const deleteMeasurement = useCallback((wellId, type, measurementIndex) => {
+    setWizardData(prev => {
+      const list = prev.measurements[wellId]?.[type] || [];
+      const newList = list.filter((_, index) => index !== measurementIndex);
+      
+      return {
+        ...prev,
+        measurements: {
+          ...prev.measurements,
+          [wellId]: {
+            ...prev.measurements[wellId],
+            [type]: newList
+          }
         }
-      }
-    }));
-  };
-
-  const updateMeasurement = (wellId, type, measurementId, field, value) => {
-    setWizardData(prev => ({
-      ...prev,
-      measurements: {
-        ...prev.measurements,
-        [wellId]: {
-          ...prev.measurements[wellId],
-          [type]: prev.measurements[wellId][type].map(m =>
-            m.id === measurementId ? { ...m, [field]: value } : m
-          )
-        }
-      }
-    }));
-  };
-
-  // Функция для переключения единиц времени при нажатии
-  const toggleTimeUnit = (wellId, type, measurementId) => {
-    const measurement = wizardData.measurements[wellId]?.[type]?.find(m => m.id === measurementId);
-    if (!measurement) return;
-    
-    const currentUnit = measurement.timeUnit || 'мин';
-    const units = ['сек', 'мин', 'час', 's', 'm', 'h'];
-    const currentIndex = units.indexOf(currentUnit);
-    const nextIndex = (currentIndex + 1) % units.length;
-    const nextUnit = units[nextIndex];
-    
-    updateMeasurement(wellId, type, measurementId, 'timeUnit', nextUnit);
-  };
-
-
-
-  // Функция для преобразования measurements в формат dataRows
-  const convertMeasurementsToDataRows = (measurements, observationWells) => {
-    const dataRows = [];
-    
-    observationWells.forEach(well => {
-      const wellMeasurements = measurements[well.id];
-      if (wellMeasurements) {
-        // Добавляем данные откачки
-        if (wellMeasurements.pumping) {
-          wellMeasurements.pumping.forEach(measurement => {
-            if (measurement.time && measurement.drawdown) {
-              const tVal = parseFloat(measurement.time);
-              const unit = measurement.timeUnit || 'мин';
-              let days = tVal;
-              if (unit === 'сек' || unit === 's') days = tVal / 86400;
-              else if (unit === 'мин' || unit === 'm') days = tVal / 1440;
-              else if (unit === 'час' || unit === 'h') days = tVal / 24;
-              dataRows.push({
-                t: days,
-                s: parseFloat(measurement.drawdown),
-                wellId: well.id,
-                wellName: well.name,
-                type: 'pumping'
-              });
-            }
-          });
-        }
-        
-        // Добавляем данные восстановления
-        if (wellMeasurements.recovery) {
-          wellMeasurements.recovery.forEach(measurement => {
-            if (measurement.time && measurement.drawdown) {
-              const tVal = parseFloat(measurement.time);
-              const unit = measurement.timeUnit || 'мин';
-              let days = tVal;
-              if (unit === 'сек' || unit === 's') days = tVal / 86400;
-              else if (unit === 'мин' || unit === 'm') days = tVal / 1440;
-              else if (unit === 'час' || unit === 'h') days = tVal / 24;
-              dataRows.push({
-                t: days,
-                s: parseFloat(measurement.drawdown),
-                wellId: well.id,
-                wellName: well.name,
-                type: 'recovery'
-              });
-            }
-          });
-        }
-      }
+      };
     });
-    
-    // Сортируем по времени
-    return dataRows.sort((a, b) => a.t - b.t);
-  };
+  }, []);
+
+  const updateMeasurement = useCallback((wellId, type, measurementIndex, field, value) => {
+    setWizardData(prev => {
+      const list = prev.measurements[wellId]?.[type] || [];
+      const newList = list.map((measurement, index) =>
+        index === measurementIndex ? { ...measurement, [field]: value } : measurement
+      );
+      
+      return {
+        ...prev,
+        measurements: {
+          ...prev.measurements,
+          [wellId]: {
+            ...prev.measurements[wellId],
+            [type]: newList
+          }
+        }
+      };
+    });
+  }, []);
+
+  // Функция для открытия модального окна измерений одной скважины
+  const openSingleWellMeasurements = useCallback((wellId, wellName) => {
+    setSelectedWellForMeasurements({ id: wellId, name: wellName });
+    setShowSingleWellMeasurements(true);
+  }, []);
+
+  const closeSingleWellMeasurements = useCallback(() => {
+    setShowSingleWellMeasurements(false);
+    setSelectedWellForMeasurements(null);
+  }, []);
+
+
+
 
   // Шаг 1: Основные параметры
   const renderBasicParameters = () => (
     <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
       <Card style={[styles.parameterCard, { backgroundColor: theme.colors.surface }]}>
         <View style={styles.cardContent}>
-          <Text style={[styles.cardTitle, { color: theme.colors.primary }]}>
+          <View style={{flexDirection: 'row', alignItems: 'start', gap: 4}}>
             <MaterialIcons name="settings" size={20} color={theme.colors.primary} /> 
-            {I18n.t("basicParameters")}
-          </Text>
+            <Text style={[styles.cardTitle, { color: theme.colors.primary }]}> 
+              Основные параметры
+            </Text>
+          </View>
 
           {/* Имя проекта/журнала (только инфо) */}
           <View style={styles.inputGroup}>
@@ -539,7 +493,6 @@ export default function NewWizard({ navigation, route }) {
             <Surface style={{ padding: 12, borderRadius: 8, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.background }}>
               <Text style={{ color: theme.colors.text }}>{wizardData.ofrType}</Text>
             </Surface>
-            <Text style={[styles.errorText, { color: theme.colors.onSurfaceVariant, marginTop: 6 }]}>Пока реализован только вариант "Откачка/Восстановление".</Text>
           </View>
           
           {/* Тип водоносного горизонта */}
@@ -547,8 +500,8 @@ export default function NewWizard({ navigation, route }) {
             <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
               {I18n.t("layerType")} *
             </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
-              <View style={[styles.radioGroup, { flexDirection: 'row', gap: 20, paddingHorizontal: 16 }]}>
+            <View style={{ flexDirection: 'column', alignItems: 'flex-start',}}>
+              <View style={[styles.radioGroup, { flexDirection: 'column', gap: 8}]}>
                 <TouchableOpacity
                   style={[
                     styles.radioOption,
@@ -593,7 +546,7 @@ export default function NewWizard({ navigation, route }) {
                   <Text style={[styles.radioText, { color: theme.colors.text }]}>{I18n.t("withInterflow")}</Text>
                 </TouchableOpacity>
               </View>
-            </ScrollView>
+            </View>
             {errors.layerType && (
               <Text style={[styles.errorText, { color: theme.colors.error }]}>
                 {errors.layerType}
@@ -770,7 +723,7 @@ export default function NewWizard({ navigation, route }) {
     </ScrollView>
   );
 
-  // Шаг 2: Выбор типов обработки, даты и главный ствол
+  // Шаг 2: Выбор типов обработки
   const renderProcessingSetup = () => {
     const pumpingDurationHours = wizardData.pumpingSelected && wizardData.recoverySelected
       ? Math.max(0, (wizardData.recoveryStartDate - wizardData.pumpingStartDate) / 3600000).toFixed(2)
@@ -779,10 +732,12 @@ export default function NewWizard({ navigation, route }) {
       <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
         <Card style={[styles.parameterCard, { backgroundColor: theme.colors.surface }]}> 
           <View style={styles.cardContent}>
-            <Text style={[styles.cardTitle, { color: theme.colors.primary }]}> 
+            <View style={{flexDirection: 'row', alignItems: 'start', gap: 4, justifyContent: 'start'}}>
               <MaterialIcons name="tune" size={20} color={theme.colors.primary} /> 
-              Тип обработки и даты
-            </Text>
+              <Text style={[styles.cardTitle, { color: theme.colors.primary }]}> 
+                Тип обработки и даты
+              </Text>
+            </View>
 
             {/* Выбор типов */}
             <View style={styles.radioGroup}>
@@ -804,8 +759,13 @@ export default function NewWizard({ navigation, route }) {
               <TouchableOpacity
                 style={[styles.dateButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, marginTop: 12 }]}
                 onPress={() => {
-                  setDatePickerType('pumping');
-                  setShowDatePicker(true);
+                  if (Platform.OS === 'android') {
+                    setCurrentEditingDateTime('pumping');
+                    setShowDateTimeModal(true);
+                  } else {
+                    setDatePickerType('pumping');
+                    setShowDatePicker(true);
+                  }
                 }}
               >
                 <MaterialIcons name="calendar-today" size={20} color={theme.colors.primary} />
@@ -818,8 +778,13 @@ export default function NewWizard({ navigation, route }) {
               <TouchableOpacity
                 style={[styles.dateButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, marginTop: 12 }]}
                 onPress={() => {
-                  setDatePickerType('recovery');
-                  setShowDatePicker(true);
+                  if (Platform.OS === 'android') {
+                    setCurrentEditingDateTime('recovery');
+                    setShowDateTimeModal(true);
+                  } else {
+                    setDatePickerType('recovery');
+                    setShowDatePicker(true);
+                  }
                 }}
               >
                 <MaterialIcons name="calendar-today" size={20} color={theme.colors.primary} />
@@ -838,10 +803,12 @@ export default function NewWizard({ navigation, route }) {
         {/* Главная (опытная) скважина */}
         <Card style={[styles.parameterCard, { backgroundColor: theme.colors.surface }]}> 
           <View style={styles.cardContent}>
-            <Text style={[styles.cardTitle, { color: theme.colors.primary }]}> 
+            <View style={{flexDirection: 'row', alignItems: 'start', gap: 4}}>
               <MaterialCommunityIcons name="water-well" size={20} color={theme.colors.primary} /> 
-              Опытная скважина (главная)
-            </Text>
+              <Text style={[styles.cardTitle, { color: theme.colors.primary }]}> 
+                Опытная скважина
+              </Text>
+          </View>
             <Surface style={[styles.wellCard, { backgroundColor: theme.colors.background }]}> 
               <View style={styles.wellHeader}>
                 <MaterialCommunityIcons name="water-well" size={24} color={theme.colors.primary} />
@@ -853,209 +820,225 @@ export default function NewWizard({ navigation, route }) {
                 {/* Без удаления для главной */}
               </View>
               <View style={styles.wellButtons}>
-                {wizardData.pumpingSelected && (
-                  <TouchableOpacity
-                    style={[styles.wellButton, { backgroundColor: theme.colors.primary }]}
-                    onPress={() => { setShowMeasurementsFor('1'); setMeasurementType('pumping'); }}
-                  >
-                    <MaterialIcons name="arrow-downward" size={18} color={theme.colors.white} />
-                    <Text style={[styles.wellButtonText, { color: theme.colors.white }]}>Откачка ({wizardData.measurements['1']?.pumping?.length || 0})</Text>
-                  </TouchableOpacity>
-                )}
-                {wizardData.recoverySelected && (
-                  <TouchableOpacity
-                    style={[styles.wellButton, { backgroundColor: theme.colors.secondary }]}
-                    onPress={() => { setShowMeasurementsFor('1'); setMeasurementType('recovery'); }}
-                  >
-                    <MaterialIcons name="arrow-upward" size={18} color={theme.colors.white} />
-                    <Text style={[styles.wellButtonText, { color: theme.colors.white }]}>Восстановление ({wizardData.measurements['1']?.recovery?.length || 0})</Text>
-                  </TouchableOpacity>
-                )}
+                <Button
+                  mode="contained"
+                  icon="water"
+                  onPress={() => openSingleWellMeasurements('1', wizardData.wellName)}
+                  style={{ backgroundColor: theme.colors.primary }}
+                >
+                  {I18n.t('measurements')} ({
+                    (wizardData.measurements['1']?.pumping?.length || 0) + 
+                    (wizardData.measurements['1']?.recovery?.length || 0)
+                  })
+                </Button>
               </View>
             </Surface>
+          </View>
+        </Card>
+
+        {/* Наблюдательные скважины */}
+        <Card style={[styles.parameterCard, { backgroundColor: theme.colors.surface, marginBottom: '40%'}]}>
+          <View style={styles.cardContent}>
+            <View style={{...styles.sectionHeader, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'start'}}>
+              <View style={{flexDirection: 'row', alignItems: 'start', gap: 4}}>
+              <MaterialCommunityIcons name="map-marker-multiple" size={20} color={theme.colors.primary} /> 
+              <Text style={[styles.cardTitle, { color: theme.colors.primary}]}>
+                Наблюдательные{'\n'}скважины
+              </Text>
+              </View>
+              <View style={{flexDirection: 'row', alignItems: 'start', gap: 5, justifyContent: 'flex-start'}}>
+                <TouchableOpacity
+                  style={[styles.addButton, { backgroundColor: theme.colors.primary }]}
+                  onPress={addObservationWell}
+                >
+                  <MaterialIcons name="add" size={20} color={theme.colors.white} />
+                </TouchableOpacity>
+                
+              </View>
+
+            </View>
+            
+            {wizardData.observationWells.filter(w => String(w.id) !== '1').map((well, index) => (
+              <Surface 
+                key={well.id} 
+                style={[styles.wellCard, { backgroundColor: theme.colors.background }]}
+              >
+                <View style={styles.wellHeader}>
+                  <MaterialCommunityIcons name="water-well" size={24} color={theme.colors.primary} />
+                  <TextInput
+                    style={[styles.textInput, { flex: 1, marginLeft: 8, borderColor: theme.colors.border, backgroundColor: theme.colors.background, color: theme.colors.text }]}
+                    value={well.name}
+                    onChangeText={(v) => {
+                      const newWells = wizardData.observationWells.map(w => w.id === well.id ? { ...w, name: v } : w);
+                      updateData('observationWells', newWells);
+                    }}
+                  />
+                  
+                </View>
+                
+                {/* Поле ввода расстояния */}
+                <View style={styles.distanceInputGroup}>
+                  <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                    Расстояние до опытной скважины (км):
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.textInput,
+                      {
+                        borderColor: errors[`distance_${well.id}`] ? theme.colors.error : theme.colors.border,
+                        backgroundColor: theme.colors.background,
+                        color: theme.colors.text,
+                      }
+                    ]}
+                    value={wizardData.distances[well.id] || ''}
+                    onChangeText={(value) => updateData('distances', {
+                      ...wizardData.distances,
+                      [well.id]: value
+                    })}
+                    placeholder="0.074"
+                    placeholderTextColor={theme.colors.textSecondary}
+                    keyboardType="numeric"
+                  />
+                  {errors[`distance_${well.id}`] && (
+                    <Text style={[styles.errorText, { color: theme.colors.error }]}>
+                      {errors[`distance_${well.id}`]}
+                    </Text>
+                  )}
+                </View>
+
+                <View style={{...styles.wellButtons, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
+                  <Button
+                    mode="contained"
+                    icon="water"
+                    onPress={() => openSingleWellMeasurements(well.id, well.name)}
+                    style={{ backgroundColor: theme.colors.primary }}
+                  >
+                    {I18n.t('measurements')} ({
+                      (wizardData.measurements[well.id]?.pumping?.length || 0) + 
+                      (wizardData.measurements[well.id]?.recovery?.length || 0)
+                    })
+                  </Button>
+                  <TouchableOpacity
+                    onPress={() => {
+                      const newWells = wizardData.observationWells.filter(w => w.id !== well.id);
+                      const { [well.id]: removed, ...restDistances } = wizardData.distances;
+                      const { [well.id]: removedM, ...restMeas } = wizardData.measurements;
+                      setWizardData(prev => ({ ...prev, observationWells: newWells, distances: restDistances, measurements: restMeas }));
+                    }}
+                  >
+                    <MaterialIcons name="delete" size={20} color={theme.colors.primary} />
+                  </TouchableOpacity>
+                </View>
+              </Surface>
+            ))}
+            
+            {wizardData.observationWells.filter(w => String(w.id) !== '1').length === 0 && (
+              <View style={styles.emptyState}>
+                <MaterialCommunityIcons name="map-marker-plus" size={48} color={theme.colors.textSecondary} />
+                <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
+                  Добавьте наблюдательные скважины
+                </Text>
+              </View>
+            )}
           </View>
         </Card>
       </ScrollView>
     );
   };
 
-  // Шаг 3: Журнал наблюдений по доп. скважинам
+  // Шаг 3: Обзор и подтверждение данных
   const renderObservationJournal = () => (
     <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
-      {/* Наблюдательные скважины */}
+      {/* Обзор данных */}
       <Card style={[styles.parameterCard, { backgroundColor: theme.colors.surface }]}>
         <View style={styles.cardContent}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.cardTitle, { color: theme.colors.primary }]}>
-              <MaterialCommunityIcons name="map-marker-multiple" size={20} color={theme.colors.primary} /> 
-              Наблюдательные скважины
+          <Text style={[styles.cardTitle, { color: theme.colors.primary }]}>
+            <MaterialIcons name="preview" size={20} color={theme.colors.primary} /> 
+            Обзор проекта
+          </Text>
+          
+          {/* Общая информация */}
+          <View style={styles.reviewSection}>
+            <Text style={[styles.reviewSectionTitle, { color: theme.colors.onSurface }]}>
+              Основные параметры
             </Text>
-            <TouchableOpacity
-              style={[styles.addButton, { backgroundColor: theme.colors.primary }]}
-              onPress={addObservationWell}
-            >
-              <MaterialIcons name="add" size={20} color={theme.colors.white} />
-            </TouchableOpacity>
+            <Text style={[styles.reviewItem, { color: theme.colors.onSurfaceVariant }]}>
+              Проект: {wizardData.projectName || 'Новый проект'}
+            </Text>
+            <Text style={[styles.reviewItem, { color: theme.colors.onSurfaceVariant }]}>
+              Опытная скважина: {wizardData.wellName || 'Не указана'}
+            </Text>
+            <Text style={[styles.reviewItem, { color: theme.colors.onSurfaceVariant }]}>
+              Расход: {wizardData.flowRate} {wizardData.flowRateUnit}
+            </Text>
+            <Text style={[styles.reviewItem, { color: theme.colors.onSurfaceVariant }]}>
+              Тип водоноса: {wizardData.layerType}
+            </Text>
           </View>
 
-           {wizardData.observationWells.filter(w => String(w.id) !== '1').map((well, index) => (
-            <Surface 
-              key={well.id} 
-              style={[styles.wellCard, { backgroundColor: theme.colors.background }]}
-            >
-              <View style={styles.wellHeader}>
-                <MaterialCommunityIcons name="water-well" size={24} color={theme.colors.primary} />
-                <TextInput
-                  style={[styles.textInput, { flex: 1, marginLeft: 8, borderColor: theme.colors.border, backgroundColor: theme.colors.background, color: theme.colors.text }]}
-                  value={well.name}
-                  onChangeText={(v) => {
-                    const newWells = wizardData.observationWells.map(w => w.id === well.id ? { ...w, name: v } : w);
-                    updateData('observationWells', newWells);
-                  }}
-                />
-                <TouchableOpacity
-                  onPress={() => {
-                    const newWells = wizardData.observationWells.filter(w => w.id !== well.id);
-                    const { [well.id]: removed, ...restDistances } = wizardData.distances;
-                    const { [well.id]: removedM, ...restMeas } = wizardData.measurements;
-                    setWizardData(prev => ({ ...prev, observationWells: newWells, distances: restDistances, measurements: restMeas }));
-                  }}
-                >
-                  <MaterialIcons name="delete" size={20} color={theme.colors.error} />
-                </TouchableOpacity>
-              </View>
-              
-              <View style={styles.wellButtons}>
-                {wizardData.pumpingSelected && (
-                  <TouchableOpacity
-                    style={[styles.wellButton, { backgroundColor: theme.colors.primary }]}
-                    onPress={() => {
-                      setShowMeasurementsFor(well.id);
-                      setMeasurementType('pumping');
-                    }}
-                  >
-                    <MaterialIcons name="arrow-downward" size={18} color={theme.colors.white} />
-                    <Text style={[styles.wellButtonText, { color: theme.colors.white }]}>Откачка ({wizardData.measurements[well.id]?.pumping?.length || 0})</Text>
-                  </TouchableOpacity>
-                )}
-                {wizardData.recoverySelected && (
-                  <TouchableOpacity
-                    style={[styles.wellButton, { backgroundColor: theme.colors.secondary }]}
-                    onPress={() => {
-                      setShowMeasurementsFor(well.id);
-                      setMeasurementType('recovery');
-                    }}
-                  >
-                    <MaterialIcons name="arrow-upward" size={18} color={theme.colors.white} />
-                    <Text style={[styles.wellButtonText, { color: theme.colors.white }]}>Восстановление ({wizardData.measurements[well.id]?.recovery?.length || 0})</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </Surface>
-          ))}
-          
-          {wizardData.observationWells.length === 0 && (
-            <View style={styles.emptyState}>
-              <MaterialCommunityIcons name="map-marker-plus" size={48} color={theme.colors.textSecondary} />
-              <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
-                Добавьте наблюдательные скважины
+          {/* Скважины */}
+          <View style={styles.reviewSection}>
+            <Text style={[styles.reviewSectionTitle, { color: theme.colors.onSurface }]}>
+              Скважины и измерения
+            </Text>
+            
+            {/* Опытная скважина */}
+            <View style={styles.reviewWell}>
+              <Text style={[styles.reviewWellName, { color: theme.colors.primary }]}>
+                {wizardData.wellName} (опытная)
+              </Text>
+              <Text style={[styles.reviewItem, { color: theme.colors.onSurfaceVariant }]}>
+                Измерений: {
+                  (wizardData.measurements['1']?.pumping?.length || 0) + 
+                  (wizardData.measurements['1']?.recovery?.length || 0)
+                } (откачка: {wizardData.measurements['1']?.pumping?.length || 0}, 
+                восстановление: {wizardData.measurements['1']?.recovery?.length || 0})
               </Text>
             </View>
-          )}
+
+            {/* Наблюдательные скважины */}
+            {wizardData.observationWells.filter(w => String(w.id) !== '1').map((well) => (
+              <View key={well.id} style={styles.reviewWell}>
+                <Text style={[styles.reviewWellName, { color: theme.colors.secondary }]}>
+                  {well.name} (наблюдательная)
+                </Text>
+                <Text style={[styles.reviewItem, { color: theme.colors.onSurfaceVariant }]}>
+                  Измерений: {
+                    (wizardData.measurements[well.id]?.pumping?.length || 0) + 
+                    (wizardData.measurements[well.id]?.recovery?.length || 0)
+                  } (откачка: {wizardData.measurements[well.id]?.pumping?.length || 0}, 
+                  восстановление: {wizardData.measurements[well.id]?.recovery?.length || 0})
+                </Text>
+                <Text style={[styles.reviewItem, { color: theme.colors.onSurfaceVariant }]}>
+                  Расстояние: {wizardData.distances[well.id] || 'Не указано'} км
+                </Text>
+              </View>
+            ))}
+          </View>
+
+
         </View>
       </Card>
+
+      {/* Информационная панель */}
+      <View style={[styles.infoCardContainer, { marginTop: 10, marginBottom: '40%'}]}>
+        <Card.Content>
+          <View style={styles.infoHeader}>
+            <MaterialIcons name="info" size={24} color={theme.colors.primary} />
+            <Text style={[styles.infoTitle, { color: theme.colors.primary }]}>{I18n.t("information")}</Text>
+          </View>
+          <Text style={[styles.infoText, { color: theme.colors.text }]}>
+            Проверьте все введенные данные перед созданием проекта. 
+            Вы сможете редактировать проект после создания.
+            {'\n\n'}
+            На следующем шаге укажите расстояния между скважинами.
+          </Text>
+        </Card.Content>
+      </View>
     </ScrollView>
   );
 
-  // Модальное окно для редактирования измерений
-  const renderMeasurementsModal = () => {
-    if (!showMeasurementsFor) return null;
-    
-    const well = wizardData.observationWells.find(w => w.id === showMeasurementsFor);
-    const measurements = wizardData.measurements[showMeasurementsFor]?.[measurementType] || [];
-    
-    return (
-      <Modal visible={true} animationType="slide" presentationStyle="pageSheet">
-        <View style={[styles.modalContainer, { backgroundColor: theme.colors.background }]}>
-          <View style={[styles.modalHeader, { backgroundColor: theme.colors.primary }]}>
-            <TouchableOpacity onPress={() => setShowMeasurementsFor(null)}>
-              <MaterialIcons name="close" size={24} color={theme.colors.white} />
-            </TouchableOpacity>
-            <Text style={[styles.modalTitle, { color: theme.colors.white }]}>
-              {well?.name} - {measurementType === 'pumping' ? I18n.t('pumping') : I18n.t('recovery')}
-            </Text>
-            <TouchableOpacity onPress={() => addMeasurement(showMeasurementsFor, measurementType)}>
-              <MaterialIcons name="add" size={24} color={theme.colors.white} />
-            </TouchableOpacity>
-          </View>
-          
-          <FlatList
-            data={measurements}
-            keyExtractor={(item) => String(item.id)}
-            contentContainerStyle={styles.measurementsList}
-            renderItem={({ item, index }) => (
-              <Surface style={[styles.measurementItem, { backgroundColor: theme.colors.surface }]}>
-                <View style={styles.measurementHeader}>
-                  <Text style={[styles.measurementNumber, { color: theme.colors.text }]}>
-                    Измерение {index + 1}
-                  </Text>
-                  {measurements.length > 1 && (
-                    <TouchableOpacity 
-                      onPress={() => deleteMeasurement(showMeasurementsFor, measurementType, item.id)}
-                    >
-                      <MaterialIcons name="delete" size={20} color={theme.colors.error} />
-                    </TouchableOpacity>
-                  )}
-                </View>
-                
-                <View style={styles.measurementInputs}>
-                  <View style={styles.measurementField}>
-                    <Text style={[styles.fieldLabel, { color: theme.colors.textSecondary }]}>Время</Text>
-                    <TextInput
-                      style={[styles.measurementInput, { 
-                        borderColor: theme.colors.border,
-                        backgroundColor: theme.colors.background,
-                        color: theme.colors.text 
-                      }]}
-                      value={item.time}
-                      onChangeText={(value) => updateMeasurement(showMeasurementsFor, measurementType, item.id, 'time', value)}
-                      placeholder="0"
-                      keyboardType="numeric"
-                    />
-                    <TouchableOpacity onPress={() => toggleTimeUnit(showMeasurementsFor, measurementType, item.id)} style={{ marginTop: 6 }}>
-                      <Text style={{ color: theme.colors.primary }}>{I18n.t("timeUnit")}: {item.timeUnit || 'мин'}</Text>
-                    </TouchableOpacity>
-                  </View>
-                  
-                  <View style={styles.measurementField}>
-                    <Text style={[styles.fieldLabel, { color: theme.colors.textSecondary }]}>Понижение (м)</Text>
-                    <TextInput
-                      style={[styles.measurementInput, { 
-                        borderColor: theme.colors.border,
-                        backgroundColor: theme.colors.background,
-                        color: theme.colors.text 
-                      }]}
-                      value={item.drawdown}
-                      onChangeText={(value) => updateMeasurement(showMeasurementsFor, measurementType, item.id, 'drawdown', value)}
-                      placeholder="0.0"
-                      keyboardType="numeric"
-                    />
-                  </View>
-                </View>
 
-                {/* Разделитель с кнопкой вставки */}
-                <View style={{ alignItems: 'center', marginTop: 8 }}>
-                  <TouchableOpacity onPress={() => addMeasurement(showMeasurementsFor, measurementType, item.id)} style={{ paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: theme.colors.surface }}>
-                    <Text style={{ color: theme.colors.primary }}>{I18n.t("insertMeasurement")}</Text>
-                  </TouchableOpacity>
-                </View>
-              </Surface>
-            )}
-          />
-        </View>
-      </Modal>
-    );
-  };
 
   // Шаг 4: Расстояния
   const renderDistances = () => (
@@ -1118,29 +1101,32 @@ export default function NewWizard({ navigation, route }) {
 
   const renderStepContent = () => {
     switch (currentStep) {
-      case STEPS.BASIC_PARAMETERS:
+      case WIZARD_STEPS.BASIC_PARAMETERS:
         return renderBasicParameters();
-      case STEPS.PROCESSING_SETUP:
+      case WIZARD_STEPS.PROCESSING_SETUP:
         return renderProcessingSetup();
-      case STEPS.OBSERVATION_JOURNAL:
+      case WIZARD_STEPS.OBSERVATION_JOURNAL:
         return renderObservationJournal();
-      case STEPS.DISTANCES:
-        return renderDistances();
       default:
         return renderBasicParameters();
     }
   };
 
-  const handleBack = () => {
-    if (currentStep > STEPS.BASIC_PARAMETERS) {
+  const handleBack = useCallback(() => {
+    // Если открыты модальные окна, НЕ обрабатываем навигацию назад
+    if (showDateTimeModal || showFlowRateUnits || showUnifiedMeasurements || showSingleWellMeasurements) {
+      return;
+    }
+    
+    if (currentStep > WIZARD_STEPS.BASIC_PARAMETERS) {
       prevStep();
     } else {
       navigation.goBack();
     }
-  };
+  }, [currentStep, prevStep, navigation, showDateTimeModal, showFlowRateUnits, showUnifiedMeasurements, showSingleWellMeasurements]);
 
-  const handleNext = async () => {
-    if (currentStep < STEPS.DISTANCES) {
+  const handleNext = useCallback(async () => {
+    if (currentStep < WIZARD_STEPS.OBSERVATION_JOURNAL) {
       nextStep();
     } else {
       // Завершение мастера - создание или обновление журнала
@@ -1250,36 +1236,213 @@ export default function NewWizard({ navigation, route }) {
         }
       }
     }
-  };
+  }, [currentStep, nextStep, validateStep, route, wizardData, navigation]);
 
-  const getBackButtonText = () => {
-    if (currentStep === STEPS.BASIC_PARAMETERS) {
-      return 'Назад';
+  const getBackButtonText = useCallback(() => {
+    if (currentStep === WIZARD_STEPS.BASIC_PARAMETERS) {
+      return I18n.t('back');
     }
-    return 'Предыдущий';
-  };
+    return I18n.t('previous');
+  }, [currentStep]);
 
-  const getNextButtonText = () => {
+  const getNextButtonText = useCallback(() => {
     const isEditing = route?.params?.isEditing || false;
-    if (currentStep === STEPS.DISTANCES) {
-      return isEditing ? 'Сохранить изменения' : 'Создать журнал';
+    if (currentStep === WIZARD_STEPS.OBSERVATION_JOURNAL) {
+      return isEditing ? I18n.t('saveChanges') : I18n.t('createJournal');
     }
-    return 'Далее';
+    return I18n.t('next');
+  }, [currentStep, route]);
+
+  // Кастомный компонент ввода даты/времени для Android
+  const CustomDateTimeInput = ({ type, date, onDateChange }) => {
+    const [dateText, setDateText] = useState('');
+    const [timeText, setTimeText] = useState('');
+    
+    useEffect(() => {
+      if (date) {
+        setDateText(date.toLocaleDateString('ru-RU'));
+        setTimeText(date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }));
+      }
+    }, [date]);
+    
+    const handleDateTextChange = (text) => {
+      setDateText(text);
+      // НЕ вызываем onDateChange автоматически - пользователь должен сам подтвердить
+    };
+    
+    const handleTimeTextChange = (text) => {
+      setTimeText(text);
+      // НЕ вызываем onDateChange автоматически - пользователь должен сам подтвердить
+    };
+    
+    const handleConfirmDateTime = () => {
+      // Валидация и сохранение только при нажатии кнопки подтверждения
+      const datePattern = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/;
+      const timePattern = /^(\d{1,2}):(\d{1,2})$/;
+      
+      const dateMatch = dateText.match(datePattern);
+      const timeMatch = timeText.match(timePattern);
+      
+      if (dateMatch && timeMatch) {
+        const [, day, month, year] = dateMatch;
+        const [, hours, minutes] = timeMatch;
+        
+        const dayNum = parseInt(day);
+        const monthNum = parseInt(month);
+        const yearNum = parseInt(year);
+        const hoursNum = parseInt(hours);
+        const minutesNum = parseInt(minutes);
+        
+        if (dayNum >= 1 && dayNum <= 31 && monthNum >= 1 && monthNum <= 12 && 
+            yearNum >= 1900 && yearNum <= 2100 && hoursNum >= 0 && hoursNum <= 23 && 
+            minutesNum >= 0 && minutesNum <= 59) {
+          
+          const newDate = new Date();
+          newDate.setDate(dayNum);
+          newDate.setMonth(monthNum - 1);
+          newDate.setFullYear(yearNum);
+          newDate.setHours(hoursNum);
+          newDate.setMinutes(minutesNum);
+          newDate.setSeconds(0);
+          
+          if (!isNaN(newDate.getTime())) {
+            onDateChange(newDate);
+            setShowDateTimeModal(false);
+            setCurrentEditingDateTime(null);
+          }
+        }
+      }
+    };
+
+    return (
+      <Modal
+        visible={showDateTimeModal && currentEditingDateTime === type}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        transparent={false}
+        statusBarTranslucent={Platform.OS === 'android'}
+        onRequestClose={() => {
+          setShowDateTimeModal(false);
+          setCurrentEditingDateTime(null);
+          // НЕ вызываем navigation - остаемся в визарде
+        }}
+      >
+        <View style={[styles.modalContainer, { 
+          backgroundColor: theme.colors.background,
+          ...Platform.select({
+            android: {
+              paddingTop: 0,
+              height: '100%',
+              width: '100%',
+            },
+            ios: {}
+          })
+        }]}>
+          {Platform.OS === 'android' && <StatusBar backgroundColor={theme.colors.primary} barStyle="light-content" />}
+          <View style={[styles.modalHeader, { 
+            backgroundColor: theme.colors.primary,
+            ...Platform.select({
+              android: {
+                paddingTop: StatusBar.currentHeight + 10,
+                elevation: 4,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.25,
+                shadowRadius: 4,
+              },
+              ios: {
+                paddingTop: 50,
+              }
+            })
+          }]}>
+            <TouchableOpacity onPress={() => {
+              setShowDateTimeModal(false);
+              setCurrentEditingDateTime(null);
+              // НЕ вызываем navigation - остаемся в визарде
+            }}>
+              <MaterialIcons name="close" size={24} color={theme.colors.white} />
+            </TouchableOpacity>
+            <Text style={[styles.modalTitle, { color: theme.colors.white }]}>
+              Ввод даты и времени
+            </Text>
+            <TouchableOpacity onPress={handleConfirmDateTime}>
+              <MaterialIcons name="check" size={24} color={theme.colors.white} />
+            </TouchableOpacity>
+          </View>
+          
+          <View style={[styles.dateTimeInputContainer, { backgroundColor: theme.colors.background }]}>
+            <Text style={[styles.inputLabel, { color: theme.colors.onSurface }]}>
+              Дата (дд.мм.гггг):
+            </Text>
+            <TextInput
+              style={[styles.textInput, { 
+                borderColor: theme.colors.outline,
+                backgroundColor: theme.colors.surface,
+                color: theme.colors.onSurface 
+              }]}
+              value={dateText}
+              onChangeText={handleDateTextChange}
+
+              placeholder="01.01.2024"
+              placeholderTextColor={theme.colors.onSurfaceVariant}
+              keyboardType="numeric"
+              returnKeyType="next"
+            />
+            
+            <Text style={[styles.inputLabel, { color: theme.colors.onSurface, marginTop: 20 }]}>
+              Время (чч:мм):
+            </Text>
+            <TextInput
+              style={[styles.textInput, { 
+                borderColor: theme.colors.outline,
+                backgroundColor: theme.colors.surface,
+                color: theme.colors.onSurface 
+              }]}
+              value={timeText}
+              onChangeText={handleTimeTextChange}
+
+              placeholder="12:00"
+              placeholderTextColor={theme.colors.onSurfaceVariant}
+              keyboardType="numeric"
+              returnKeyType="done"
+            />
+            
+            <View style={styles.helpTextContainer}>
+              <Text style={[styles.helpText, { color: theme.colors.onSurfaceVariant }]}>
+                Формат даты: ДД.ММ.ГГГГ (например: 15.03.2024)
+              </Text>
+              <Text style={[styles.helpText, { color: theme.colors.onSurfaceVariant }]}>
+                Формат времени: ЧЧ:ММ (например: 14:30)
+              </Text>
+            </View>
+            
+            <TouchableOpacity
+              style={[styles.confirmButton, { 
+                backgroundColor: theme.colors.primary,
+                marginTop: 30 
+              }]}
+              onPress={handleConfirmDateTime}
+            >
+              <MaterialIcons name="check" size={20} color={theme.colors.white} />
+              <Text style={[styles.confirmButtonText, { color: theme.colors.white }]}>
+                Подтвердить
+              </Text>
+            </TouchableOpacity>
+          </View>
+          
+          {/* Заполнитель для покрытия всей нижней области */}
+          <View style={{ 
+            flex: 1, 
+            backgroundColor: theme.colors.background,
+            minHeight: Platform.OS === 'android' ? 150 : 100
+          }} />
+        </View>
+      </Modal>
+    );
   };
 
   const getCurrentTitle = () => {
     return STEP_TITLES[currentStep];
-  };
-
-  const getCurrentSubtitle = () => {
-    const isEditing = route?.params?.isEditing || false;
-    if (isEditing) {
-      return `Редактирование проекта: ${route?.params?.projectName || 'Неизвестный проект'}`;
-    } else if (activeProject) {
-      return `${I18n.t('project')}: ${activeProject.name}`;
-    } else {
-      return I18n.t('newProject');
-    }
   };
 
   // Модальное окно для выбора единиц расхода
@@ -1287,12 +1450,46 @@ export default function NewWizard({ navigation, route }) {
     <Modal
       visible={showFlowRateUnits}
       animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={() => setShowFlowRateUnits(false)}
+      presentationStyle="fullScreen"
+      onRequestClose={() => {
+        setShowFlowRateUnits(false);
+        // НЕ вызываем navigation - остаемся в визарде
+      }}
+      transparent={false}
+      statusBarTranslucent={Platform.OS === 'android'}
     >
-      <View style={[styles.modalContainer, { backgroundColor: theme.colors.background }]}>
-        <View style={[styles.modalHeader, { backgroundColor: theme.colors.primary }]}>
-          <TouchableOpacity onPress={() => setShowFlowRateUnits(false)}>
+      <View style={[styles.modalContainer, { 
+        backgroundColor: theme.colors.background,
+        ...Platform.select({
+          android: {
+            paddingTop: 0,
+            height: '100%',
+            width: '100%',
+          },
+          ios: {}
+        })
+      }]}>
+        {Platform.OS === 'android' && <StatusBar backgroundColor={theme.colors.primary} barStyle="light-content" />}
+        <View style={[styles.modalHeader, { 
+          backgroundColor: theme.colors.primary,
+          ...Platform.select({
+            android: {
+              paddingTop: StatusBar.currentHeight + 10,
+              elevation: 4,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.25,
+              shadowRadius: 4,
+            },
+            ios: {
+              paddingTop: 50,
+            }
+          })
+        }]}>
+          <TouchableOpacity onPress={() => {
+            setShowFlowRateUnits(false);
+            // НЕ вызываем navigation - остаемся в визарде
+          }}>
             <MaterialIcons name="close" size={24} color={theme.colors.white} />
           </TouchableOpacity>
           <Text style={[styles.modalTitle, { color: theme.colors.white }]}>
@@ -1302,7 +1499,7 @@ export default function NewWizard({ navigation, route }) {
         </View>
         
         <ScrollView style={styles.unitsContent}>
-          {flowRateUnits.map((unit) => (
+          {FLOW_RATE_UNITS.map((unit) => (
             <TouchableOpacity
               key={unit}
               style={[
@@ -1332,6 +1529,12 @@ export default function NewWizard({ navigation, route }) {
             </TouchableOpacity>
           ))}
         </ScrollView>
+        
+        {/* Заполнитель для покрытия всей нижней области */}
+        <View style={{ 
+          backgroundColor: theme.colors.background,
+          minHeight: Platform.OS === 'android' ? 100 : 50
+        }} />
       </View>
     </Modal>
   );
@@ -1369,11 +1572,10 @@ export default function NewWizard({ navigation, route }) {
           ))}
         </View>
         <Text style={[styles.stepText, { color: theme.colors.text }]}>{getCurrentTitle()}</Text>
-        <Text style={[styles.stepSubtext, { color: theme.colors.textSecondary }]}>{getCurrentSubtitle()}</Text>
       </Surface>
 
       {/* Content */}
-      <View style={styles.content}>
+      <View style={{height: '100%'}}>
         {renderStepContent()}
       </View>
 
@@ -1396,51 +1598,94 @@ export default function NewWizard({ navigation, route }) {
         </TouchableOpacity>
       </View>
 
-      {/* Measurements Modal */}
-      {renderMeasurementsModal()}
+      {/* Единое модальное окно измерений */}
+      <UnifiedMeasurementsModal
+        visible={showUnifiedMeasurements}
+        onClose={() => setShowUnifiedMeasurements(false)}
+        wizardData={wizardData}
+        onUpdateMeasurement={updateMeasurement}
+        onAddMeasurement={addMeasurement}
+        onDeleteMeasurement={deleteMeasurement}
+      />
 
-      {/* Date Picker Modal */}
-      {showDatePicker && (
-        Platform.OS === 'android' ? (
-          <DateTimePicker
-            value={datePickerType === 'pumping' ? wizardData.pumpingStartDate : wizardData.recoveryStartDate}
-            mode="datetime"
-            display="default"
-            onChange={(event, selectedDate) => {
-              setShowDatePicker(false);
-              if (selectedDate) {
-                updateData(datePickerType === 'pumping' ? 'pumpingStartDate' : 'recoveryStartDate', selectedDate);
-              }
-            }}
+      {/* Модальное окно измерений одной скважины */}
+      {selectedWellForMeasurements && (
+        <SingleWellMeasurementsModal
+          visible={showSingleWellMeasurements}
+          onClose={closeSingleWellMeasurements}
+          wellId={selectedWellForMeasurements.id}
+          wellName={selectedWellForMeasurements.name}
+          wizardData={wizardData}
+          onUpdateMeasurement={updateMeasurement}
+          onAddMeasurement={addMeasurement}
+          onDeleteMeasurement={deleteMeasurement}
+        />
+      )}
+
+      {/* Кастомные компоненты ввода даты/времени для Android */}
+      {Platform.OS === 'android' && (
+        <>
+          <CustomDateTimeInput
+            type="pumping"
+            date={wizardData.pumpingStartDate}
+            onDateChange={(date) => updateData('pumpingStartDate', date)}
           />
-        ) : (
-          <Modal visible={showDatePicker} animationType="slide" presentationStyle="pageSheet">
-            <View style={[styles.modalContainer, { backgroundColor: theme.colors.background }]}>
-              <View style={[styles.modalHeader, { backgroundColor: theme.colors.primary }]}>
-                <TouchableOpacity onPress={() => setShowDatePicker(false)}>
-                  <MaterialIcons name="close" size={24} color={theme.colors.white} />
-                </TouchableOpacity>
-                <Text style={[styles.modalTitle, { color: theme.colors.white }]}>
-                  {I18n.t("dateTimeSelection")}
-                </Text>
-                <View style={{ width: 24 }} />
-              </View>
-              
-              <View style={styles.datePickerContainer}>
-                <DateTimePicker
-                  value={datePickerType === 'pumping' ? wizardData.pumpingStartDate : wizardData.recoveryStartDate}
-                  mode="datetime"
-                  display="spinner"
-                  onChange={(event, selectedDate) => {
-                    if (selectedDate) {
+          <CustomDateTimeInput
+            type="recovery"
+            date={wizardData.recoveryStartDate}
+            onDateChange={(date) => updateData('recoveryStartDate', date)}
+          />
+        </>
+      )}
+
+      {/* DateTimePicker только для iOS */}
+      {Platform.OS === 'ios' && showDatePicker && (
+        <Modal 
+          visible={showDatePicker} 
+          animationType="slide" 
+          presentationStyle="fullScreen" 
+          transparent={false}
+          statusBarTranslucent={false}
+        >
+          <View style={[styles.modalContainer, { backgroundColor: theme.colors.background }]}>
+            <View style={[styles.modalHeader, { 
+              backgroundColor: theme.colors.primary,
+              paddingTop: 50
+            }]}>
+              <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                <MaterialIcons name="close" size={24} color={theme.colors.white} />
+              </TouchableOpacity>
+              <Text style={[styles.modalTitle, { color: theme.colors.white }]}>
+                {I18n.t("dateTimeSelection")}
+              </Text>
+              <View style={{ width: 24 }} />
+            </View>
+            
+            <View style={styles.datePickerContainer}>
+              <DateTimePicker
+                value={datePickerType === 'pumping' ? wizardData.pumpingStartDate : wizardData.recoveryStartDate}
+                mode="datetime"
+                display="spinner"
+                onChange={(event, selectedDate) => {
+                  try {
+                    if (selectedDate && selectedDate instanceof Date && !isNaN(selectedDate.getTime())) {
                       updateData(datePickerType === 'pumping' ? 'pumpingStartDate' : 'recoveryStartDate', selectedDate);
                     }
-                  }}
-                />
-              </View>
+                  } catch (error) {
+                    console.error('DateTimePicker iOS modal error:', error);
+                  }
+                }}
+              />
             </View>
-          </Modal>
-        )
+            
+            {/* Заполнитель для покрытия всей нижней области */}
+            <View style={{ 
+              backgroundColor: theme.colors.background,
+              flex: 1,
+              minHeight: 100
+            }} />
+          </View>
+        </Modal>
       )}
 
       {/* Flow Rate Units Modal */}
@@ -1515,12 +1760,14 @@ const styles = StyleSheet.create({
   },
   stepContainer: {
     flex: 1,
+    marginHorizontal: 2,
+    marginBottom: '30%',
   },
   cardContent: {
     padding: 16,
   },
   cardTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 16,
   },
@@ -1542,13 +1789,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   radioGroup: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     gap: 20,
+    width: '100%',
     marginTop: 8,
   },
   radioOption: {
     flexDirection: 'row',
     alignItems: 'center',
+    
     gap: 8,
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -1888,6 +2137,7 @@ const styles = StyleSheet.create({
   },
   wellButtons: {
     flexDirection: 'row',
+
     gap: 8,
   },
   wellButton: {
@@ -1927,8 +2177,65 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   parameterCard: {
+    marginTop: 10,
     marginBottom: 16,
     borderRadius: 12,
     elevation: 2,
+  },
+  reviewSection: {
+    marginBottom: 16,
+  },
+  reviewSectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  reviewItem: {
+    fontSize: 14,
+    marginBottom: 4,
+    paddingLeft: 8,
+  },
+  reviewWell: {
+    marginBottom: 12,
+    paddingLeft: 8,
+  },
+  reviewWellName: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  distanceInputGroup: {
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  dateTimeInputContainer: {
+    padding: 20,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: '100%',
+  },
+  helpTextContainer: {
+    marginTop: 30,
+    padding: 16,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  helpText: {
+    fontSize: 13,
+    marginBottom: 4,
+    lineHeight: 18,
+  },
+  confirmButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 12,
+    gap: 8,
+  },
+  confirmButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 }); 

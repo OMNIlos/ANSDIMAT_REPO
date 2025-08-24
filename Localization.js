@@ -106,6 +106,9 @@ const i18n = new I18n({
     observationWells: "Наблюдательные скважины",
     measurements: "Измерения",
     distances: "Расстояния",
+    dragToMove: "Перетащите для перемещения",
+    pinchToZoom: "Масштабируйте пальцами",
+    tapToSelect: "Нажмите для выбора",
     addWell: "Добавить скважину",
     deleteWell: "Удалить скважину",
     editWell: "Редактировать скважину",
@@ -535,6 +538,10 @@ const i18n = new I18n({
     chartSavedSuccess: "График сохранён в галерею!",
     chartSaveError: "Не удалось сохранить график",
     saveChartToGallery: "Сохранить график (PNG)",
+    scale: "Масштаб",
+    move: "Перемещение",
+    dragging: "Перетаскивание",
+    chartInstruction: "Используйте жесты для масштабирования и перемещения графика",
     
     // Дополнительные переводы для DataProcessing
     pumpingTestJournals: "Журналы откачек",
@@ -1102,6 +1109,10 @@ const i18n = new I18n({
     chartSavedSuccess: "Chart saved to gallery!",
     chartSaveError: "Could not save chart",
     saveChartToGallery: "Save chart (PNG)",
+    scale: "Scale",
+    move: "Move",
+    dragging: "Dragging",
+    chartInstruction: "Use gestures to zoom and pan the chart",
     
     // Дополнительные переводы для DataProcessing
     pumpingTestJournals: "Pumping Test Journals",
@@ -1124,6 +1135,13 @@ const i18n = new I18n({
     unitMetersSqrt: "m¹/²",
     unitMetersPowerN: "m^n",
     unitDimensionless: "-",
+
+    // PumpingTestProcessing - Chart
+    dragToMove: "Drag to move",
+    pinchToZoom: "Pinch to zoom",
+    tapToSelect: "Tap to select",
+    zooming: "Zooming",
+    dragging: "Dragging",
 
     // Common
     save: "Save",

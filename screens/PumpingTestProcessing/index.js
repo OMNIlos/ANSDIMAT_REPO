@@ -231,19 +231,45 @@ function MainScreen({ navigation }) {
 
   const handleImportProject = async () => {
     try {
-      const res = await DocumentPicker.getDocumentAsync({
-        type: 'application/json',
-      });
+      // Открываем выбор файла с таймаутом для предотвращения зависаний
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout')), 10000)
+      );
+      
+      const res = await Promise.race([
+        DocumentPicker.getDocumentAsync({
+          type: 'application/json',
+          copyToCacheDirectory: true, // Важно для больших файлов
+        }),
+        timeoutPromise
+      ]);
       
       if (res.canceled || !res.assets || !res.assets[0]) return;
       
       const fileUri = res.assets[0].uri;
-      const content = await FileSystem.readAsStringAsync(fileUri);
       
+      // Добавляем обработку ошибок и таймаут для чтения файла
+      const readPromise = FileSystem.readAsStringAsync(fileUri, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+      
+      const content = await Promise.race([
+        readPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Read timeout')), 5000))
+      ]);
+      
+      // Валидируем файл с размером
+      if (!content || content.length === 0) {
+        Alert.alert(I18n.t("error"), "Файл пуст или не может быть прочитан");
+        return;
+      }
+      
+      // Для больших файлов JSON обрабатываем частями
       let imported;
       try {
         imported = JSON.parse(content);
       } catch (e) {
+        console.error('JSON parse error:', e);
         Alert.alert(I18n.t("error"), I18n.t("invalidJSONFormat"));
         return;
       }
@@ -253,29 +279,91 @@ function MainScreen({ navigation }) {
         return;
       }
       
+      // Проверяем, нет ли в импортированном проекте слишком больших данных
+      const cleanImported = {...imported};
+      
+      // Ограничиваем размер некоторых больших полей, если они есть
+      if (cleanImported.measurements && typeof cleanImported.measurements === 'object') {
+        // Убедимся, что нет повреждений в данных измерений
+        Object.keys(cleanImported.measurements).forEach(wellId => {
+          const well = cleanImported.measurements[wellId];
+          if (typeof well !== 'object') {
+            cleanImported.measurements[wellId] = { 
+              pumping: [], recovery: []
+            };
+          }
+          
+          // Проверим наличие ключей и их правильный формат
+          ['pumping', 'recovery'].forEach(type => {
+            if (!Array.isArray(well[type])) {
+              well[type] = [];
+            }
+            
+            // Проверяем и корректируем каждое измерение
+            well[type] = well[type].map(m => {
+              if (!m || typeof m !== 'object') return { 
+                id: Date.now() + Math.random(), 
+                time: '', 
+                timeUnit: 'мин', 
+                drawdown: '', 
+                date: new Date() 
+              };
+              
+              // Добавим проверку даты
+              if (m.date && typeof m.date === 'string') {
+                try {
+                  const parsedDate = new Date(m.date);
+                  if (isNaN(parsedDate.getTime())) {
+                    m.date = new Date();
+                  } else {
+                    m.date = parsedDate;
+                  }
+                } catch (e) {
+                  m.date = new Date();
+                }
+              } else if (!m.date) {
+                m.date = new Date();
+              }
+              
+              return m;
+            });
+          });
+        });
+      }
+      
       // Загружаем существующие проекты
       const projectsData = await AsyncStorage.getItem('pumping_projects');
       let projects = projectsData ? JSON.parse(projectsData) : [];
+      if (!Array.isArray(projects)) projects = []; // Защита от ошибок в AsyncStorage
       
       // Проверяем, не существует ли уже проект с таким именем
-      const existingProject = projects.find(p => p.name === imported.name);
+      const existingProject = projects.find(p => p.name === cleanImported.name);
       if (existingProject) {
         Alert.alert(
           I18n.t("projectAlreadyExists"), 
-          I18n.t("projectAlreadyExistsDescription", { name: imported.name }),
+          I18n.t("projectAlreadyExistsDescription", { name: cleanImported.name }),
           [
             { text: I18n.t("cancel"), style: 'cancel' },
             {
               text: I18n.t("replace"),
               style: 'destructive',
               onPress: async () => {
-                const updatedProjects = projects.map(p => 
-                  String(p.id) === String(existingProject.id) ? { ...imported, id: existingProject.id, createdAt: existingProject.createdAt } : p
-                );
-                await AsyncStorage.setItem('pumping_projects', JSON.stringify(updatedProjects));
-                await AsyncStorage.setItem('pumping_active_project_id', String(existingProject.id));
-                Alert.alert(I18n.t("success"), I18n.t("projectUpdated"));
-                loadRecentProjects();
+                try {
+                  const updatedProjects = projects.map(p => 
+                    String(p.id) === String(existingProject.id) ? { 
+                      ...cleanImported, 
+                      id: existingProject.id, 
+                      createdAt: existingProject.createdAt 
+                    } : p
+                  );
+                  await AsyncStorage.setItem('pumping_projects', JSON.stringify(updatedProjects));
+                  await AsyncStorage.setItem('pumping_active_project_id', String(existingProject.id));
+                  Alert.alert(I18n.t("success"), I18n.t("projectUpdated"));
+                  loadRecentProjects();
+                } catch (err) {
+                  console.error('Error replacing project:', err);
+                  Alert.alert('Ошибка', 'Не удалось заменить проект');
+                }
               }
             }
           ]
@@ -285,12 +373,13 @@ function MainScreen({ navigation }) {
       
       // Добавляем новый проект
       const newProject = {
-        ...imported,
+        ...cleanImported,
         id: Date.now().toString(),
         createdAt: Date.now(),
         favorite: false,
       };
       
+      // Добавляем с проверкой размера и структуры
       projects.unshift(newProject);
       await AsyncStorage.setItem('pumping_projects', JSON.stringify(projects));
       
@@ -301,7 +390,7 @@ function MainScreen({ navigation }) {
       loadRecentProjects();
     } catch (e) {
       console.error('Import error:', e);
-      Alert.alert('Ошибка', 'Не удалось импортировать файл');
+      Alert.alert('Ошибка', 'Не удалось импортировать файл. ' + (e.message || ''));
     }
   };
 
