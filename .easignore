@@ -1,0 +1,50 @@
+# Что НЕ уезжает на сборочный сервер.
+#
+# Внимание: при наличии этого файла EAS перестаёт смотреть в .gitignore и
+# руководствуется только им. Поэтому здесь продублировано всё оттуда, а ниже
+# добавлено то, что в git лежит, но сборке не нужно.
+
+# ── из .gitignore
+node_modules/
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+android/
+ios/
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+.metro-health-check*
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.DS_Store
+*.pem
+.env
+.env*.local
+*.tsbuildinfo
+
+# ── исходники презентации и UI-кита: несколько мегабайт SVG и PNG,
+#    которые в приложение не попадают
+presentation/
+
+# ── вложенный проект-прототип, оставшийся от ранних итераций
+ansdimat/
+
+# ── экспортированные макеты
+Artboard*
+3/
+
+# ── документация и серверная часть: в APK ничего из этого не входит
+docs/
+supabase/
+MANUAL.md
+
+# ── тесты
+**/__tests__/
+**/*.test.js

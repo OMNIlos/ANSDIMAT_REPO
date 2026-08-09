@@ -1,413 +1,304 @@
-import React, { useContext } from "react";
-import { View, StyleSheet, ScrollView, Linking, TouchableOpacity, Platform, BackHandler, Alert } from "react-native";
-import { Text, Button, Card, Surface, Chip } from "react-native-paper";
-import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
-import I18n from "../Localization";
-import { LanguageContext } from "../LanguageContext";
-import { useTheme } from "react-native-paper";
+/**
+ * Примеры и видео
+ *
+ * Каталог обучающих материалов АНСДИМАТ: заставка, название, площадка.
+ * Нажатие открывает видео во внешнем приложении или браузере.
+ *
+ * Раньше здесь лежали выдуманные карточки со штриховкой вместо превью и
+ * несуществующей длительностью — нажатие показывало «Воспроизведение» и
+ * ничего не открывало. Теперь список берётся из каталога сайта.
+ *
+ * @param {Object} navigation - объект навигации
+ */
 
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  StatusBar,
+  useWindowDimensions,
+  Image,
+  Linking,
+} from 'react-native';
+import { useTheme } from 'react-native-paper';
+import { MaterialIcons } from '@expo/vector-icons';
+import I18n from '../Localization';
+import {
+  STUDY_MATERIALS,
+  VIDEO_CATEGORIES,
+  VIDEO_LESSONS,
+  videoHost,
+} from '../data/videoLessons';
+import AppearIn from '../components/ui/AppearIn';
+import PressableScale from '../components/ui/PressableScale';
+import { spacing, radius, type, elevation, fontFamily, brandHeader } from '../theme';
 
-export default function ExamplesAndVideosScreen({ navigation }) {
-  const theme = useTheme();
-  const { locale } = useContext(LanguageContext);
+const FILTERS = [
+  { key: 'all', labelKey: 'filterAll', fallback: 'Все' },
+  { key: VIDEO_CATEGORIES.PUMPING, labelKey: 'filterPumping', fallback: 'Обработка ОФР' },
+  { key: VIDEO_CATEGORIES.DEWATERING, labelKey: 'filterDewatering', fallback: 'Водопонижение' },
+  { key: VIDEO_CATEGORIES.MODELING, labelKey: 'filterModeling', fallback: 'Моделирование' },
+];
 
-  const handleLinkOpen = (url) => {
-    Linking.openURL(url);
+export default function ExamplesAndVideos() {
+  const { colors } = useTheme();
+  const { width } = useWindowDimensions();
+  const contentMaxWidth = width >= 700 ? 620 : undefined;
+
+  const [filter, setFilter] = useState('all');
+  // Заставки лежат на сайте: без сети показываем подложку вместо битой картинки
+  const [failedThumbs, setFailedThumbs] = useState({});
+
+  const open = (url) => {
+    Linking.openURL(url).catch(() => {});
   };
 
-
-
-  const examples = [
-    {
-      id: 1,
-      title: I18n.t("pumpTestTitle"),
-      description: I18n.t("pumpTestDescription"),
-      url: "https://ansdimat.com/Ru/video_cases/case_01.shtml",
-      icon: "water-pump",
-              difficulty: I18n.t("difficultyMedium"),
-      duration: "15 мин"
-    },
-    {
-      id: 2,
-      title: I18n.t("pitModelTitle"),
-      description: I18n.t("pitModelDescription"),
-      url: "https://ansdimat.com/Ru/video_cases/case_02.shtml",
-      icon: "excavator",
-              difficulty: I18n.t("difficultyHard"),
-      duration: "25 мин"
-    }
-  ];
-
-  const videos = [
-    {
-      id: 1,
-      title: I18n.t("video1Title"),
-      url: "https://rutube.ru/video/a86ee3f1bdd6896d95afc1bd8aa13851/",
-      duration: "12:45",
-              category: I18n.t("categoryBasics")
-    },
-    {
-      id: 2,
-      title: I18n.t("video2Title"),
-      url: "https://rutube.ru/video/6107cc6ecaf01a721d30661569f92ac0/",
-      duration: "8:30",
-              category: I18n.t("categorySetup")
-    },
-    {
-      id: 3,
-      title: I18n.t("video3Title"),
-      url: "https://rutube.ru/video/472c734ab749122fd95c4506a05e6d41/",
-      duration: "15:20",
-              category: I18n.t("categoryCalculations")
-    },
-    {
-      id: 4,
-      title: I18n.t("video4Title"),
-      url: "https://rutube.ru/video/2e106a4faaf4f34fa315b5a5ac8b8b2a/",
-      duration: "10:15",
-              category: I18n.t("categoryAnalysis")
-    },
-    {
-      id: 5,
-      title: I18n.t("video5Title"),
-      url: "https://rutube.ru/video/23f1fc0ac55afbec746b9689a30fae0c/",
-      duration: "18:45",
-              category: I18n.t("categoryExport")
-    },
-    {
-      id: 6,
-      title: I18n.t("video6Title"),
-      url: "https://rutube.ru/video/a96c453b0b730de20ac58e0cc097acff/",
-      duration: "13:30",
-              category: I18n.t("categoryCharts")
-    },
-    {
-      id: 7,
-      title: I18n.t("video7Title"),
-      url: "https://rutube.ru/video/a96c453b0b730de20ac58e0cc097acff/",
-      duration: "16:20",
-              category: I18n.t("categoryReports")
-    }
-  ];
-
-  const renderExampleCard = (example) => (
-    <Card key={example.id} style={[styles.exampleCard, { backgroundColor: theme.colors.surface }]}>
-        <Card.Content>
-        <View style={styles.cardHeader}>
-          <View style={[styles.iconContainer, { backgroundColor: theme.colors.primary + '20' }]}>
-            <MaterialCommunityIcons 
-              name={example.icon} 
-              size={32} 
-              color={theme.colors.primary} 
-            />
-          </View>
-          <View style={styles.cardMeta}>
-            <Chip 
-              mode="outlined" 
-              compact 
-              style={[styles.chip, { borderColor: theme.colors.secondary }]}
-              textStyle={{ color: theme.colors.secondary }}
-            >
-              {example.difficulty}
-            </Chip>
-            <View style={styles.durationContainer}>
-              <MaterialIcons name="schedule" size={16} color={theme.colors.textSecondary} />
-              <Text style={[styles.duration, { color: theme.colors.textSecondary }]}>
-                {example.duration}
-              </Text>
-            </View>
-          </View>
-        </View>
-        
-        <Text style={[styles.exampleTitle, { color: theme.colors.text }]}>
-          {example.title}
-        </Text>
-        <Text style={[styles.exampleDescription, { color: theme.colors.textSecondary }]}>
-          {example.description}
-        </Text>
-        
-        <TouchableOpacity
-          style={[styles.detailsButton, { backgroundColor: theme.colors.primary }]}
-          onPress={() => handleLinkOpen(example.url)}
-        >
-          <MaterialIcons name="arrow-forward" size={20} color={theme.colors.white} />
-          <Text style={[styles.buttonText, { color: theme.colors.white }]}>
-            {I18n.t("moreDetails")}
-          </Text>
-        </TouchableOpacity>
-        </Card.Content>
-      </Card>
-  );
-
-  const renderVideoCard = (video) => (
-    <Card key={video.id} style={[styles.videoCard, { backgroundColor: theme.colors.surface }]}>
-        <Card.Content>
-        <View style={styles.videoHeader}>
-          <Surface style={[styles.videoThumbnail, { backgroundColor: theme.colors.background }]}>
-            <MaterialIcons name="play-circle-filled" size={48} color={theme.colors.primary} />
-          </Surface>
-          
-          <View style={styles.videoInfo}>
-            <View style={styles.videoMeta}>
-              <Chip 
-                mode="flat" 
-                compact 
-                style={[styles.categoryChip, { backgroundColor: theme.colors.secondary + '20' }]}
-                textStyle={{ color: theme.colors.secondary, fontSize: 12 }}
-              >
-                {video.category}
-              </Chip>
-              <View style={styles.durationContainer}>
-                <MaterialIcons name="access-time" size={14} color={theme.colors.textSecondary} />
-                <Text style={[styles.videoDuration, { color: theme.colors.textSecondary }]}>
-                  {video.duration}
-                </Text>
-              </View>
-          </View>
-            
-            <Text style={[styles.videoTitle, { color: theme.colors.text }]} numberOfLines={2}>
-              {video.title}
-            </Text>
-          </View>
-        </View>
-        
-        <TouchableOpacity
-          style={[styles.watchButton, { backgroundColor: theme.colors.primary }]}
-          onPress={() => handleLinkOpen(video.url)}
-        >
-          <MaterialIcons name="play-arrow" size={20} color={theme.colors.white} />
-          <Text style={[styles.buttonText, { color: theme.colors.white }]}>
-            {I18n.t("watch")}
-          </Text>
-        </TouchableOpacity>
-        </Card.Content>
-      </Card>
-  );
+  const videos = VIDEO_LESSONS.filter((v) => filter === 'all' || v.category === filter);
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContainer}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Заголовок */}
-        <Surface style={[styles.headerCard, { backgroundColor: theme.colors.surface }]}>
-          <View style={styles.headerContent}>
-            <MaterialCommunityIcons name="school" size={48} color={theme.colors.primary} />
-            <Text style={[styles.mainTitle, { color: theme.colors.primary }]}>
-              {I18n.t("examplesTitle")}
-            </Text>
-            <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
-              Изучайте ANSDIMAT с помощью примеров и видеоуроков
-            </Text>
-          </View>
-        </Surface>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar backgroundColor={brandHeader} barStyle="light-content" />
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+        <View style={[styles.content, contentMaxWidth && { maxWidth: contentMaxWidth }]}>
+          {/* Фильтр по разделам */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filters}
+            style={styles.filtersWrap}
+          >
+            {FILTERS.map((f) => {
+              const active = f.key === filter;
+              return (
+                <TouchableOpacity
+                  key={f.key}
+                  onPress={() => setFilter(f.key)}
+                  style={[
+                    styles.filterChip,
+                    {
+                      backgroundColor: active ? colors.secondary : colors.surface,
+                      borderColor: active ? colors.secondary : colors.border,
+                    },
+                  ]}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                >
+                  <Text
+                    style={[styles.filterText, { color: active ? '#FFFFFF' : colors.textSecondary }]}
+                  >
+                    {I18n.t(f.labelKey, { defaultValue: f.fallback })}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
 
-        {/* Примеры использования */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <MaterialCommunityIcons name="book-open-variant" size={24} color={theme.colors.primary} />
-            <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
-              {I18n.t("usageExamples")}
-            </Text>
-          </View>
-          
-          {examples.map(renderExampleCard)}
-            </View>
+          <Text style={[type.eyebrow, styles.eyebrow, { color: colors.textSecondary }]}>
+            {I18n.t('videoLessons', { defaultValue: 'Видеоуроки' })} · {videos.length}
+          </Text>
 
-        {/* Видеоуроки */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <MaterialCommunityIcons name="video-box" size={24} color={theme.colors.primary} />
-            <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
-              {I18n.t("tutorialVideos")}
-            </Text>
-            </View>
-          
-          <View style={styles.videosGrid}>
-            {videos.map(renderVideoCard)}
-          </View>
-            </View>
+          <View style={styles.videoList}>
+            {videos.map((video, index) => (
+              <AppearIn key={video.id} index={index}>
+              <PressableScale
+                style={[
+                  styles.videoCard,
+                  elevation.card,
+                  { backgroundColor: colors.surface, borderColor: colors.border },
+                ]}
+                onPress={() => open(video.url)}
+                accessibilityRole="link"
+                accessibilityLabel={video.title}
+              >
+                <View style={[styles.thumb, { backgroundColor: colors.surfaceSunken }]}>
+                  {failedThumbs[video.id] ? (
+                    <MaterialIcons name="movie" size={30} color={colors.faint} />
+                  ) : (
+                    <Image
+                      source={{ uri: video.thumb }}
+                      style={StyleSheet.absoluteFill}
+                      resizeMode="cover"
+                      onError={() =>
+                        setFailedThumbs((prev) => ({ ...prev, [video.id]: true }))
+                      }
+                    />
+                  )}
 
-        {/* Нижний отступ */}
-        <View style={{ height: 100 }} />
+                  {/* Затемнение под кнопкой: заставки светлые, белая иконка
+                      на них терялась */}
+                  <View style={styles.scrim} pointerEvents="none" />
+
+                  <View style={styles.playCircle}>
+                    <MaterialIcons name="play-arrow" size={30} color="#FFFFFF" />
+                  </View>
+
+                  <View style={styles.hostBadge}>
+                    <Text style={styles.hostText}>{videoHost(video.url)}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.videoBody}>
+                  <Text style={[styles.videoTitle, { color: colors.text }]}>{video.title}</Text>
+                  <Text style={[styles.videoDesc, { color: colors.textSecondary }]}>
+                    {video.description}
+                  </Text>
+                </View>
+              </PressableScale>
+              </AppearIn>
+            ))}
+          </View>
+
+          <Text style={[type.eyebrow, styles.eyebrow, { color: colors.textSecondary }]}>
+            {I18n.t('studyMaterials', { defaultValue: 'Материалы' })}
+          </Text>
+
+          <View style={styles.materialList}>
+            {STUDY_MATERIALS.map((item) => (
+              <PressableScale
+                key={item.id}
+                style={[
+                  styles.materialCard,
+                  { backgroundColor: colors.surface, borderColor: colors.border },
+                ]}
+                onPress={() => open(item.url)}
+                accessibilityRole="link"
+                accessibilityLabel={item.title}
+              >
+                <View style={[styles.materialIcon, { backgroundColor: colors.primaryWash }]}>
+                  <MaterialIcons name={item.icon} size={20} color={colors.primaryAccent} />
+                </View>
+                <View style={styles.materialText}>
+                  <Text style={[styles.materialTitle, { color: colors.text }]}>{item.title}</Text>
+                  <Text style={[styles.materialDesc, { color: colors.textSecondary }]}>
+                    {item.description}
+                  </Text>
+                </View>
+                <MaterialIcons name="open-in-new" size={18} color={colors.faint} />
+              </PressableScale>
+            ))}
+          </View>
+        </View>
       </ScrollView>
-
-
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContainer: {
-    padding: 16,
-  },
-  headerCard: {
-    marginBottom: 24,
-    borderRadius: 16,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  headerContent: {
+  container: { flex: 1 },
+  scroll: {
+    paddingHorizontal: 18,
+    paddingTop: 20,
+    paddingBottom: 128,
     alignItems: 'center',
-    padding: 24,
   },
-  mainTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginTop: 12,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 16,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-    gap: 8,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  exampleCard: {
-    marginBottom: 16,
-    borderRadius: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  iconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  cardMeta: {
-    flex: 1,
-    alignItems: 'flex-start',
-    justifyContent: 'flex-start',
-  },
-  chip: {
-    height: 28,
-    alignSelf: 'flex-start',
-    marginBottom: 8,
-  },
-  categoryChip: {
-    height: 24,
-    alignSelf: 'flex-start',
-  },
-  durationContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    alignSelf: 'flex-start',
-  },
-  duration: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  videoDuration: {
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  exampleTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    lineHeight: 24,
-  },
-  exampleDescription: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  detailsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
-    gap: 8,
-    alignSelf: 'flex-start',
-  },
-  watchButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    gap: 8,
-    marginTop: 12,
-  },
-  buttonText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  videosGrid: {
-    gap: 12,
-  },
-  videoCard: {
-    borderRadius: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-  },
-  videoHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  videoThumbnail: {
-    width: 80,
-    height: 60,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
+  content: { width: '100%' },
+
+  filtersWrap: { marginHorizontal: -18, marginBottom: 4 },
+  filters: { gap: 8, paddingHorizontal: 18, paddingVertical: 4 },
+  filterChip: {
+    paddingHorizontal: 15,
+    paddingVertical: 9,
+    borderRadius: radius.chip,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
   },
-  videoInfo: {
-    flex: 1,
-  },
-  videoMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  videoTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    lineHeight: 20,
+  filterText: {
+    fontFamily: fontFamily.bold,
+    fontSize: 13,
+    fontWeight: '700',
   },
 
+  eyebrow: {
+    marginTop: spacing.xl,
+    marginBottom: spacing.md,
+    marginLeft: 4,
+  },
+
+  videoList: { gap: spacing.md },
+  videoCard: {
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  thumb: {
+    height: 148,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(20, 7, 14, 0.28)',
+  },
+  playCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: radius.round,
+    backgroundColor: 'rgba(114,0,47,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#72002F',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  hostBadge: {
+    position: 'absolute',
+    right: 10,
+    bottom: 10,
+    backgroundColor: 'rgba(12,10,13,0.78)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  hostText: {
+    fontFamily: fontFamily.monoSemibold,
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  videoBody: { paddingHorizontal: 15, paddingVertical: 13 },
+  videoTitle: {
+    fontFamily: fontFamily.bold,
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  videoDesc: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12.5,
+    marginTop: 3,
+  },
+
+  materialList: { gap: spacing.sm },
+  materialCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 15,
+    paddingVertical: 14,
+  },
+  materialIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  materialText: { flex: 1 },
+  materialTitle: {
+    fontFamily: fontFamily.bold,
+    fontSize: 14.5,
+    fontWeight: '700',
+  },
+  materialDesc: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    marginTop: 1,
+  },
 });

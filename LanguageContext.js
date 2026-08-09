@@ -42,28 +42,14 @@ export const LanguageProvider = ({ children }) => {
    */
   const getSystemLanguage = () => {
     try {
-      // Пробуем получить локаль из expo-localization
-      if (Localization && Localization.locale) {
-        const locale = Localization.locale;
-        
-        // Проверяем, что locale существует и является строкой
-        if (locale && typeof locale === 'string') {
-          const languageCode = locale.split('-')[0]; // Получаем код языка (например, 'ru' из 'ru-RU')
-          
-          // Если язык русский, используем русский, иначе английский
+      const locales = Localization.getLocales();
+      if (Array.isArray(locales) && locales.length > 0) {
+        const languageCode = locales[0]?.languageCode;
+        if (languageCode && typeof languageCode === 'string') {
           return languageCode === 'ru' ? 'ru' : 'en';
         }
       }
-      
-      // Fallback: проверяем доступные локали
-      if (Localization && Localization.locales && Localization.locales.length > 0) {
-        const firstLocale = Localization.locales[0];
-        if (firstLocale && typeof firstLocale === 'string') {
-          const languageCode = firstLocale.split('-')[0];
-          return languageCode === 'ru' ? 'ru' : 'en';
-        }
-      }
-      
+
       console.warn('Could not determine system language, using default');
       return 'en'; // По умолчанию английский
     } catch (error) {
@@ -138,9 +124,28 @@ export const LanguageProvider = ({ children }) => {
     }
   };
 
+  /**
+   * Устанавливает конкретный язык напрямую
+   *
+   * Нужен экрану настроек с сегментами RU/EN, где язык выбирается явно,
+   * а не переключается по кругу.
+   *
+   * @param {'ru'|'en'} newLocale - выбранный язык
+   */
+  const setLanguage = async (newLocale) => {
+    if (newLocale !== 'ru' && newLocale !== 'en') return;
+    setLocale(newLocale);
+    I18n.locale = newLocale;
+    try {
+      await AsyncStorage.setItem('appLocale', newLocale);
+    } catch (error) {
+      console.error('Error saving language preference:', error);
+    }
+  };
+
   // Предоставляем контекст всем дочерним компонентам
   return (
-    <LanguageContext.Provider value={{ locale, toggleLanguage, isLoading }}>
+    <LanguageContext.Provider value={{ locale, toggleLanguage, setLanguage, isLoading }}>
       {children}
     </LanguageContext.Provider>
   );

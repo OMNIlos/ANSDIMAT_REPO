@@ -3,12 +3,9 @@
     "name": "Ansdimat",
     "slug": "Ansdimat",
     "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/app_icon.png",
-    "userInterfaceStyle": "light",
-    "splash": {
-      "backgroundColor": "#FFFFFF"
-    },
+    "orientation": "default",
+    "icon": "./assets/icon-app.png",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.omnion.Ansdimat",
@@ -19,7 +16,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#FFFFFF"
+        "foregroundImage": "./assets/icon-adaptive.png",
+        "backgroundColor": "#72002F"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.omnion.Ansdimat",
@@ -29,9 +27,22 @@
       ]
     },
     "web": {
+      "bundler": "metro",
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-logo.png",
+          "imageWidth": 132,
+          "resizeMode": "contain",
+          "backgroundColor": "#72002F",
+          "dark": {
+            "backgroundColor": "#72002F"
+          }
+        }
+      ],
       [
         "expo-media-library",
         {
@@ -55,13 +66,15 @@
         }
       ],
       "expo-localization",
-      "expo-font"
+      "expo-font",
+      "expo-sqlite"
     ],
     "extra": {
       "eas": {
         "projectId": "ccd8e4bf-0524-44c2-b5f4-f3cd1aa817bf"
       }
     },
-    "owner": "omnion"
+    "owner": "omnion",
+    "scheme": "ansdimat"
   }
 }

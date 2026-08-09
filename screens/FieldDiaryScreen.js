@@ -1,1074 +1,641 @@
-import React, { useState, useEffect, useRef } from 'react';
+/**
+ * Полевой дневник — точки наблюдения с геопривязкой
+ *
+ * Тап по карте ставит точку в выбранном месте, кнопка внизу — в текущей
+ * геопозиции. Оба пути ведут к одной записи в базе: в поле удобнее ставить
+ * точку пальцем по карте, а при работе на самой скважине — по координатам.
+ *
+ * Координаты показываются моноширинным шрифтом: цифры выравниваются
+ * по разрядам, и подмену знака в списке видно сразу.
+ */
+
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
-  Alert,
-  TextInput,
   ScrollView,
-  Dimensions,
-  StatusBar,
-  Platform,
-  Share,
-  Linking,
+  TouchableOpacity,
+  TextInput,
+  ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native';
-import {
-  useTheme,
-  Card,
-  Title,
-  Paragraph,
-  Button,
-  IconButton,
-  Dialog,
-  TextInput as PaperTextInput,
-  Chip,
-  Menu,
-  Divider,
-  Snackbar,
-} from 'react-native-paper';
-import * as Location from 'expo-location';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
+import { useTheme } from 'react-native-paper';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import FieldDiaryStats from '../components/FieldDiaryStats';
+import { useFocusEffect } from '@react-navigation/native';
+import * as Location from 'expo-location';
+import I18n from '../Localization';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import FieldMap from '../components/FieldMap';
+import { MENU_BAR_HEIGHT } from '../components/BottomMenuBar';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
+import { listPoints, createPoint, deletePoint, getPointStats } from '../db/points';
+import { POINT_TYPES } from '../db/schema';
+import { spacing, radius, type, elevation, pointTypeColors, numericAt } from '../theme';
 
+const TYPE_OPTIONS = [
+  { key: POINT_TYPES.WELL, labelKey: 'pointTypeWell' },
+  { key: POINT_TYPES.SPRING, labelKey: 'pointTypeSpring' },
+  { key: POINT_TYPES.PIT, labelKey: 'pointTypePit' },
+  { key: POINT_TYPES.OBSERVATION, labelKey: 'pointTypeObservationPoint' },
+];
 
-const { width, height } = Dimensions.get('window');
+/**
+ * Форматирует координату с фиксированной точностью
+ *
+ * Четыре знака после запятой — это около 10 м на местности, чего достаточно
+ * для привязки точки наблюдения.
+ *
+ * @param {number} value - координата
+ * @returns {string} отформатированная координата
+ */
+function formatCoordinate(value) {
+  return Number(value).toFixed(4);
+}
 
-export default function FieldDiaryScreen({ navigation }) {
+/**
+ * Форматирует время записи
+ *
+ * @param {number} timestamp - метка времени
+ * @returns {string} время в формате ЧЧ:ММ
+ */
+function formatTime(timestamp) {
+  const date = new Date(timestamp);
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+export default function FieldDiaryScreen() {
   const theme = useTheme();
-  
-  const [location, setLocation] = useState(null);
-  const [errorMsg, setErrorMsg] = useState(null);
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+
+  // Кнопки развёрнутой карты поднимаются над меню приложения по фактической
+  // высоте: раньше отступ был подобран числом и на телефонах с жестовой
+  // навигацией кнопки садились прямо на полосу меню
+  const buttonsAboveMenu = Math.max(insets.bottom, 26) + MENU_BAR_HEIGHT + 12;
+
   const [points, setPoints] = useState([]);
-  const [selectedPoint, setSelectedPoint] = useState(null);
-  const [isAddingPoint, setIsAddingPoint] = useState(false);
-  const [isEditingPoint, setIsEditingPoint] = useState(false);
-  const [newPointData, setNewPointData] = useState({
-    title: '',
-    description: '',
-    type: 'observation',
-  });
-  const [showPointList, setShowPointList] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
-  const [filterType, setFilterType] = useState('all');
-  const [snackbarVisible, setSnackbarVisible] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [showStats, setShowStats] = useState(false);
-  const [activeWindow, setActiveWindow] = useState(null); // 'stats', 'filter', 'add', 'edit'
+  const [stats, setStats] = useState({ total: 0, types: 0, lastRecordedAt: null });
+  const [title, setTitle] = useState('');
+  const [pointType, setPointType] = useState(POINT_TYPES.WELL);
+  // Куда центрировать карту — задаётся после определения геопозиции
+  const [center, setCenter] = useState(null);
+  // Точка, для которой запрошено удаление
+  const [pendingDelete, setPendingDelete] = useState(null);
+  // Сообщение о проблеме с геопозицией и признак ожидания координат
+  const [notice, setNotice] = useState('');
+  const [locating, setLocating] = useState(false);
+  // Развёрнута ли карта на весь экран
+  const [mapFullscreen, setMapFullscreen] = useState(false);
 
-  // Типы точек для полевого дневника
-  const pointTypes = [
-    { key: 'observation', label: 'Наблюдение', icon: 'eye', color: '#4CAF50' },
-    { key: 'sample', label: 'Проба', icon: 'flask', color: '#2196F3' },
-    { key: 'measurement', label: 'Измерение', icon: 'ruler', color: '#FF9800' },
-    { key: 'photo', label: 'Фото', icon: 'camera', color: '#9C27B0' },
-    { key: 'note', label: 'Заметка', icon: 'note-text', color: '#607D8B' },
-  ];
-
-  useEffect(() => {
-    (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setErrorMsg('Разрешение на доступ к местоположению отклонено');
-        showSnackbar('Разрешение на доступ к местоположению отклонено');
-        return;
-      }
-
-      try {
-        let currentLocation = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
-        });
-        setLocation(currentLocation);
-      } catch (error) {
-        console.error('Ошибка получения местоположения:', error);
-        showSnackbar('Не удалось получить текущее местоположение');
-      }
-      
-      // Загружаем сохраненные точки
-      loadSavedPoints();
-    })();
+  const load = useCallback(async () => {
+    setPoints(await listPoints());
+    setStats(await getPointStats());
   }, []);
 
-  const showSnackbar = (message) => {
-    setSnackbarMessage(message);
-    setSnackbarVisible(true);
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
+
+  /**
+   * Создаёт точку с заданными координатами
+   */
+  const addPointAt = async (lat, lon) => {
+    const name = title.trim() || `${I18n.t(`pointType_${pointType}`, { defaultValue: 'Точка' })} ${points.length + 1}`;
+    await createPoint({ title: name, lat, lon, type: pointType });
+    setTitle('');
+    await load();
   };
 
-  const loadSavedPoints = async () => {
+  /**
+   * Запрашивает текущие координаты устройства
+   *
+   * @returns {Promise<{latitude: number, longitude: number}|null>} координаты
+   *   или null, если доступ не выдан либо позицию определить не удалось
+   */
+  const getMyCoords = async () => {
+    setNotice('');
+    setLocating(true);
     try {
-      const savedPoints = await AsyncStorage.getItem('fieldDiaryPoints');
-      if (savedPoints) {
-        setPoints(JSON.parse(savedPoints));
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        // Сообщение выводится плашкой на самом экране, а не Alert.alert:
+        // на вебе тот не показывается вообще, и отказ в доступе выглядел
+        // как будто кнопка просто не работает
+        setNotice(
+          I18n.t('locationDenied', {
+            defaultValue: 'Нет доступа к геопозиции. Разрешите его в настройках или отметьте точку тапом по карте.',
+          })
+        );
+        return null;
       }
-    } catch (error) {
-      console.error('Ошибка загрузки точек:', error);
-      showSnackbar('Ошибка загрузки сохраненных точек');
-    }
-  };
 
-  const savePoints = async (newPoints) => {
-    try {
-      await AsyncStorage.setItem('fieldDiaryPoints', JSON.stringify(newPoints));
-    } catch (error) {
-      console.error('Ошибка сохранения точек:', error);
-      showSnackbar('Ошибка сохранения точек');
-    }
-  };
-
-  const openWindow = (windowType) => {
-    setActiveWindow(windowType);
-    // Закрываем все другие окна
-    if (windowType !== 'stats') setShowStats(false);
-    if (windowType !== 'filter') setShowPointList(false);
-    if (windowType !== 'add') setIsAddingPoint(false);
-    if (windowType !== 'edit') setIsEditingPoint(false);
-  };
-
-  const closeWindow = (windowType) => {
-    setActiveWindow(null);
-    if (windowType === 'stats') setShowStats(false);
-    if (windowType === 'filter') setShowPointList(false);
-    if (windowType === 'add') setIsAddingPoint(false);
-    if (windowType === 'edit') setIsEditingPoint(false);
-  };
-
-  const addPoint = () => {
-    if (!location) {
-      Alert.alert('Ошибка', 'Не удалось получить текущее местоположение');
-      return;
-    }
-    
-    openWindow('add');
-    setNewPointData({
-      title: '',
-      description: '',
-      type: 'observation',
-    });
-  };
-
-  const savePoint = () => {
-    if (!newPointData.title.trim()) {
-      Alert.alert('Ошибка', 'Введите название точки');
-      return;
-    }
-
-    const newPoint = {
-      id: Date.now().toString(),
-      latitude: location.coords.latitude,
-      longitude: location.coords.longitude,
-      title: newPointData.title,
-      description: newPointData.description,
-      type: newPointData.type,
-      timestamp: new Date().toISOString(),
-      accuracy: location.coords.accuracy,
-    };
-
-    const updatedPoints = [...points, newPoint];
-    setPoints(updatedPoints);
-    savePoints(updatedPoints);
-    
-    closeWindow('add');
-    setNewPointData({ title: '', description: '', type: 'observation' });
-    showSnackbar('Точка успешно добавлена');
-  };
-
-  const editPoint = (point) => {
-    setSelectedPoint(point);
-    setNewPointData({
-      title: point.title,
-      description: point.description,
-      type: point.type,
-    });
-    openWindow('edit');
-  };
-
-  const updatePoint = () => {
-    if (!newPointData.title.trim()) {
-      Alert.alert('Ошибка', 'Введите название точки');
-      return;
-    }
-
-    const updatedPoints = points.map(point => 
-      point.id === selectedPoint.id 
-        ? { ...point, ...newPointData }
-        : point
-    );
-    
-    setPoints(updatedPoints);
-    savePoints(updatedPoints);
-    
-    closeWindow('edit');
-    setSelectedPoint(null);
-    setNewPointData({ title: '', description: '', type: 'observation' });
-    
-    showSnackbar('Точка успешно обновлена');
-  };
-
-  const deletePoint = (pointId) => {
-    Alert.alert(
-      'Удаление точки',
-      'Вы уверены, что хотите удалить эту точку?',
-      [
-        { text: 'Отмена', style: 'cancel' },
-        {
-          text: 'Удалить',
-          style: 'destructive',
-          onPress: () => {
-            const updatedPoints = points.filter(point => point.id !== pointId);
-            setPoints(updatedPoints);
-            savePoints(updatedPoints);
-            showSnackbar('Точка удалена');
-          },
-        },
-      ]
-    );
-  };
-
-  const deleteAllPoints = () => {
-    Alert.alert(
-      'Удаление всех точек',
-      'Вы уверены, что хотите удалить все точки? Это действие нельзя отменить.',
-      [
-        { text: 'Отмена', style: 'cancel' },
-        {
-          text: 'Удалить все',
-          style: 'destructive',
-          onPress: () => {
-            setPoints([]);
-            savePoints([]);
-            showSnackbar('Все точки удалены');
-          },
-        },
-      ]
-    );
-  };
-
-  const exportData = async () => {
-    if (points.length === 0) {
-      showSnackbar('Нет данных для экспорта');
-      return;
-    }
-
-    try {
-      const exportData = {
-        exportDate: new Date().toISOString(),
-        totalPoints: points.length,
-        points: points.map(point => ({
-          ...point,
-          typeLabel: getPointTypeInfo(point.type).label,
-        })),
-      };
-
-      const csvContent = generateCSV(exportData.points);
-      const fileName = `field_diary_${new Date().toISOString().split('T')[0]}.csv`;
-      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
-
-      await FileSystem.writeAsStringAsync(fileUri, csvContent, {
-        encoding: FileSystem.EncodingType.UTF8,
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
       });
-
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(fileUri, {
-          mimeType: 'text/csv',
-          dialogTitle: 'Экспорт полевого дневника',
-        });
-      } else {
-        showSnackbar('Функция экспорта недоступна на этом устройстве');
-      }
-    } catch (error) {
-      console.error('Ошибка экспорта:', error);
-      showSnackbar('Ошибка при экспорте данных');
+      return location.coords;
+    } catch {
+      setNotice(
+        I18n.t('locationFailed', {
+          defaultValue: 'Не удалось определить местоположение. Под землёй и в здании сигнала может не быть — поставьте точку по карте.',
+        })
+      );
+      return null;
+    } finally {
+      setLocating(false);
     }
   };
 
-  const generateCSV = (points) => {
-    const headers = ['ID', 'Название', 'Тип', 'Описание', 'Широта', 'Долгота', 'Дата создания', 'Точность (м)'];
-    const rows = points.map(point => [
-      point.id,
-      point.title,
-      getPointTypeInfo(point.type).label,
-      point.description || '',
-      point.latitude,
-      point.longitude,
-      new Date(point.timestamp).toLocaleString('ru-RU'),
-      point.accuracy ? Math.round(point.accuracy) : 'N/A'
-    ]);
-
-    return [headers, ...rows]
-      .map(row => row.map(cell => `"${cell}"`).join(','))
-      .join('\n');
+  /**
+   * Подводит карту к текущей геопозиции, ничего не записывая
+   */
+  const centerOnMyLocation = async () => {
+    const coords = await getMyCoords();
+    if (coords) setCenter({ lat: coords.latitude, lon: coords.longitude });
   };
 
-  const openInMaps = (point) => {
-    const url = Platform.OS === 'ios' 
-      ? `http://maps.apple.com/?q=${point.latitude},${point.longitude}`
-      : `geo:${point.latitude},${point.longitude}`;
-    
-    Linking.openURL(url).catch(() => {
-      showSnackbar('Не удалось открыть карту');
-    });
+  /**
+   * Ставит точку по текущей геопозиции
+   */
+  const addPointAtMyLocation = async () => {
+    const coords = await getMyCoords();
+    if (!coords) return;
+    // Сначала подводим карту к своей позиции, затем ставим точку —
+    // так сразу видно, куда она встала
+    setCenter({ lat: coords.latitude, lon: coords.longitude });
+    await addPointAt(coords.latitude, coords.longitude);
   };
 
-  const getPointTypeInfo = (typeKey) => {
-    return pointTypes.find(type => type.key === typeKey) || pointTypes[0];
+  const handleDelete = (point) => {
+    setPendingDelete(point);
   };
 
-  const getFilteredPoints = () => {
-    if (filterType === 'all') return points;
-    return points.filter(point => point.type === filterType);
+  /**
+   * Удаляет точку наблюдения и обновляет список
+   */
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    await deletePoint(pendingDelete.id);
+    setPendingDelete(null);
+    await load();
   };
 
-  const renderPointCard = (point) => {
-    const typeInfo = getPointTypeInfo(point.type);
-    
-    return (
-      <Card key={point.id} style={[styles.pointCard, { backgroundColor: theme.colors.surface }]}>
-        <Card.Content>
-          <View style={styles.pointHeader}>
-            <View style={[styles.pointIcon, { backgroundColor: typeInfo.color }]}>
-              <MaterialCommunityIcons name={typeInfo.icon} size={20} color="white" />
-            </View>
-            <View style={styles.pointInfo}>
-              <Text style={[styles.pointTitle, { color: theme.colors.text }]}>
-                {point.title}
-              </Text>
-              <Text style={[styles.pointType, { color: theme.colors.textSecondary }]}>
-                {typeInfo.label}
-              </Text>
-            </View>
-            <View style={styles.pointActions}>
-              <IconButton
-                icon="map-marker"
-                size={20}
-                onPress={() => openInMaps(point)}
-              />
-              <IconButton
-                icon="pencil"
-                size={20}
-                onPress={() => editPoint(point)}
-              />
-              <IconButton
-                icon="delete"
-                size={20}
-                onPress={() => deletePoint(point.id)}
-              />
-            </View>
-          </View>
-          
-          {point.description && (
-            <Text style={[styles.pointDescription, { color: theme.colors.textSecondary }]}>
-              {point.description}
-            </Text>
-          )}
-          
-          <View style={styles.pointDetails}>
-            <Text style={[styles.pointCoordinates, { color: theme.colors.textSecondary }]}>
-              Координаты: {point.latitude.toFixed(6)}, {point.longitude.toFixed(6)}
-            </Text>
-            <Text style={[styles.pointDate, { color: theme.colors.textSecondary }]}>
-              {new Date(point.timestamp).toLocaleString('ru-RU')}
-            </Text>
-          </View>
-        </Card.Content>
-      </Card>
-    );
-  };
+  const mapHeight = Math.min(320, Math.max(220, width * 0.62));
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <StatusBar backgroundColor={theme.colors.primary} barStyle="light-content" />
+    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+      {/* Карта вынесена из прокрутки: пока она была внутри списка, движение
+          пальцем по ней доставалось прокрутке, и карта под пальцем стояла.
+          Отдельным блоком такого конфликта нет в принципе */}
+      <View style={[styles.mapBlock, mapFullscreen ? styles.mapBlockFull : styles.mapBlockInline]}>
+        {/* Накладки позиционируются относительно этого контейнера, а он точно
+            повторяет границы карты. Иначе на полях блока кнопки съезжали
+            за её край */}
+        <View style={[styles.mapArea, mapFullscreen && styles.mapAreaFull]}>
+        <FieldMap
+          points={points}
+          onPressMap={addPointAt}
+          center={center}
+          height={mapFullscreen ? undefined : mapHeight}
+          flush={mapFullscreen}
+        />
 
-      {/* Кнопки управления */}
-      <View style={styles.controlsContainer}>
+        {!mapFullscreen && (
+          <View style={[styles.mapHint, { backgroundColor: theme.colors.chip }]} pointerEvents="none">
+            <MaterialIcons name="touch-app" size={15} color={theme.colors.primaryAccent} />
+            <Text style={[styles.mapHintText, { color: theme.colors.text }]}>
+              {I18n.t('tapMapToMark', { defaultValue: 'Нажмите на карту — отметить точку' })}
+            </Text>
+          </View>
+        )}
+
+        {/* Разворот карты на весь экран. В развёрнутом виде список скрыт,
+            прокручивать нечего — карта получает жесты целиком */}
         <TouchableOpacity
           style={[
-            styles.controlButton, 
-            { 
-              backgroundColor: activeWindow === 'filter' ? '#7a1434' : theme.colors.surface,
-            }
+            styles.mapExpand,
+            mapFullscreen && { bottom: buttonsAboveMenu },
+            elevation.brandButton,
+            { backgroundColor: theme.colors.primary },
           ]}
-          onPress={() => {
-            if (activeWindow === 'filter') {
-              closeWindow('filter');
-            } else {
-              openWindow('filter');
-            }
-          }}
-        >
-          <MaterialIcons 
-            name="list" 
-            size={24} 
-            color={activeWindow === 'filter' ? 'white' : theme.colors.primary} 
-          />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.controlButton, 
-            { 
-              backgroundColor: activeWindow === 'stats' ? '#7a1434' : theme.colors.surface,
-            }
-          ]}
-          onPress={() => {
-            if (activeWindow === 'stats') {
-              closeWindow('stats');
-            } else {
-              openWindow('stats');
-            }
-          }}
-        >
-          <MaterialIcons 
-            name="analytics" 
-            size={24} 
-            color={activeWindow === 'stats' ? 'white' : theme.colors.primary} 
-          />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.controlButton, 
-            { 
-              backgroundColor: activeWindow === 'add' ? '#7a1434' : theme.colors.surface,
-            }
-          ]}
-          onPress={addPoint}
-        >
-          <MaterialIcons 
-            name="add" 
-            size={24} 
-            color={activeWindow === 'add' ? 'white' : theme.colors.primary} 
-          />
-        </TouchableOpacity>
-
-        <Menu
-          visible={showMenu}
-          onDismiss={() => setShowMenu(false)}
-          anchor={
-            <TouchableOpacity
-              style={[styles.controlButton, { backgroundColor: theme.colors.surface }]}
-              onPress={() => setShowMenu(true)}
-            >
-              <MaterialIcons name="more-vert" size={24} color={theme.colors.primary} />
-            </TouchableOpacity>
+          onPress={() => setMapFullscreen((value) => !value)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: mapFullscreen }}
+          accessibilityLabel={
+            mapFullscreen
+              ? I18n.t('mapCollapse', { defaultValue: 'Свернуть карту' })
+              : I18n.t('mapExpand', { defaultValue: 'Развернуть карту на весь экран' })
           }
         >
-          <Menu.Item
-            onPress={() => {
-              setShowMenu(false);
-              deleteAllPoints();
-            }}
-            title="Удалить все точки"
-            leadingIcon="delete-sweep"
+          <MaterialIcons
+            name={mapFullscreen ? 'fullscreen-exit' : 'fullscreen'}
+            size={24}
+            color="#FFFFFF"
           />
-        </Menu>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.mapLocate,
+            mapFullscreen && { bottom: buttonsAboveMenu },
+            elevation.brandButton,
+            { backgroundColor: theme.colors.primary },
+          ]}
+          onPress={centerOnMyLocation}
+          accessibilityRole="button"
+          accessibilityLabel={I18n.t('centerOnMyLocation', {
+            defaultValue: 'Показать моё местоположение на карте',
+          })}
+        >
+          <MaterialIcons name="my-location" size={22} color="#FFFFFF" />
+        </TouchableOpacity>
+        </View>
       </View>
 
-      {/* Фильтр по типам */}
-      {activeWindow === 'filter' && (
-        <View style={styles.filterContainer}>
-          <View style={[styles.filterHeader, { backgroundColor: theme.colors.primary }]}>
-            <MaterialIcons name="filter-list" size={24} color="white" />
-            <Text style={styles.filterHeaderText}>Фильтр по типам</Text>
+      {mapFullscreen ? null : (
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+
+        {/* Статистика */}
+        <View style={styles.statsRow}>
+          <View
+            style={[
+              styles.statCard,
+              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+            ]}
+          >
+            <Text style={[styles.statValue, { color: theme.colors.text }]}>{stats.total}</Text>
+            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
+              {I18n.t('pointsCount', { defaultValue: 'точек' })}
+            </Text>
           </View>
-          <Card style={[styles.filterCard, { backgroundColor: theme.colors.surface }]}>
-            <Card.Content>
-              <ScrollView vertical showsVerticalScrollIndicator={false}>
-                <Chip
-                  selected={filterType === 'all'}
-                  onPress={() => setFilterType('all')}
-                  style={styles.filterChip}
-                >
-                  Все ({points.length})
-                </Chip>
-                {pointTypes.map(type => {
-                  const count = points.filter(point => point.type === type.key).length;
-                  return (
-                    <Chip
-                      key={type.key}
-                      selected={filterType === type.key}
-                      onPress={() => setFilterType(type.key)}
-                      style={[styles.filterChip, { borderColor: type.color }]}
-                      textStyle={{ color: filterType === type.key ? 'white' : theme.colors.text }}
-                    >
-                      <MaterialCommunityIcons 
-                        name={type.icon} 
-                        size={16} 
-                        color={filterType === type.key ? 'white' : type.color} 
-                      />
-                      {' '}{type.label} ({count})
-                    </Chip>
-                  );
-                })}
-              </ScrollView>
-            </Card.Content>
-          </Card>
+          <View
+            style={[
+              styles.statCard,
+              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+            ]}
+          >
+            <Text style={[styles.statValue, { color: theme.colors.text }]}>{stats.types}</Text>
+            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
+              {I18n.t('typesCount', { defaultValue: 'типа' })}
+            </Text>
+          </View>
+          <View
+            style={[
+              styles.statCard,
+              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+            ]}
+          >
+            <Text style={[styles.statValue, { color: theme.colors.text }]}>
+              {stats.lastRecordedAt ? formatTime(stats.lastRecordedAt) : '—'}
+            </Text>
+            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
+              {I18n.t('lastRecord', { defaultValue: 'запись' })}
+            </Text>
+          </View>
         </View>
-      )}
 
-      {/* Список точек */}
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {activeWindow === 'stats' && (
-          <View style={styles.statsContainer}>
-            <View style={[styles.statsHeader, { backgroundColor: theme.colors.primary }]}>
-              <MaterialIcons name="analytics" size={24} color="white" />
-              <Text style={styles.statsHeaderText}>Статистика полевого дневника</Text>
-            </View>
-            <FieldDiaryStats points={points} theme={theme} />
+        {/* Параметры новой точки */}
+        <View
+          style={[
+            styles.newPointCard,
+            elevation.card,
+            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+          ]}
+        >
+          <TextInput
+            value={title}
+            onChangeText={setTitle}
+            placeholder={I18n.t('pointTitlePlaceholder', { defaultValue: 'Название точки' })}
+            placeholderTextColor={theme.colors.textSecondary}
+            style={[
+              styles.input,
+              type.body,
+              { borderColor: theme.colors.border, color: theme.colors.text },
+            ]}
+          />
+
+          <View style={styles.typeRow}>
+            {TYPE_OPTIONS.map((option) => {
+              const active = option.key === pointType;
+              return (
+                <TouchableOpacity
+                  key={option.key}
+                  onPress={() => setPointType(option.key)}
+                  style={[
+                    styles.typeChip,
+                    {
+                      backgroundColor: active ? pointTypeColors[option.key] : 'transparent',
+                      borderColor: active ? pointTypeColors[option.key] : theme.colors.border,
+                    },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                >
+                  <View
+                    style={[styles.typeDot, { backgroundColor: active ? '#FFFFFF' : pointTypeColors[option.key] }]}
+                  />
+                  <Text
+                    style={[
+                      styles.typeChipText,
+                      { color: active ? '#FFFFFF' : theme.colors.textSecondary },
+                    ]}
+                  >
+                    {I18n.t(option.labelKey)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
-        )}
 
-        {getFilteredPoints().length === 0 ? (
-          <View style={styles.emptyState}>
-            <MaterialCommunityIcons 
-              name="map-marker-off" 
-              size={64} 
-              color={theme.colors.textSecondary} 
+          {/* Второй способ поставить точку — по координатам устройства.
+              Кнопка в потоке карточки: плавающая пряталась за нижним меню */}
+          <TouchableOpacity
+            style={[
+              styles.locateButton,
+              elevation.brandButton,
+              { backgroundColor: theme.colors.primary, opacity: locating ? 0.6 : 1 },
+            ]}
+            onPress={addPointAtMyLocation}
+            disabled={locating}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: locating }}
+          >
+            {locating ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <MaterialIcons name="my-location" size={18} color="#FFFFFF" />
+            )}
+            <Text style={styles.locateButtonText}>
+              {locating
+                ? I18n.t('locating', { defaultValue: 'Определяем координаты…' })
+                : I18n.t('markMyLocation', { defaultValue: 'Отметить моё местоположение' })}
+            </Text>
+          </TouchableOpacity>
+
+          {!!notice && (
+            <Text style={[type.caption, styles.notice, { color: theme.colors.error }]}>
+              {notice}
+            </Text>
+          )}
+        </View>
+
+        {/* Список точек */}
+        <Text style={[type.eyebrow, styles.sectionLabel, { color: theme.colors.textSecondary }]}>
+          {I18n.t('observationPoints', { defaultValue: 'Точки наблюдения' })} · {points.length}
+        </Text>
+
+        {points.map((point) => (
+          <View
+            key={point.id}
+            style={[
+              styles.pointRow,
+              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+            ]}
+          >
+            <View
+              style={[
+                styles.pointDot,
+                { backgroundColor: pointTypeColors[point.type] ?? pointTypeColors.observation },
+              ]}
             />
-            <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
-              {filterType === 'all' ? 'Нет добавленных точек' : 'Нет точек выбранного типа'}
-            </Text>
-            <Text style={[styles.emptySubtext, { color: theme.colors.textSecondary }]}>
-              Добавьте первую точку, нажав кнопку "+" в панели управления
-            </Text>
+            <View style={styles.pointInfo}>
+              <Text style={[type.body, { color: theme.colors.text }]} numberOfLines={1}>
+                {point.title}
+              </Text>
+              <Text style={[styles.pointCoords, { color: theme.colors.textSecondary }]}>
+                {formatCoordinate(point.lat)}, {formatCoordinate(point.lon)} · {formatTime(point.recordedAt)}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => handleDelete(point)}
+              style={styles.pointDelete}
+              accessibilityRole="button"
+              accessibilityLabel={I18n.t('delete')}
+            >
+              <MaterialIcons name="delete-outline" size={20} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
           </View>
-        ) : (
-          <View style={styles.pointsContainer}>
-            {getFilteredPoints().map(renderPointCard)}
+        ))}
+
+        {points.length === 0 && (
+          <View
+            style={[
+              styles.empty,
+              { backgroundColor: theme.colors.surfaceSunken, borderColor: theme.colors.border },
+            ]}
+          >
+            <MaterialCommunityIcons
+              name="map-marker-plus-outline"
+              size={32}
+              color={theme.colors.textSecondary}
+            />
+            <Text style={[type.caption, styles.emptyText, { color: theme.colors.textSecondary }]}>
+              {I18n.t('tapMapToAddPoint', {
+                defaultValue: 'Нажмите на карту, чтобы отметить точку',
+              })}
+            </Text>
           </View>
         )}
+
+        <View style={{ height: 160 }} />
       </ScrollView>
-
-
-
-      {/* Окно добавления точки */}
-      {activeWindow === 'add' && (
-        <View style={styles.addPointContainer}>
-          <View style={[styles.addPointHeader, { backgroundColor: theme.colors.primary }]}>
-            <View style={styles.addPointHeaderContent}>
-              <MaterialIcons name="add-location" size={24} color="white" />
-              <Text style={styles.addPointHeaderText}>Добавить точку</Text>
-            </View>
-            <IconButton
-              icon="close"
-              size={24}
-              color="white"
-              onPress={() => closeWindow('add')}
-            />
-          </View>
-          
-          <Card style={[styles.addPointCard, { backgroundColor: theme.colors.surface }]}>
-            <Card.Content>
-              <TextInput
-                style={[styles.input, { 
-                  backgroundColor: theme.colors.background,
-                  color: theme.colors.text,
-                  borderColor: theme.colors.border
-                }]}
-                placeholder="Название точки"
-                placeholderTextColor={theme.colors.textSecondary}
-                value={newPointData.title}
-                onChangeText={(text) => setNewPointData({ ...newPointData, title: text })}
-              />
-              
-              <Text style={[styles.label, { color: theme.colors.text }]}>Тип точки:</Text>
-              <View style={styles.typeSelector}>
-                {pointTypes.map(type => (
-                  <Chip
-                    key={type.key}
-                    selected={newPointData.type === type.key}
-                    onPress={() => setNewPointData({ ...newPointData, type: type.key })}
-                    style={[
-                      styles.typeChip,
-                      newPointData.type === type.key && { backgroundColor: type.color }
-                    ]}
-                    textStyle={{ color: newPointData.type === type.key ? 'white' : theme.colors.text }}
-                  >
-                    <MaterialCommunityIcons 
-                      name={type.icon} 
-                      size={16} 
-                      color={newPointData.type === type.key ? 'white' : theme.colors.textSecondary} 
-                    />
-                    {' '}{type.label}
-                  </Chip>
-                ))}
-              </View>
-              
-              <TextInput
-                style={[styles.textArea, { 
-                  backgroundColor: theme.colors.background,
-                  color: theme.colors.text,
-                  borderColor: theme.colors.border
-                }]}
-                placeholder="Описание (необязательно)"
-                placeholderTextColor={theme.colors.textSecondary}
-                value={newPointData.description}
-                onChangeText={(text) => setNewPointData({ ...newPointData, description: text })}
-                multiline
-                numberOfLines={4}
-              />
-
-              {location && (
-                <View style={[styles.locationInfo, { backgroundColor: theme.colors.surfaceVariant }]}>
-                  <Text style={[styles.locationText, { color: theme.colors.textSecondary }]}>
-                    Координаты: {location.coords.latitude.toFixed(6)}, {location.coords.longitude.toFixed(6)}
-                  </Text>
-                  <Text style={[styles.locationText, { color: theme.colors.textSecondary }]}>
-                    Точность: {Math.round(location.coords.accuracy)} м
-                  </Text>
-                </View>
-              )}
-              
-              <View style={styles.addPointFooter}>
-                <Button
-                  mode="outlined"
-                  onPress={() => closeWindow('add')}
-                  style={{ marginRight: 8 }}
-                >
-                  Отмена
-                </Button>
-                <Button
-                  mode="contained"
-                  onPress={savePoint}
-                >
-                  Добавить
-                </Button>
-              </View>
-            </Card.Content>
-          </Card>
-        </View>
       )}
 
-      {/* Окно редактирования точки */}
-      {activeWindow === 'edit' && (
-        <View style={styles.editPointContainer}>
-          <View style={[styles.editPointHeader, { backgroundColor: theme.colors.primary }]}>
-            <View style={styles.editPointHeaderContent}>
-              <MaterialIcons name="edit-location" size={24} color="white" />
-              <Text style={styles.editPointHeaderText}>Изменить точку</Text>
-            </View>
-            <IconButton
-              icon="close"
-              size={24}
-              color="white"
-              onPress={() => closeWindow('edit')}
-            />
-          </View>
-          
-          <Card style={[styles.editPointCard, { backgroundColor: theme.colors.surface }]}>
-            <Card.Content>
-              <TextInput
-                style={[styles.input, { 
-                  backgroundColor: theme.colors.background,
-                  color: theme.colors.text,
-                  borderColor: theme.colors.border
-                }]}
-                placeholder="Название точки"
-                placeholderTextColor={theme.colors.textSecondary}
-                value={newPointData.title}
-                onChangeText={(text) => setNewPointData({ ...newPointData, title: text })}
-              />
-              
-              <Text style={[styles.label, { color: theme.colors.text }]}>Тип точки:</Text>
-              <View style={styles.typeSelector}>
-                {pointTypes.map(type => (
-                  <Chip
-                    key={type.key}
-                    selected={newPointData.type === type.key}
-                    onPress={() => setNewPointData({ ...newPointData, type: type.key })}
-                    style={[
-                      styles.typeChip,
-                      newPointData.type === type.key && { backgroundColor: type.color }
-                    ]}
-                    textStyle={{ color: newPointData.type === type.key ? 'white' : theme.colors.text }}
-                  >
-                    <MaterialCommunityIcons 
-                      name={type.icon} 
-                      size={16} 
-                      color={newPointData.type === type.key ? 'white' : theme.colors.textSecondary} 
-                    />
-                    {' '}{type.label}
-                  </Chip>
-                ))}
-              </View>
-              
-              <TextInput
-                style={[styles.textArea, { 
-                  backgroundColor: theme.colors.background,
-                  color: theme.colors.text,
-                  borderColor: theme.colors.border
-                }]}
-                placeholder="Описание (необязательно)"
-                placeholderTextColor={theme.colors.textSecondary}
-                value={newPointData.description}
-                onChangeText={(text) => setNewPointData({ ...newPointData, description: text })}
-                multiline
-                numberOfLines={4}
-              />
-              
-              <View style={styles.editPointFooter}>
-                <Button
-                  mode="outlined"
-                  onPress={() => closeWindow('edit')}
-                  style={{ marginRight: 8 }}
-                >
-                  Отмена
-                </Button>
-                <Button
-                  mode="contained"
-                  onPress={updatePoint}
-                >
-                  Сохранить
-                </Button>
-              </View>
-            </Card.Content>
-          </Card>
-        </View>
-      )}
-
-      {/* Snackbar для уведомлений */}
-      <Snackbar
-        visible={snackbarVisible}
-        onDismiss={() => setSnackbarVisible(false)}
-        duration={3000}
-        style={{ backgroundColor: theme.colors.primary }}
-      >
-        {snackbarMessage}
-      </Snackbar>
-      
-
+      <ConfirmDialog
+        visible={!!pendingDelete}
+        title={I18n.t('deletePoint', { defaultValue: 'Удалить точку?' })}
+        message={pendingDelete ? `«${pendingDelete.title}» будет удалена из дневника.` : ''}
+        confirmLabel={I18n.t('delete', { defaultValue: 'Удалить' })}
+        destructive
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1
-  },
-  header: {
-    paddingTop: 50,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    opacity: 0.9,
-  },
   content: {
+    padding: spacing.lg,
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
+  },
+  mapBlock: {
+    position: 'relative',
+  },
+  mapBlockInline: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+  },
+  // Границы самой карты: к ним привязаны подсказка и круглые кнопки
+  mapArea: {
+    position: 'relative',
+  },
+  mapAreaFull: {
     flex: 1,
-    padding: 16,
   },
-  controlsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    gap: 12,
+  // Развёрнутая карта занимает всё, что осталось от экрана: сверху шапка
+  // навигации, снизу меню приложения — они остаются на местах
+  mapBlockFull: {
+    flex: 1,
   },
-  controlButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
+  // Кнопка разворота — зеркально кнопке геопозиции, у левого края
+  mapExpand: {
+    position: 'absolute',
+    left: 12,
+    bottom: 12,
+    width: 46,
+    height: 46,
+    borderRadius: 14,
     alignItems: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
+    justifyContent: 'center',
   },
-  filterCard: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4
-  },
-  filterTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  filterChip: {
-    marginRight: 8,
-    marginBottom: 4,
-  },
-  pointsContainer: {
-    gap: 12,
-  },
-  pointCard: {
-    marginBottom: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  pointHeader: {
+  mapHint: {
+    position: 'absolute',
+    left: 10,
+    top: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
-  },
-  pointIcon: {
-    width: 40,
-    height: 40,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 20,
-    justifyContent: 'center',
+    shadowColor: '#14070E',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  mapHintText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+  },
+  mapLocate: {
+    position: 'absolute',
+    right: 12,
+    bottom: 12,
+    width: 46,
+    height: 46,
+    borderRadius: 14,
     alignItems: 'center',
-    marginRight: 12,
+    justifyContent: 'center',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginTop: spacing.md,
+  },
+  statCard: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  statValue: {
+    ...numericAt(22),
+    fontWeight: '600',
+  },
+  statLabel: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  newPointCard: {
+    marginTop: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: spacing.md,
+  },
+  input: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  typeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  typeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: radius.chip,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  typeDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  typeChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  sectionLabel: {
+    marginTop: spacing.xl,
+    marginBottom: spacing.sm,
+  },
+  pointRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: spacing.sm,
+  },
+  pointDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: spacing.md,
   },
   pointInfo: {
     flex: 1,
   },
-  pointTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 2,
+  pointCoords: {
+    ...type.numeric,
+    fontSize: 11,
+    marginTop: 2,
   },
-  pointType: {
-    fontSize: 12,
-    marginBottom: 4,
+  pointDelete: {
+    padding: spacing.sm,
   },
-  pointActions: {
-    flexDirection: 'row',
-  },
-  pointDescription: {
-    fontSize: 14,
-    fontStyle: 'italic',
-    marginBottom: 8,
-    lineHeight: 20,
-  },
-  pointDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  empty: {
     alignItems: 'center',
-  },
-  pointCoordinates: {
-    fontSize: 12,
-    opacity: 0.7,
-  },
-  pointDate: {
-    fontSize: 12,
-    opacity: 0.7,
-  },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
+    paddingVertical: spacing.xxl,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: spacing.sm,
   },
   emptyText: {
-    fontSize: 18,
-    fontWeight: '500',
-    marginTop: 16,
-    marginBottom: 8,
     textAlign: 'center',
+    paddingHorizontal: spacing.lg,
   },
-  emptySubtext: {
-    fontSize: 14,
-    textAlign: 'center',
-    opacity: 0.7,
-  },
-  fab: {
-    position: 'absolute',
-    margin: 16,
-    right: 0,
-    bottom: '20%',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'transparent',
+  locateButton: {
+    marginTop: spacing.md,
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    borderRadius: radius.pill,
   },
-  modalContent: {
-    width: width * 0.9,
-    maxHeight: height * 0.8,
-    borderRadius: 16,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
+  notice: {
+    marginTop: spacing.sm,
+    lineHeight: 18,
   },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+  locateButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
-  modalBody: {
-    padding: 20,
-  },
-  modalFooter: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0, 0, 0, 0.1)',
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    marginBottom: 16,
-    fontSize: 16,
-  },
-  textArea: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    marginBottom: 16,
-    fontSize: 16,
-    textAlignVertical: 'top',
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  typeSelector: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 16,
-  },
-  typeChip: {
-    marginBottom: 4,
-  },
-  locationInfo: {
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-  },
-  locationText: {
-    fontSize: 12,
-    marginBottom: 2,
-  },
-  statsContainer: {
-    marginBottom: 16,
-  },
-  statsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-  },
-  statsHeaderText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  filterContainer: {
-    marginBottom: 16,
-  },
-  filterHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-  },
-  filterHeaderText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  modalHeaderContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  modalHeaderText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  addPointContainer: {
-    marginBottom: 16,
-  },
-  addPointHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-  },
-  addPointHeaderContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  addPointHeaderText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  addPointCard: {
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-  },
-  addPointFooter: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 16,
-  },
-  editPointContainer: {
-    marginBottom: 16,
-  },
-  editPointHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-  },
-  editPointHeaderContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  editPointHeaderText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  editPointCard: {
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-  },
-  editPointFooter: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 16,
-  },
-}); 
+});

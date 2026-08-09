@@ -1,306 +1,279 @@
 /**
- * Главный экран приложения АНСДИМАТ
- * 
- * Этот экран является центральной точкой навигации и содержит:
- * - Приветствие пользователя
- * - Карточки основных разделов приложения
- * - Информацию о подписке
- * - Ссылки на дополнительные ресурсы
- * - Адаптивный дизайн для светлой и темной темы
- * 
- * Основные разделы:
- * - Обработка откачек (PumpingTestProcessing)
- * - Калькулятор (Calculator)
- * - Полевой дневник (FieldDiary)
- * - Примеры и видео (ExamplesAndVideos)
- * - Ссылка на десктопную версию
- * 
- * @param {Object} navigation - Объект навигации React Navigation
+ * Главная (home)
+ *
+ * Воссоздаёт экран из дизайн-прототипа один в один:
+ * - надзаголовок «Основной сценарий»
+ * - герой-карточка «Создать откачку» (бордовый градиент + кривая понижения)
+ * - три плитки: Калькулятор, Полевой дневник, Примеры и видео
+ * - баннер десктоп-версии
+ *
+ * @param {Object} navigation - объект навигации React Navigation
  */
 
-import React, { useContext, useState, useEffect } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
-  Dimensions,
+  Image,
   StatusBar,
   Linking,
-  Image,
-  BackHandler,
-  Platform,
-  Alert,
+  useWindowDimensions,
 } from 'react-native';
-import {
-  useTheme,
-  Card,
-  Title,
-  Paragraph,
-  Button,
-  Surface,
-  IconButton,
-} from 'react-native-paper';
+import { useTheme } from 'react-native-paper';
+import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { LanguageContext } from '../LanguageContext.js';
-import { SubscriptionManager } from '../utils/SubscriptionManager';
 import I18n from '../Localization';
-import Vector4 from '../components/Vector4';
-
-// Получаем ширину экрана для адаптивного дизайна
-const { width } = Dimensions.get('window');
+import DrawdownWave from '../components/DrawdownWave';
+import AppearIn from '../components/ui/AppearIn';
+import PressableScale from '../components/ui/PressableScale';
+import { spacing, radius, type, elevation, brandHeader, heroGradient, fontFamily } from '../theme';
 
 export default function HomeScreen({ navigation }) {
-  // Получаем текущую тему для адаптивного дизайна
   const theme = useTheme();
-  // Получаем текущий язык из контекста
-  const { locale } = useContext(LanguageContext);
-  // Состояние статуса подписки пользователя
-  const [subscriptionStatus, setSubscriptionStatus] = useState(false);
+  const c = theme.colors;
+  const { width } = useWindowDimensions();
 
-  /**
-   * Эффект для проверки статуса подписки при загрузке экрана
-   * Вызывается один раз при монтировании компонента
-   */
-  useEffect(() => {
-    checkSubscriptionStatus();
-  }, []);
+  // На планшетах ограничиваем ширину контента
+  const isTablet = width >= 700;
+  const contentMaxWidth = isTablet ? 620 : undefined;
 
-  /**
-   * Проверяет статус подписки пользователя
-   * Обновляет состояние subscriptionStatus на основе данных из SubscriptionManager
-   */
-  const checkSubscriptionStatus = async () => {
-    const status = await SubscriptionManager.getSubscriptionStatus();
-    setSubscriptionStatus(status);
-  };
-  
-  /**
-   * Массив пунктов главного меню
-   * 
-   * Каждый пункт содержит:
-   * - id: уникальный идентификатор
-   * - title: название раздела (локализованное)
-   * - subtitle: описание раздела (локализованное)
-   * - icon: название иконки
-   * - iconFamily: семейство иконок (material или community)
-   * - color: цвет акцента для раздела
-   * - onPress: функция навигации или действия
-   */
-  const menuItems = [
-    {
-      id: 'pumping',
-      title: I18n.t('pumpingTest', { defaultValue: 'Обработка откачек' }),
-      subtitle: I18n.t('pumpingTestDesc', { 
-        defaultValue: 'Анализ данных откачки скважин' 
-      }),
-      icon: 'water-pump',
-      iconFamily: 'community', // MaterialCommunityIcons
-      color: theme.colors.primary, // Основной бордовый цвет
-      onPress: () => navigation.navigate('PumpingTestProcessing'),
-    },
+  const tiles = [
     {
       id: 'calculator',
       title: I18n.t('calculator', { defaultValue: 'Калькулятор' }),
-      subtitle: I18n.t('calculatorDesc', { 
-        defaultValue: 'Гидрогеологические расчеты' 
-      }),
+      subtitle: I18n.t('calculatorDesc', { defaultValue: 'Гидрогеологические расчёты' }),
       icon: 'calculate',
-      iconFamily: 'material', // MaterialIcons
-      color: theme.colors.secondary, // Синий акцент
+      family: 'material',
+      tone: c.secondary,
       onPress: () => navigation.navigate('Calculator'),
     },
     {
       id: 'field-diary',
       title: I18n.t('field', { defaultValue: 'Полевой дневник' }),
-      subtitle: I18n.t('fieldDesc', { 
-        defaultValue: 'Запись данных в полевых условиях' 
-      }),
-      icon: 'map-outline',
-      iconFamily: 'community', // MaterialCommunityIcons
-      color: theme.colors.primary, // Основной бордовый цвет
+      subtitle: I18n.t('fieldDesc', { defaultValue: 'Точки наблюдения с координатами' }),
+      icon: 'map',
+      family: 'material',
+      tone: c.primary,
       onPress: () => navigation.navigate('FieldDiary'),
     },
     {
       id: 'examples',
       title: I18n.t('examples', { defaultValue: 'Примеры и видео' }),
-      subtitle: I18n.t('examplesDesc', { 
-        defaultValue: 'Обучающие материалы' 
-      }),
+      subtitle: I18n.t('examplesDesc', { defaultValue: 'Обучающие материалы' }),
       icon: 'play-circle-outline',
-      iconFamily: 'community', // MaterialCommunityIcons
-      color: theme.colors.secondary, // Синий акцент
+      family: 'material',
+      tone: c.secondary,
       onPress: () => navigation.navigate('ExamplesAndVideos'),
     },
-    {
-      id: 'program-adds',
-      title: I18n.t("homeTitle", { defaultValue: 'АНСДИМАТ' }),
-      subtitle: I18n.t('programAddsDesc', { 
-        defaultValue: 'Программа для повседневных гидрогеологических расчетов для windows.' 
-      }), 
-      onPress: () => Linking.openURL('https://www.ansdimat.com/'),
-    },
-    
   ];
 
-  const renderMenuItem = (item) => (
-    <TouchableOpacity
-      key={item.id}
-      style={[styles.menuItem, { borderColor: theme.colors.border, backgroundColor: item.id === 'program-adds' ? theme.colors.d4d4d4 : theme.colors.surface }]}
-      onPress={item.onPress}
-      activeOpacity={0.7}
-    >
-      <Surface style={item.id === 'program-adds' ? [{width: 40, height: 40, borderRadius: 25, justifyContent: 'center', alignItems: 'center', marginRight: 16,}] : [styles.iconContainer, { backgroundColor: item.color }]}> 
-        {item.id === 'program-adds' ? (
-          <Image
-            source={require('../assets/Logo_main.png')}
-            style={{ width: 40, height: 40 }}
-            resizeMode="contain"
-          />
-        ) : item.iconFamily === 'community' ? (
-          <MaterialCommunityIcons name={item.icon} size={28} color={theme.colors.white} />
-        ) : (
-          <MaterialIcons name={item.icon} size={28} color={theme.colors.white} />
-        )}
-      </Surface>
-      
-      <View style={styles.textContainer}>
-        <Text style={[styles.itemTitle, { color: theme.colors.text }]}> 
-          {item.title}
-        </Text>
-        <Text style={[styles.itemSubtitle, { color: theme.colors.textSecondary }]}> 
-          {item.subtitle}
-        </Text>
-      </View>
-      
-      <MaterialIcons 
-        name="arrow-forward-ios" 
-        size={16} 
-        color={theme.colors.textSecondary} 
-      />
-    </TouchableOpacity>
+  const renderTile = (tile, index) => (
+    // index + 2: герой занимает первые два шага очереди появления
+    <AppearIn key={tile.id} index={index + 2}>
+      <PressableScale
+        style={[styles.tile, elevation.card, { backgroundColor: c.surface, borderColor: c.border }]}
+        onPress={tile.onPress}
+        accessibilityRole="button"
+        accessibilityLabel={tile.title}
+      >
+        <View style={[styles.tileIcon, { backgroundColor: tile.tone }]}>
+          {tile.family === 'community' ? (
+            <MaterialCommunityIcons name={tile.icon} size={22} color="#FFFFFF" />
+          ) : (
+            <MaterialIcons name={tile.icon} size={22} color="#FFFFFF" />
+          )}
+        </View>
+        <View style={styles.tileText}>
+          <Text style={[styles.tileTitle, { color: c.text }]}>{tile.title}</Text>
+          <Text style={[styles.tileSubtitle, { color: c.textSecondary }]}>{tile.subtitle}</Text>
+        </View>
+        <MaterialIcons name="chevron-right" size={22} color={c.faint} />
+      </PressableScale>
+    </AppearIn>
   );
 
-
-
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <StatusBar backgroundColor={theme.colors.primary} barStyle="light-content" />
-      
-      <ScrollView 
-        style={styles.content} 
+    <View style={[styles.container, { backgroundColor: c.background }]}>
+      <StatusBar backgroundColor={brandHeader} barStyle="light-content" />
+
+      <ScrollView
+        style={styles.scroll}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 100 }}
+        contentContainerStyle={styles.scrollContent}
       >
+        <View style={[styles.content, contentMaxWidth && { maxWidth: contentMaxWidth }]}>
+          {/* Герой «Создать откачку» */}
+          <AppearIn index={1}>
+          <PressableScale
+            scale={0.985}
+            onPress={() => navigation.navigate('PumpingMain')}
+            style={[styles.heroWrap, elevation.brandButton]}
+            accessibilityRole="button"
+            accessibilityLabel={I18n.t('createPumping', { defaultValue: 'Создать откачку' })}
+          >
+            <LinearGradient
+              colors={heroGradient.colors}
+              locations={heroGradient.locations}
+              start={heroGradient.start}
+              end={heroGradient.end}
+              style={styles.hero}
+            >
+              <View style={styles.heroBody}>
+                <View style={styles.heroIcon}>
+                  <MaterialCommunityIcons name="water-pump" size={28} color="#FFFFFF" />
+                </View>
+                <View style={styles.heroTextBox}>
+                  <Text style={styles.heroTitle}>
+                    {I18n.t('createPumping', { defaultValue: 'Создать откачку' })}
+                  </Text>
+                  <Text style={styles.heroSubtitle}>
+                    {I18n.t('createPumpingSub', { defaultValue: 'Журнал и обработка ОФР' })}
+                  </Text>
+                </View>
+                <MaterialIcons name="arrow-forward" size={26} color="#FFFFFF" />
+              </View>
+              <DrawdownWave height={58} />
+            </LinearGradient>
+          </PressableScale>
+          </AppearIn>
 
-        {/* Основное меню */}
-        <View style={styles.menuContainer}>
-          <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-              {I18n.t('mainMenu', { defaultValue: 'Основные функции' })}
-            </Text>
+          {/* Плитки разделов */}
+          <View style={styles.tiles}>{tiles.map(renderTile)}</View>
 
-            <Vector4 width={60} height={50} color={theme.colors.text} /> 
-          </View>
-          
-          
-          <View style={styles.menuGrid}>
-            {menuItems.map(renderMenuItem)}
-          </View>
+          {/* Баннер десктоп-версии */}
+          <AppearIn index={tiles.length + 2}>
+          <PressableScale
+            style={[styles.banner, { backgroundColor: c.surfaceSunken, borderColor: c.border }]}
+            onPress={() => Linking.openURL('https://www.ansdimat.com/')}
+            accessibilityRole="link"
+          >
+            {/* Баннер собран как обычная плитка: тот же размер значка,
+                заголовок и подпись на своих местах. Раньше он выпадал из
+                ряда — мелкий логотип и одна серая строка в две строки */}
+            <Image
+              source={require('../assets/logo-mark.png')}
+              style={styles.bannerIcon}
+              resizeMode="contain"
+            />
+            <View style={styles.tileText}>
+              <Text style={[styles.tileTitle, { color: c.text }]}>
+                {I18n.t('desktopBannerTitle', { defaultValue: 'Версия для Windows' })}
+              </Text>
+              <Text style={[styles.tileSubtitle, { color: c.textSecondary }]}>
+                {I18n.t('desktopBannerSub', { defaultValue: 'Полные расчёты на компьютере' })}
+              </Text>
+            </View>
+            <MaterialIcons name="open-in-new" size={20} color={c.faint} />
+          </PressableScale>
+          </AppearIn>
         </View>
-
-        
       </ScrollView>
-
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  container: { flex: 1 },
+  scroll: { flex: 1 },
+  scrollContent: {
+    paddingHorizontal: 18,
+    paddingTop: 20,
+    paddingBottom: 128,
+    alignItems: 'center',
   },
-  content: {
-    flex: 1,
-    padding: 20,
+  content: { width: '100%' },
+
+
+  // Герой
+  heroWrap: {
+    borderRadius: 22,
+    overflow: 'hidden',
   },
-  subscriptionCard: {
-    marginBottom: 24,
-    elevation: 2,
+  hero: {
+    borderRadius: 22,
+    overflow: 'hidden',
   },
-  subscriptionContent: {
+  heroBody: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 16,
+    paddingHorizontal: 22,
+    paddingTop: 22,
+    paddingBottom: 14,
   },
-  subscriptionInfo: {
-    flexDirection: 'row',
+  heroIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.14)',
     alignItems: 'center',
-    flex: 1,
-  },
-  subscriptionText: {
-    marginLeft: 12,
-    flex: 1,
-  },
-  subscriptionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  subscriptionStatus: {
-    fontSize: 14,
-  },
-  menuContainer: {
-    marginBottom: 50,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 16,
-  },
-  menuGrid: {
-    gap: 12,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 20,
-    borderRadius: 12,
-    borderWidth: 1,
-    backgroundColor: 'white',
-    marginBottom: 8,
-  },
-  iconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
     justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
   },
-  textContainer: {
-    flex: 1,
+  heroTextBox: { flex: 1 },
+  heroTitle: {
+    fontFamily: fontFamily.bold,
+    fontSize: 19,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
   },
-  itemTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  itemSubtitle: {
-    fontSize: 14,
-    lineHeight: 18,
-  },
-  quickActions: {
-    marginBottom: 20,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  actionButton: {
-    flex: 1,
+  heroSubtitle: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 3,
   },
 
+  // Плитки
+  tiles: {
+    gap: 11,
+    marginTop: 18,
+  },
+  tile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  tileIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tileText: { flex: 1 },
+  tileTitle: {
+    fontFamily: fontFamily.bold,
+    fontSize: 15.5,
+    fontWeight: '700',
+  },
+  tileSubtitle: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12.5,
+    marginTop: 1,
+  },
+
+  // Баннер
+  // Те же отступы и радиус, что у плиток: баннер стоит с ними в одном ряду
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginTop: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  bannerIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 13,
+  },
 });

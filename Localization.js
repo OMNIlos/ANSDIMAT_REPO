@@ -36,7 +36,6 @@ const i18n = new I18n({
     home: "Главная",
     about: "О нас",
     order: "Заказ",
-    subscription: "Подписка",
     download: "Скачать программу",
     contact: "Связаться с нами",
     examples: "Примеры и видео",
@@ -46,6 +45,421 @@ const i18n = new I18n({
     toggleLang: "Переключить язык",
     homeTitle: "АНСДИМАТ",
     import: "Импорт",
+    util3: "Калькулятор",
+    searchButton: "Поиск",
+
+    selectOfrType: "Выберите тип ОФР",
+    newJournal: "Новый журнал",
+    fillAndProcess: "Заполнить и обработать ОФР",
+    previouslyCreated: "Ранее созданные",
+
+    // ===== ОБРАБОТКА ОФР =====
+    flowRateQ: "Дебит Q",
+    measurementsJournal: "Журнал замеров",
+    measurementsShort: "замеров",
+    drawdownChart: "График понижения",
+    recoveryChart: "График восстановления",
+    phasePumping: "Откачка",
+    phaseRecovery: "Восстановление",
+    pumpingDuration: "Откачка длилась",
+    recoveryAxisHint:
+      "По оси X — отношение t/t′: время от начала откачки к времени от её остановки",
+    recoveryNeedDuration:
+      "Укажите продолжительность откачки и внесите замеры после остановки насоса — иначе восстановление не обработать.",
+    recoveryInterceptNote:
+      "Прямая не проходит через начало координат: возможно влияние границ пласта или непостоянный дебит на откачке.",
+    chartEmpty: "Добавьте замеры, чтобы построить график",
+    ofr_single: "Одиночная",
+    ofr_cluster: "Кустовая",
+    ofr_fill: "Налив",
+    ofr_recovery: "Восстановление",
+
+    // ===== ОБРАБОТКА ОФР: ПОДПИСИ К РАСЧЁТУ =====
+    transmissivityLabel: "T, м²/сут",
+    methodRecovery: "T = 0.183·Q / a (восстановление по Тейсу), a — наклон прямой s′ — lg(t/t′).",
+    methodCooperJacob: "T = 0.183·Q / Δs (Купер — Джейкоба).",
+    methodTwoPoints: "Прямая проведена по двум выбранным точкам.",
+    methodFitQuality: "Достоверность аппроксимации R² = %{r2}",
+    methodNeedLogAxis: "Для расчёта T переключите ось в режим lg t.",
+
+    // ===== ПРИМЕРЫ И ВИДЕО (редизайн) =====
+    filterAll: "Все",
+    filterPumping: "Обработка ОФР",
+    filterDewatering: "Водопонижение",
+    filterModeling: "Моделирование",
+    videoLessons: "Видеоуроки",
+    studyMaterials: "Материалы",
+    open: "Открыть",
+
+    // ===== СПРАВКА (редизайн) =====
+    aboutManual: "Руководство пользователя",
+    aboutVideos: "Видеоуроки",
+    aboutContact: "Связаться с нами",
+    aboutLocalData: "© АНСДИМАТ. Расчёты идут на устройстве и работают без связи.",
+    orderLicense: "Заказать лицензию",
+    versionLabel: "версия",
+
+    // ===== РУКОВОДСТВО ПОЛЬЗОВАТЕЛЯ =====
+    manualEyebrow: "Как пользоваться",
+    manualStartTitle: "С чего начать",
+    manualStartIntro:
+      "АНСДИМАТ — полевой инструмент гидрогеолога: журнал опытно-фильтрационных работ (ОФР), обработка замеров и расчёты параметров водоносного пласта. Всё считается на устройстве и хранится локально, интернет нужен только для входа в аккаунт и синхронизации.",
+    manualStartStep1: "«Создать откачку» — заведите журнал: выберите тип ОФР и назовите проект.",
+    manualStartStep2: "Заполните паспорт опыта: дебит, радиус скважины, мощность пласта.",
+    manualStartStep3: "Вносите замеры «время — понижение» по ходу откачки.",
+    manualStartStep4: "Откройте обработку: график строится сам, параметры пересчитываются на лету.",
+    manualJournalTitle: "Журнал ОФР",
+    manualJournalIntro:
+      "Журнал — это опыт целиком: паспорт скважины, условия опробования и таблица замеров. Журналы не удаляются случайно: удаление всегда спрашивает подтверждение, а вместе с журналом удаляются и его замеры.",
+    manualJournalStep1: "Карандаш у журнала — вернуться к вводу данных и правке замеров.",
+    manualJournalStep2: "График — перейти к обработке и расчёту параметров.",
+    manualJournalStep3: "Звезда — пометить журнал важным, он поднимется в начало списка.",
+    manualJournalStep4: "Стрелка — выгрузить журнал вместе с замерами и передать коллеге.",
+    manualJournalNote:
+      "Время замеров вводится от начала откачки. Понижение — разность между статическим и динамическим уровнем, всегда положительная величина.",
+    manualProcessingTitle: "Обработка ОФР",
+    manualProcessingIntro:
+      "Обработка идёт методом Купера — Джейкоба: замеры откладываются в полулогарифмических координатах «lg t — понижение», и по прямолинейному участку определяются параметры пласта.",
+    manualFormulaT:
+      "T — водопроводимость, м²/сут; Q — дебит, м³/сут; a — наклон прямой, м на логарифмический цикл.",
+    manualFormulaK: "k — коэффициент фильтрации, м/сут; m — мощность водоносного пласта, м.",
+    manualProcessingStep1: "По умолчанию прямая проводится методом наименьших квадратов по всем замерам.",
+    manualProcessingStep2:
+      "Чтобы отсечь начальный и конечный участки, переключитесь на построение по двум точкам и отметьте их — в таблице замеров или прямо на графике.",
+    manualProcessingStep3:
+      "График масштабируется двумя пальцами и кнопками «+» и «−», перетаскивается одним пальцем; оси при этом остаются на месте.",
+    manualProcessingStep4: "Кнопка «Вписать» возвращает исходный масштаб по всем замерам.",
+    manualProcessingNote:
+      "Начальные замеры искажает ёмкость ствола скважины, конечные — влияние границ пласта. Прямолинейный участок обычно лежит между ними: именно его и стоит выбирать двумя точками.",
+    manualCalculatorTitle: "Калькулятор",
+    manualCalculatorIntro:
+      "Четыре вкладки для быстрых расчётов, когда полного журнала нет — достаточно нескольких величин из полевой книжки.",
+    manualCalcFiltration:
+      "Перевод коэффициента фильтрации между единицами: м/сут, м/ч, м/с, см/с, фут/сут, мейнцеры.",
+    manualCalcParams:
+      "Коэффициент фильтрации по данным одиночной откачки — формулы Дюпюи для напорного и безнапорного пласта, с поправкой Козени на несовершенство скважины.",
+    manualCalcForecast:
+      "Понижение на заданном расстоянии и времени по формуле Тейса — через функцию скважины W(u).",
+    manualCalcPit: "Приток воды в котлован: контур заменяется «большим колодцем» эквивалентного радиуса.",
+    manualCalcBarrage:
+      "Пласт с границей: непроницаемый контакт углубляет воронку, река — выполаживает. Плюс подпор уровня перед стеной в грунте.",
+    manualCalcLeakage:
+      "Пласт с перетеканием: понижение по Хантушу — Джейкобу, фактор перетекания B и расход утечки через кровлю.",
+    manualRecoveryTitle: "Восстановление уровня",
+    manualRecoveryIntro:
+      "Вторая половина опыта: насос остановлен, уровень поднимается. Обрабатывать её выгодно — насос не работает, и колебания дебита уже ничего не портят.",
+    manualFormulaRecovery:
+      "s′ — остаточное понижение, м; t — время от начала откачки; t′ — время от остановки насоса.",
+    manualRecoveryStep1: "В обработке переключитесь на «Восстановление».",
+    manualRecoveryStep2: "Укажите, сколько длилась откачка: от этого момента отсчитывается t′.",
+    manualRecoveryStep3: "Замеры вносятся так же — время от начала опыта и остаточное понижение.",
+    manualRecoveryNote:
+      "Прямая восстановления обязана проходить через начало координат. Заметный сдвиг — признак влияния границ пласта или непостоянного дебита на откачке; приложение об этом предупредит.",
+    manualCalculatorNote:
+      "Радиус влияния R редко замеряют — его принимают из опыта работ. Если оставить поле пустым, берётся R = 300·r₀, и в результатах появляется предупреждение: значение оценочное.",
+    manualDiaryTitle: "Полевой дневник",
+    manualDiaryStep1: "Введите название точки и выберите тип: скважина, родник, шурф, наблюдение.",
+    manualDiaryStep2: "Нажмите на карту в нужном месте — точка встанет по координатам нажатия.",
+    manualDiaryStep3:
+      "Кнопка «Отметить моё местоположение» ставит точку по координатам устройства, кружок на карте просто подводит карту к вам.",
+    manualDiaryNote:
+      "Карта подгружается из интернета, но уже отмеченные точки и их координаты хранятся на устройстве и доступны без связи.",
+    manualAccountTitle: "Аккаунт и синхронизация",
+    manualAccountIntro:
+      "Без аккаунта приложение полностью работоспособно: журналы, замеры и точки хранятся в памяти устройства. Аккаунт нужен, чтобы те же данные открывались на другом телефоне или планшете.",
+    manualGlossaryTitle: "Обозначения",
+    manualTermQ: "Дебит скважины, м³/сут",
+    manualTermS: "Понижение уровня, м",
+    manualTermT: "Водопроводимость, м²/сут",
+    manualTermK: "Коэффициент фильтрации, м/сут",
+    manualTermM: "Мощность водоносного пласта, м",
+    manualTermA: "Наклон прямой, м на логарифмический цикл",
+    manualTermR0: "Радиус скважины, м",
+    manualTermR: "Радиус влияния откачки, м",
+    manualTermW: "Функция скважины Тейса, безразмерная",
+
+    // ===== ГРАФИК ПОНИЖЕНИЯ =====
+    fitAuto: "По всем точкам",
+    fitTwoPoints: "По двум точкам",
+    selectTwoPoints: "Коснитесь двух точек, через которые провести прямую",
+    addMeasurementsForChart: "Добавьте замеры, чтобы построить график",
+    chartEmptyTitle: "График строится по двум замерам",
+    chartEmptyHint: "Внесите время и понижение в журнале выше — прямая и T появятся сразу.",
+    stepX: "Цена деления X",
+
+    // ===== ДИАГНОСТИКА РЕЖИМА ФИЛЬТРАЦИИ =====
+    chartExpand: "Развернуть график на весь экран",
+    chartCollapse: "Свернуть график",
+    viewFit: "Подбор прямой",
+    viewDiagnostic: "Диагностика",
+    diagnosticChart: "Диагностика режима",
+    legendDerivative: "производная ds/d(ln t)",
+    diagnosticAxes: "t, мин · по вертикали — метры",
+    legendDrawdown: "понижение s",
+    diagnosticEmptyTitle: "Диагностике нужно не меньше пяти замеров",
+    diagnosticEmptyHint:
+      "И желательно вразбивку по времени: 1, 2, 5, 10, 30 минут. По равномерному ряду форма кривой не читается.",
+    timeFromPumpStart: "t от начала откачки, мин",
+    columnTime: "t, мин",
+    columnDrawdown: "s, м",
+    recoveryNoDuration: "Укажите, сколько длилась откачка — без этого восстановление не построить.",
+    recoveryTimeTooSmall:
+      "Время замеров меньше длительности откачки. В журнале восстановления время отсчитывается от начала откачки, а не от остановки насоса.",
+    needLogMode: "Переключите ось X в режим lg t — по другим осям T не считается.",
+    needTwoMeasurements: "Внесите хотя бы два замера: по одной точке прямую не провести.",
+    needTwoSelected: "Отметьте на графике две точки, через которые провести прямую.",
+    needFlowRate: "Укажите дебит Q — без него водопроводимость не рассчитать.",
+    needSlope: "Понижение не растёт со временем: наклон прямой равен нулю, T не определена.",
+    plateauEstimate: "T по полке производной",
+    unitTransmissivity: "м²/сут",
+    plateauMismatch:
+      "Оценка расходится с расчётом по прямой больше чем на четверть — скорее всего, прямая проведена не по радиальному участку.",
+    regimeRadial: "Радиальный поток",
+    regimeRadialSign: "Производная вышла на полку и держится.",
+    regimeRadialAdvice:
+      "Пласт ведёт себя как неограниченный — формула Купера — Джейкоба применима, прямую можно вести по всем поздним точкам.",
+    regimeBarrier: "Непроницаемая граница",
+    regimeBarrierSign: "Полка производной выросла в %{ratio} раза.",
+    regimeBarrierAdvice:
+      "Понижение дошло до границы пласта. Считайте T по раннему участку: по поздним точкам она выйдет вдвое заниженной. Расстояние до границы оценивает вкладка «Барраж» в калькуляторе.",
+    regimeRecharge: "Подпитка пласта",
+    regimeRechargeSign: "Производная падает — понижение перестаёт расти.",
+    regimeRechargeAdvice:
+      "В пласт поступает вода: переток через разделяющий слой или близкий водоём. По поздним точкам T выйдет завышенной — берите участок до перегиба, а переток оцените во вкладке «Утечки».",
+    regimeWellbore: "Работает ствол скважины",
+    regimeWellboreSign: "Производная растёт под 45° почти на всей записи.",
+    regimeWellboreAdvice:
+      "Пока откачивается вода из самой скважины, пласт ещё не включился. Расчёт по этим замерам недостоверен — продолжите откачку.",
+    regimeUnclear: "Режим не определён",
+    regimeUnclearSign: "Замеров мало или они разбросаны.",
+    regimeUnclearAdvice:
+      "Нужно хотя бы пять замеров, разнесённых по времени в несколько раз: 1, 2, 5, 10, 30 минут.",
+
+    // ===== ДЕПРЕССИОННАЯ ВОРОНКА =====
+    coneSection: "Разрез депрессионной воронки",
+    coneStaticLevel: "уровень до откачки",
+    coneAxis: "расстояние от скважины, м",
+    coneEmpty:
+      "Заполните дебит, водопроводимость, водоотдачу и время — разрез построится сразу.",
+    coneInfluence: "Радиус влияния ≈ %{radius} м — дальше понижение практически не ощущается.",
+
+    // ===== СПИСОК ЖУРНАЛОВ =====
+    measurementsCount: "%{count} замеров",
+    noMeasurements: "замеров нет",
+    createFailed: "Не удалось создать журнал. Попробуйте ещё раз.",
+
+    // ===== АККАУНТ =====
+    accountSection: "Аккаунт",
+    accountTitle: "Аккаунт",
+    signIn: "Вход",
+    signUp: "Регистрация",
+    signOut: "Выйти",
+    signInToSync: "Войти в аккаунт",
+    syncAcrossDevices: "Синхронизация между устройствами",
+    password: "Пароль",
+    authFillFields: "Заполните почту и пароль",
+    authInvalidCredentials: "Неверная почта или пароль",
+    authEmailNotConfirmed:
+      "Почта не подтверждена. Откройте ссылку из письма — или выключите подтверждение почты в настройках проекта Supabase.",
+    authEmailTaken: "Такая почта уже зарегистрирована",
+    authWeakPassword: "Пароль короче 6 символов",
+    authBadEmail: "Проверьте адрес почты",
+    authNetwork: "Нет связи с сервером",
+    authCheckEmail: "Подтвердите адрес по ссылке из письма, затем войдите",
+    accountPurpose: "Аккаунт нужен, чтобы журналы и точки были на всех ваших устройствах. Без входа приложение работает локально.",
+    syncNotConfigured: "Синхронизация не настроена",
+    syncNotConfiguredHint: "Синхронизация не настроена: не заданы ключи сервера. Приложение работает локально.",
+
+    // ===== НАСТРОЙКИ (редизайн) =====
+    appearance: "Оформление",
+    themeLight: "Светлая",
+    themeDark: "Тёмная",
+    themeSystem: "Системная",
+    appLanguage: "Язык интерфейса",
+    basicVersion: "Базовая версия",
+    premiumPitch: "Расширьте до Premium: приток, барраж, утечки",
+    dataAndCalc: "Данные и расчёты",
+    settingTablet: "Адаптация под планшет",
+    settingAutoLocation: "Автоопределение координат",
+    settingTabularNums: "Моноширинные цифры",
+    aboutApp: "О приложении",
+
+    // ===== ГЛАВНАЯ (редизайн) =====
+    mainScenario: "Основной сценарий",
+    createPumping: "Создать откачку",
+    createPumpingSub: "Журнал и обработка ОФР",
+    desktopBanner: "Полная версия для Windows — расчёты на компьютере",
+    desktopBannerTitle: "Версия для Windows",
+    desktopBannerSub: "Полные расчёты на компьютере",
+
+    // ===== ОБЩИЕ ДЕЙСТВИЯ =====
+    add: "Добавить",
+    confirm: "Подтвердить",
+    total: "Всего",
+
+    // ===== КАЛЬКУЛЯТОР: вкладки и поля =====
+    tabFiltration: "Коэф. фильтрации",
+    tabParams: "Оценка параметров",
+    tabForecast: "Прогноз s",
+    tabPit: "Приток в котлован",
+    tabBarrage: "Барраж",
+    tabLeakage: "Утечки",
+
+    // ===== БАРРАЖ И ГРАНИЧНЫЕ УСЛОВИЯ =====
+    distanceToBoundary: "Расстояние до границы L",
+    boundaryType: "Тип границы",
+    boundaryBarrier: "Непроницаемая",
+    boundaryRecharge: "Постоянный напор",
+    withoutBoundary: "Без границы",
+    boundaryEffect: "Вклад границы",
+    boundaryNotReachedNote:
+      "Возмущение ещё не дошло до границы — она пока не влияет на понижение.",
+    observationBeyondBoundaryNote:
+      "Точка наблюдения оказалась за границей пласта: r должно быть меньше L.",
+    barrageRiseTitle: "Подпор перед сооружением",
+    naturalGradient: "Уклон потока i",
+    barrierLength: "Длина сооружения b",
+
+    // ===== ИНФИЛЬТРАЦИОННЫЕ УТЕЧКИ =====
+    aquitardThickness: "Мощность слабопроницаемого слоя m′",
+    aquitardK: "Коэф. фильтрации слоя k′",
+    steadyDrawdown: "Стационар",
+    leakageVolumeTitle: "Расход перетекания",
+    leakageArea: "Площадь F",
+    leakageTotal: "Расход по площади",
+    value: "Значение",
+    result: "Результат",
+    convertedToAllUnits: "Пересчёт по всем единицам",
+    thickness: "Мощность m",
+    influenceRadius: "Радиус влияния R",
+    penetrationRatio: "Доля вскрытия l/m",
+    transmissivity: "Водопроводимость T",
+    storativity: "Водоотдача S",
+    filtrationCoefficient: "Коэф. фильтрации k",
+    pitDrawdown: "Понижение s₀",
+    pitRadius: "Радиус котлована r₀",
+    defaultInfluenceRatioNote: "R и r₀ не заданы — принято отношение R/r₀ = 300. Для точного результата укажите фактические значения.",
+    drawdownExceedsThicknessNote: "Понижение больше мощности пласта — проверьте исходные данные.",
+    unitMDay: "м/сут",
+    unitMHour: "м/час",
+    unitMSec: "м/сек",
+    unitCmDay: "см/сут",
+    unitCmSec: "см/сек",
+    unitMmDay: "мм/сут",
+    unitFtDay: "фт/сут",
+    unitFtSec: "фт/сек",
+    unitMeinzer: "мейнцер",
+
+    // ===== ПОЛЕВОЙ ДНЕВНИК: карта и точки =====
+    pointTypeWell: "Скважина",
+    pointTypeSpring: "Родник",
+    pointTypePit: "Шурф",
+    pointTypeObservationPoint: "Наблюдение",
+    pointType_well: "Скважина",
+    pointType_spring: "Родник",
+    pointType_pit: "Шурф",
+    pointType_observation: "Точка",
+    pointsCount: "точек",
+    typesCount: "типа",
+    lastRecord: "запись",
+    observationPoints: "Точки наблюдения",
+    pointTitlePlaceholder: "Название точки",
+    markMyLocation: "Отметить моё местоположение",
+    centerOnMyLocation: "Показать моё местоположение на карте",
+    mapExpand: "Развернуть карту на весь экран",
+    mapCollapse: "Свернуть карту",
+    tapMapToMark: "Нажмите на карту — отметить точку",
+    tapMapToAddPoint: "Нажмите на карту, чтобы отметить точку",
+    mapNativeOnly: "Карта доступна в мобильном приложении",
+    locationDenied:
+      "Нет доступа к геопозиции. Разрешите его в настройках или отметьте точку тапом по карте.",
+    locationFailed:
+      "Не удалось определить местоположение. Под землёй и в здании сигнала может не быть — поставьте точку по карте.",
+    locating: "Определяем координаты…",
+
+    // ===== ПОЛЕВОЙ ДНЕВНИК: интерфейс =====
+    filterByTypes: "Фильтр по типам",
+    fieldDiaryStats: "Статистика полевого дневника",
+    addPoint: "Добавить точку",
+    editPoint: "Изменить точку",
+    pointTypeLabel: "Тип точки:",
+
+    // ===== КАЛЬКУЛЯТОР =====
+    imperfectWell: "Несовершенная скважина",
+
+    // ===== ОБЩЕЕ =====
+    loadingSettings: "Загрузка настроек...",
+
+    // ===== ПОЛЕВОЙ ДНЕВНИК: типы точек =====
+    pointTypeObservation: "Наблюдение",
+    pointTypeSample: "Проба",
+    pointTypeMeasurement: "Измерение",
+    pointTypePhoto: "Фото",
+    pointTypeNote: "Заметка",
+
+    // ===== НИЖНЕЕ МЕНЮ =====
+    help: "Справка",
+    exit: "Выход",
+    // ===== АККАУНТ И СИНХРОНИЗАЦИЯ =====
+    accountManage: "Синхронизация, пароль, удаление",
+    signInAction: "Войти",
+    signUpAction: "Зарегистрироваться",
+    subscribeNeedsAccount: "Войдите в аккаунт: подписка привязывается к учётной записи.",
+    billingPending: "Оплата подключается через App Store и Google Play. Для доступа сейчас используйте промокод в разделе «Аккаунт».",
+    cancelViaStore: "Подписка отменяется в настройках App Store или Google Play — так требуют правила магазинов.",
+    syncSection: "Синхронизация",
+    syncIdle: "Готово к обмену",
+    syncInProgress: "Синхронизация…",
+    syncUpToDate: "Данные актуальны",
+    syncConflicts: "Есть расхождения",
+    syncFailed: "Не удалось синхронизировать",
+    syncLast: "Последний обмен",
+    syncNever: "ещё не выполнялась",
+    syncJustNow: "только что",
+    syncMinutesAgo: "%{count} мин назад",
+    syncPending: "ждут отправки",
+    syncNow: "Синхронизировать",
+    conflictsSection: "Расхождения",
+    conflictQuestion: "Запись изменена и здесь, и на другом устройстве. Какую версию оставить?",
+    keepLocal: "Эту",
+    keepRemote: "С другого устройства",
+    passwordSection: "Пароль",
+    newPassword: "Новый пароль",
+    changePassword: "Сменить пароль",
+    passwordChanged: "Пароль изменён",
+    passwordTooShort: "Не короче 6 символов",
+    forgotPassword: "Забыли пароль?",
+    enterEmailFirst: "Введите адрес почты",
+    resetSent: "Письмо со ссылкой отправлено. Проверьте почту.",
+    dangerSection: "Управление учётной записью",
+    deleteAccount: "Удалить аккаунт",
+    deleteAccountTitle: "Удалить аккаунт?",
+    deleteAccountMessage: "Учётная запись и все данные на сервере будут удалены без возможности восстановления.",
+    deleteAccountHint: "Журналы и точки останутся на этом устройстве. С сервера данные будут удалены безвозвратно.",
+    planBasic: "Базовый доступ",
+    planPremium: "Премиум-доступ",
+    premiumActive: "Синхронизация и расширенные расчёты открыты",
+    promoSection: "Промокод",
+    promoPlaceholder: "Код от партнёра",
+    promoApply: "Применить",
+    promoApplied: "Промокод применён",
+    signOutTitle: "Выйти из аккаунта?",
+    signOutMessage:
+      "Журналы и точки останутся на устройстве. Синхронизация остановится до следующего входа.",
+
+    // ===== МОДУЛЬ ОТКАЧЕК (главный экран) =====
+    loadProject: "Загрузить проект",
+    processing: "Обработка",
+    ofrType: "Тип ОФР",
+    projectJournalName: "Название проекта/журнала",
+    stepOfTotal: "Шаг %{current} из %{total}",
+    drawdownData: "Данные понижений",
+    projectReview: "Обзор проекта",
+    processingTypeAndDates: "Тип обработки и даты",
+    createJournalSubtitle: "Мастер создания нового журнала обработки откачки за 3 шага",
+    zooming: "Масштабирование",
+    distancesInfo: "На этом шаге важно указать расстояние от откачиваемой скважины до наблюдательной, в метрах. Если отдельной наблюдательной скважины нет, а наблюдения выполнялись в откачиваемой скважине, то за расстояние принимается радиус скважины.",
+    km: "км",
     
     // ===== ЭКРАН ЗАГРУЗКИ =====
     
@@ -57,54 +471,27 @@ const i18n = new I18n({
     flowRateUnits: "Единицы измерения расхода",
     
     // Мастер создания проектов
-    basicParameters: "Основные параметры",
     processingTypeSelection: "Выбор типа обработки",
-    observationJournalStep: "Журнал наблюдений",
-    distancesBetweenWells: "Расстояния между скважинами",
-    wellNamePlaceholder: "Введите название скважины",
-    project: "Проект",
-    newProject: "Новый проект",
-    information: "Информация",
-    journalWillBeAddedToActiveProject: "Журнал будет добавлен к активному проекту",
-    noActiveProject: "Нет активного проекта.",
-    newProjectWillBeCreated: "Будет создан новый проект.",
-    firstStep: "Шаг 1: Укажите основные параметры проекта, включая тип водоносного горизонта, название скважины, расход и другие характеристики.",
-    secondStep: "Шаг 2: Выберите типы обработки (откачка/восстановление) и укажите даты начала процессов.",
-    journalCreationInfo: "После завершения всех шагов будет создан журнал наблюдений, который можно будет использовать для анализа данных.",
     
     // Кнопки навигации и элементы мастера
-    next: "Далее",
-    previous: "Предыдущий",
-    back: "Назад",
-    createJournal: "Создать журнал",
     saveChanges: "Сохранить изменения",
     addObservationWell: "Добавить наблюдательную скважину",
-    addMeasurement: "Добавить измерение",
-    deleteMeasurement: "Удалить измерение",
+    addMeasurement: "Добавить замер",
+    deleteMeasurement: "Удалить замер",
     timeUnit: "Единица времени",
     timeUnits: "Единицы времени",
-    seconds: "секунды",
-    minutes: "минуты",
-    hours: "часы",
     wellRadius: "Радиус скважины",
     aquiferThickness: "Мощность водоносного горизонта",
     saturatedThickness: "Насыщенная мощность",
     mainFormationThickness: "Основная мощность",
     flowRate: "Расход",
     wellName: "Название скважины",
-    layerType: "Тип водоносного горизонта",
-    confined: "Напорный",
-    unconfined: "Безнапорный",
     withInterflow: "С перетеканием",
     processingTypes: "Типы обработки",
-    pumping: "Откачка/восстановление",
-    recovery: "Восстановление",
     pumpingStart: "Начало откачки",
     recoveryStart: "Начало восстановления",
-    pumpingDuration: "Длительность откачки",
     experimentalWell: "Опытная скважина",
-    observationWells: "Наблюдательные скважины",
-    measurements: "Измерения",
+    measurements: "Замеры",
     distances: "Расстояния",
     dragToMove: "Перетащите для перемещения",
     pinchToZoom: "Масштабируйте пальцами",
@@ -113,8 +500,8 @@ const i18n = new I18n({
     deleteWell: "Удалить скважину",
     editWell: "Редактировать скважину",
     wellActions: "Действия со скважиной",
-    measurementNumber: "Измерение",
-    insertMeasurement: "Вставить измерение",
+    measurementNumber: "Замер",
+    insertMeasurement: "Вставить замер",
     selectDate: "Выбор даты и времени",
     dateTimeSelection: "Выбор даты и времени",
     
@@ -134,7 +521,7 @@ const i18n = new I18n({
     examplesDesc: "Обучающие материалы",
     subscriptionDesc: "Управление подпиской",
     settingsDesc: "Настройки приложения",
-    fieldDesc: "Запись данных в полевых условиях",
+    fieldDesc: "Точки наблюдения с координатами",
     field: "Полевой дневник",
     programAddsDesc: "Программа для повседневных гидрогеологических расчетов на windows.",
     programAdds: "АНСДИМАТ",
@@ -154,10 +541,8 @@ const i18n = new I18n({
     // Основные настройки приложения
     settings: "Настройки",
     settingsDescription: "Настройка внешнего вида и поведения приложения",
-    appearance: "Внешний вид",
     theme: "Тема",
     language: "Язык",
-    appLanguage: "Язык приложения",
     version: "Версия",
     developer: "Разработчик",
     website: "Сайт",
@@ -215,16 +600,18 @@ const i18n = new I18n({
     orderTitle: "Форма заказа ANSDIMAT",
     fullName: "ФИО",
     organization: "Организация",
-    email: "E-mail",
     phone: "Телефон",
-    address: "Адрес",
-    licenseType: "Тип лицензии:",
+    licenseType: "Тип лицензии",
     singleLicense: "Однопользовательская",
     multiLicense: "Многопользовательская",
     comment: "Комментарий",
     submit: "Отправить",
     orderSent: "Заказ отправлен",
-    orderThanks: "Спасибо, {name}! Мы свяжемся с вами.",
+    orderIntro:
+      "Заявка откроется письмом в почтовом приложении. Звёздочкой отмечены поля, без которых мы не сможем ответить.",
+    orderThanks: "Спасибо, %{name}! Письмо открыто в почтовом клиенте — отправьте его, и мы свяжемся с вами.",
+    fieldRequired: "Заполните поле",
+    emailInvalid: "Проверьте адрес почты",
 
     // Скачать
     downloadText: "Скачать АНСДИМАТ можно по ссылке ниже:",
@@ -270,31 +657,19 @@ const i18n = new I18n({
       "Обработка откачек - это инструмент для обработки данных откачек.",
     
     // PumpingTestProcessing - Заголовки разделов
-    observationJournal: "Журнал наблюдений",
-    dataProcessing: "Обработка данных", 
     journalCreationWizard: "Мастер создания журнала",
-    projectManagement: "Управление проектами",
-    exportData: "Экспорт данных",
-    journalManagement: "Управление журналами",
     
     // PumpingTestProcessing - Заголовки шагов мастера
-    basicParameters: "Основные параметры",
     observationJournalStep: "Журнал наблюдений",
     distancesBetweenWells: "Расстояния между скважинами",
     
     // PumpingTestProcessing - Экспорт
     availableExportFormats: "Доступные форматы экспорта",
-    exportProjectJSON: "Экспорт проекта (JSON)",
-    exportProjectJSONDesc: "Полный экспорт проекта со всеми журналами и данными",
-    exportJournalsCSV: "Экспорт журналов (CSV)",
-    exportJournalsCSVDesc: "Экспорт всех журналов в формате CSV для анализа в Excel",
-    exportAnalysisPDF: "Экспорт анализа (PDF)",
-    exportAnalysisPDFDesc: "Подробный отчет с графиками и результатами анализа",
     exportInformation: "Информация об экспорте",
     exportInfoText: "• JSON формат сохраняет полную структуру данных\n• CSV формат подходит для анализа в электронных таблицах\n• PDF отчеты содержат графики и детальный анализ\n• Все экспортированные файлы можно импортировать обратно",
     
     // PumpingTestProcessing - Детали журнала
-    measurementCount: "Количество измерений",
+    measurementCount: "Количество замеров",
     
     // PumpingTestProcessing - Расстояния
     distanceTo: "Расстояние до",
@@ -303,8 +678,7 @@ const i18n = new I18n({
     projectManagement: "Управление",
     createProject: "Создать проект",
     projectName: "Название проекта",
-    projectNamePlaceholder: "Введите название проекта",
-    noProjects: "Нет проектов",
+    projectNamePlaceholder: "Например: Скв. 7Ц откачка",
     activeProject: "Активный проект",
     selectProject: "Выберите проект",
     deleteProject: "Удалить проект",
@@ -313,7 +687,6 @@ const i18n = new I18n({
     journalProcessingDescription: "Модуль для анализа результатов откачных испытаний скважин. Создавайте проекты, ведите журналы наблюдений и получайте подробные отчёты.",
     projectCreated: "Проект создан",
     exportProject: "Экспорт проекта",
-    importProject: "Импорт проекта",
     favoriteProject: "В избранное",
     unfavoriteProject: "Убрать из избранного",
     addToFavorites: "Добавить в избранное",
@@ -330,9 +703,7 @@ const i18n = new I18n({
     step4: "Шаг 4: Таблица данных",
     step5: "Шаг 5: Подтверждение",
     next: "Далее",
-    back: "Назад",
     finish: "Завершить",
-    cancel: "Отмена",
 
     // Test Types
     testType: "Тип теста",
@@ -342,8 +713,6 @@ const i18n = new I18n({
 
     // Layer Types
     layerType: "Тип слоя",
-    confined: "Напорный",
-    unconfined: "Безнапорный",
     leaky: "Полунапорный",
 
     // Boundary Conditions
@@ -354,13 +723,9 @@ const i18n = new I18n({
 
     // Data Table
     dataTable: "Таблица данных",
-    time: "Время (мин)",
-    drawdown: "Понижение (м)",
     addRow: "Добавить строку",
     deleteRow: "Удалить строку",
-    noData: "Нет данных",
     rows: "строк",
-    selectDateTime: "Выбрать дату/время",
     dataType: "Тип данных",
     data: "Данные",
     dataRows: "Количество строк",
@@ -369,13 +734,11 @@ const i18n = new I18n({
     confirmation: "Подтверждение",
     journalCreated: "Журнал создан",
     journalSaved: "Журнал сохранен в проект",
-    noActiveProject: "Нет активного проекта",
     selectProjectFirst: "Сначала выберите проект",
 
     // Data Processing
     dataProcessing: "Обработка",
     processingTitle: "Обработка журнала",
-    project: "Проект",
     journalProcessing: "Создать журнал откачки",
     journalProcessingSubtitle: "Мастер создания нового журнала обработки откачки за 3 шага",
     journal: "Журнал",
@@ -386,26 +749,19 @@ const i18n = new I18n({
     editJournal: "Редактировать журнал",
     importJournal: "Импорт журнала",
     dataPreview: "Предварительный просмотр данных",
-    journalUpdated: "Журнал обновлен",
     journalWillBeAddedToActiveProject: "Журнал будет добавлен в активный проект",
     newProjectWillBeCreated: "Поскольку нет активного проекта, будет создан новый проект для этого журнала откачки.",
     firstStep: "На первом шаге выбирается предполагаемый тип водоносного горизонта (напорный, безнапорный).",
     secondStep: "Далее задается имя скважины (например, скв.1) и её расход. Расход можно задать в м³/сут.",
-    selectTwoPoints:
-      "Нажмите на две точки для графоаналитического расчёта (наклон и пересечение)",
     results: "Результаты графоаналитического метода",
-    slope: "Наклон (k)",
+    slope: "Наклон прямой a",
     intercept: "Пересечение (b)",
     formula: "Формула: s = k·log₁₀(t) + b",
     deleteJournal: "Удалить журнал",
-    deleteJournalConfirm: "Удалить журнал '{name}'?",
-    journalDeleted: "Журнал удален",
     noJournals: "Нет сохранённых журналов в проекте",
     function: "Функция",
     units: "Единицы измерения",
-    time: "Время",
     distance: "Расстояние",
-    scale: "Масштаб",
     dragLine: "или перетащите прямую",
     slopeUp: "Наклон +",
     slopeDown: "Наклон -",
@@ -426,14 +782,9 @@ const i18n = new I18n({
     exportAnalysisPdf: "Отчёт анализа (PDF)",
     exportAnalysisPdfDesc: "Генерация отчёта с результатами анализа",
     exportSuccess: "Экспорт выполнен",
-    exportError: "Ошибка экспорта",
-    projectNotFound: "Проект не найден",
-    invalidJsonFile: "Файл не является валидным JSON",
     notAnsdimatProject: "Файл не является проектом ANSDIMAT",
     projectIdExists: "Проект с таким ID уже существует",
     projectImported: "Проект успешно импортирован!",
-    importError: "Ошибка при импорте файла",
-    noDataToExport: "Нет данных для экспорта",
     projectInfo: "Информация о проекте",
     created: "Создан",
     journalsCount: "Журналов",
@@ -454,7 +805,7 @@ const i18n = new I18n({
     subscriptionFeatures: "Возможности подписки",
     unlimitedProjects: "Неограниченное количество проектов",
     advancedAnalytics: "Расширенная аналитика",
-    advancedFunctionality: "Расширенные функционал",
+    advancedFunctionality: "Расширенный функционал",
     exportAllFormats: "Экспорт во всех форматах",
     subscriptionActive: "Подписка активна",
     subscriptionExpires: "Подписка истекает",
@@ -468,21 +819,19 @@ const i18n = new I18n({
     price: "Цена",
     perMonth: "в месяц",
     perYear: "в год",
-    saveWithYearly: "Сэкономьте с годовой подпиской",
+    saveWithYearly: "Выгоднее на год",
+    yearlySavings: "Экономия %{amount} в год",
+    subscriptionAutoRenew:
+      "Подписка продлевается автоматически, если не отменить её не позднее чем за 24 часа до конца оплаченного периода.",
     trialPeriod: "Пробный период",
     daysFree: "дней бесплатно",
     premiumFeature: "Премиум функция",
-    premiumFeatureCSV:
-      "Экспорт в CSV доступен только для пользователей с подпиской",
-    premiumFeaturePDF:
-      "Экспорт в PDF доступен только для пользователей с подпиской",
     premiumFeatureInfiltration:
       "Инфильтрационные утечки доступны только для премиум пользователей",
     premiumFeaturePitInflow:
       "Приток в котлован доступен только для премиум пользователей",
     goToPremium: "Перейти на премиум",
     premiumOnly: "Только для премиум пользователей",
-    subscription: "Подписка",
     subscriptionNavigation: "Функция перехода к подписке будет добавлена позже",
 
     // Контакты
@@ -497,17 +846,11 @@ const i18n = new I18n({
 
     // Ошибки и сообщения
     linkOpenError: "Ошибка при открытии ссылки",
-    mailClientError: "Не удалось открыть почтовый клиент",
-    mailSendError: "Не удалось отправить письмо",
+    mailClientError: "Почтовый клиент не открылся. Отправьте заявку вручную на адрес",
+    mailSendError: "Не удалось открыть письмо. Отправьте заявку вручную на адрес",
     invalidJsonFile: "Файл не является валидным JSON",
-    notAnsdimatJournal: "Файл не является журналом ANSDIMAT",
     journalImportedSuccess: "Журнал успешно импортирован!",
     importFileError: "Ошибка при импорте файла",
-    noData: "Нет данных",
-    createJournalInWizard: 'Создайте журнал в разделе "Ввод"',
-    noGalleryAccess: "Нет доступа к галерее",
-    chartSavedSuccess: "График сохранён в галерею!",
-    chartSaveError: "Не удалось сохранить график",
 
     // Лимиты проектов
     projectLimit: "Лимит проектов",
@@ -554,6 +897,7 @@ const i18n = new I18n({
 
     // Единицы измерения для функций
     unitMinutes: "мин",
+    unitFlowRate: "м³/сут",
     unitMeters: "м",
     unitMinutesSqrt: "мин¹/²",
     unitLogMinutes: "lg(мин)",
@@ -568,7 +912,6 @@ const i18n = new I18n({
     // Common
     save: "Сохранить",
     edit: "Редактировать",
-    delete: "Удалить",
     create: "Создать",
     loading: "Загрузка...",
     error: "Ошибка",
@@ -647,7 +990,7 @@ const i18n = new I18n({
     exportJournalsCSVDesc: "Экспорт всех журналов в формате CSV для анализа в Excel",
     exportAnalysisPDF: "Экспорт анализа (PDF)",
     exportAnalysisPDFDesc: "Подробный отчет с графиками и результатами анализа",
-    enterProjectName: "Введите название проекта",
+    enterProjectName: "Введите название журнала",
     createProjectError: "Не удалось создать проект",
     projectNotFound: "Проект не найден",
     projectSelected: "Проект \"{name}\" выбран",
@@ -667,10 +1010,10 @@ const i18n = new I18n({
     projectUpdated: "Проект обновлен",
     categoryExport: "Экспорт",
     categoryCharts: "Графики",
-    pumping: "Откачка",
     lugeon: "Люжон",  
     express: "Экспресс",
-    injection: "Наливка",
+    injection: "Налив в зону аэрации",
+    packer: "Пакерное опробование",
     categoryReports: "Отчеты",
     invalidJSONFormat: "Неверный формат файла JSON",
     invalidProjectFile: "Файл не является проектом Ansdimat",
@@ -692,7 +1035,7 @@ const i18n = new I18n({
     pumping: "Откачка",
     recovery: "Восстановление",
     addObservationWells: "Добавить наблюдательные скважины",
-    measurement: "Измерение",
+    measurement: "Замер",
     time: "Время",
     drawdown: "Понижение",
     pumpingJournalCreated: "Журнал откачки",
@@ -711,7 +1054,6 @@ const i18n = new I18n({
     home: "Home",
     about: "About",
     order: "Order",
-    subscription: "Subscription",
     download: "Download",
     contact: "Contact Us",
     examples: "Examples & Videos",
@@ -721,6 +1063,436 @@ const i18n = new I18n({
     util3: "Calculator",
     toggleLang: "Switch Language",
     homeTitle: "ANSDIMAT",
+
+    // ===== SPLASH SCREEN =====
+    appSubtitle: "hydrogeologist's field calculator",
+
+    selectOfrType: "Select test type",
+    newJournal: "New log",
+    fillAndProcess: "Fill in and process the test",
+    previouslyCreated: "Previously created",
+
+    // ===== PUMPING TEST PROCESSING =====
+    flowRateQ: "Discharge Q",
+    measurementsJournal: "Measurements log",
+    measurementsShort: "measurements",
+    drawdownChart: "Drawdown chart",
+    recoveryChart: "Recovery chart",
+    phasePumping: "Pumping",
+    phaseRecovery: "Recovery",
+    pumpingDuration: "Pumping lasted",
+    recoveryAxisHint:
+      "The X axis shows t/t′: time since pumping started over time since it stopped",
+    recoveryNeedDuration:
+      "Enter the pumping duration and add measurements taken after the pump stopped — otherwise recovery cannot be processed.",
+    recoveryInterceptNote:
+      "The line does not pass through the origin: aquifer boundaries or a variable discharge rate may be at play.",
+    chartEmpty: "Add measurements to build the chart",
+    ofr_single: "Single well",
+    ofr_cluster: "Cluster",
+    ofr_fill: "Infiltration",
+    ofr_recovery: "Recovery",
+
+    // ===== TEST PROCESSING: CALCULATION CAPTIONS =====
+    transmissivityLabel: "T, m²/day",
+    methodRecovery: "T = 0.183·Q / a (Theis recovery), a — slope of the s′ — lg(t/t′) line.",
+    methodCooperJacob: "T = 0.183·Q / Δs (Cooper — Jacob).",
+    methodTwoPoints: "The line is drawn through the two selected points.",
+    methodFitQuality: "Goodness of fit R² = %{r2}",
+    methodNeedLogAxis: "Switch the X axis to lg t to compute T.",
+
+    // ===== EXAMPLES & VIDEOS (redesign) =====
+    filterAll: "All",
+    filterPumping: "Test processing",
+    filterDewatering: "Dewatering",
+    filterModeling: "Modeling",
+    videoLessons: "Video tutorials",
+    studyMaterials: "Materials",
+    open: "Open",
+
+    // ===== ABOUT (redesign) =====
+    aboutManual: "User manual",
+    aboutVideos: "Video tutorials",
+    aboutContact: "Contact us",
+    aboutLocalData: "© ANSDIMAT. Calculations run on the device and work offline.",
+    orderLicense: "Order a licence",
+    versionLabel: "version",
+
+    // ===== USER MANUAL =====
+    manualEyebrow: "How to use",
+    manualStartTitle: "Getting started",
+    manualStartIntro:
+      "ANSDIMAT is a field tool for hydrogeologists: a pumping-test journal, measurement processing and aquifer parameter calculations. Everything is computed on the device and stored locally; the internet is only needed to sign in and sync.",
+    manualStartStep1: "Tap “Create pumping test” — pick the test type and name the project.",
+    manualStartStep2: "Fill in the test data: discharge rate, well radius, aquifer thickness.",
+    manualStartStep3: "Record time–drawdown measurements as the test runs.",
+    manualStartStep4: "Open processing: the plot is built automatically and parameters update live.",
+    manualJournalTitle: "Pumping-test journal",
+    manualJournalIntro:
+      "A journal holds the whole test: well data, test conditions and the measurement table. Journals are not deleted by accident — deletion always asks for confirmation, and the measurements go with the journal.",
+    manualJournalStep1: "The pencil returns you to data entry and measurement editing.",
+    manualJournalStep2: "The chart icon opens processing and parameter calculation.",
+    manualJournalStep3: "The star marks a journal as important and moves it to the top of the list.",
+    manualJournalStep4: "The arrow exports the journal together with its measurements.",
+    manualJournalNote:
+      "Measurement time is counted from the start of pumping. Drawdown is the difference between the static and dynamic water level and is always positive.",
+    manualProcessingTitle: "Test processing",
+    manualProcessingIntro:
+      "Processing uses the Cooper–Jacob method: measurements are plotted in semi-log coordinates (lg t vs drawdown), and aquifer parameters are derived from the straight-line segment.",
+    manualFormulaT:
+      "T — transmissivity, m²/day; Q — discharge rate, m³/day; a — slope of the line, m per log cycle.",
+    manualFormulaK: "k — hydraulic conductivity, m/day; m — aquifer thickness, m.",
+    manualProcessingStep1: "By default the line is fitted by least squares over all measurements.",
+    manualProcessingStep2:
+      "To cut off the early and late segments, switch to the two-point fit and mark the points — in the measurement table or directly on the plot.",
+    manualProcessingStep3:
+      "Pinch with two fingers or use “+” and “−” to zoom, drag with one finger to pan; the axes stay in place.",
+    manualProcessingStep4: "“Fit” restores the original scale covering all measurements.",
+    manualProcessingNote:
+      "Early measurements are distorted by wellbore storage, late ones by aquifer boundaries. The straight-line segment usually lies between them — that is what the two points should bracket.",
+    manualCalculatorTitle: "Calculator",
+    manualCalculatorIntro:
+      "Four tabs for quick calculations when there is no full journal — a few values from the field notebook are enough.",
+    manualCalcFiltration:
+      "Convert hydraulic conductivity between units: m/day, m/h, m/s, cm/s, ft/day, Meinzer units.",
+    manualCalcParams:
+      "Hydraulic conductivity from a single-well test — Dupuit formulas for confined and unconfined aquifers, with the Kozeny partial-penetration correction.",
+    manualCalcForecast:
+      "Drawdown at a given distance and time from the Theis equation via the well function W(u).",
+    manualCalcPit:
+      "Inflow into an excavation pit: the contour is replaced by a “big well” of equivalent radius.",
+    manualCalcBarrage:
+      "Aquifer with a boundary: an impermeable contact deepens the cone of depression, a river flattens it. Plus head build-up upstream of a cutoff wall.",
+    manualCalcLeakage:
+      "Leaky aquifer: drawdown after Hantush–Jacob, the leakage factor B and the leakage rate through the aquitard.",
+    manualRecoveryTitle: "Level recovery",
+    manualRecoveryIntro:
+      "The second half of the test: the pump is off and the level rises. Processing it pays off — with the pump stopped, discharge fluctuations no longer spoil the data.",
+    manualFormulaRecovery:
+      "s′ — residual drawdown, m; t — time since pumping started; t′ — time since the pump stopped.",
+    manualRecoveryStep1: "In processing, switch to “Recovery”.",
+    manualRecoveryStep2: "Enter how long pumping lasted: t′ is counted from that moment.",
+    manualRecoveryStep3: "Measurements are entered the same way — time from the start and residual drawdown.",
+    manualRecoveryNote:
+      "The recovery line must pass through the origin. A noticeable offset points to aquifer boundaries or a variable discharge rate during pumping; the app warns about it.",
+    manualCalculatorNote:
+      "The radius of influence R is rarely measured — it is taken from experience. Leave the field empty and R = 300·r₀ is used, with a warning that the result is an estimate.",
+    manualDiaryTitle: "Field diary",
+    manualDiaryStep1: "Enter the point name and pick its type: well, spring, pit or observation.",
+    manualDiaryStep2: "Tap the map where you need it — the point is placed at the tapped coordinates.",
+    manualDiaryStep3:
+      "“Mark my location” places a point at the device coordinates; the circle on the map only centres the map on you.",
+    manualDiaryNote:
+      "Map tiles come from the internet, but points you have already marked and their coordinates are stored on the device and available offline.",
+    manualAccountTitle: "Account and sync",
+    manualAccountIntro:
+      "The app works fully without an account: journals, measurements and points live in the device storage. An account lets the same data open on another phone or tablet.",
+    manualGlossaryTitle: "Notation",
+    manualTermQ: "Well discharge rate, m³/day",
+    manualTermS: "Water level drawdown, m",
+    manualTermT: "Transmissivity, m²/day",
+    manualTermK: "Hydraulic conductivity, m/day",
+    manualTermM: "Aquifer thickness, m",
+    manualTermA: "Slope of the line, m per log cycle",
+    manualTermR0: "Well radius, m",
+    manualTermR: "Radius of influence, m",
+    manualTermW: "Theis well function, dimensionless",
+
+    // ===== DRAWDOWN CHART =====
+    fitAuto: "All points",
+    fitTwoPoints: "Two points",
+    selectTwoPoints: "Tap two points to draw the line through them",
+    addMeasurementsForChart: "Add measurements to build the chart",
+    chartEmptyTitle: "Two measurements build the chart",
+    chartEmptyHint: "Enter time and drawdown in the table above — the line and T appear at once.",
+    stepX: "Grid step X",
+
+    // ===== FLOW REGIME DIAGNOSIS =====
+    chartExpand: "Expand the chart to full screen",
+    chartCollapse: "Collapse the chart",
+    viewFit: "Straight line",
+    viewDiagnostic: "Diagnosis",
+    diagnosticChart: "Flow regime diagnosis",
+    legendDerivative: "derivative ds/d(ln t)",
+    diagnosticAxes: "t, min · vertical axis — metres",
+    legendDrawdown: "drawdown s",
+    diagnosticEmptyTitle: "Diagnosis needs at least five readings",
+    diagnosticEmptyHint:
+      "Spaced out in time — 1, 2, 5, 10, 30 minutes. An evenly spaced series hides the shape of the curve.",
+    timeFromPumpStart: "t from pumping start, min",
+    columnTime: "t, min",
+    columnDrawdown: "s, m",
+    recoveryNoDuration: "Enter how long the pumping lasted — recovery cannot be plotted without it.",
+    recoveryTimeTooSmall:
+      "Reading times are shorter than the pumping duration. In a recovery journal time is counted from the start of pumping, not from the pump stop.",
+    needLogMode: "Switch the X axis to lg t — T is not computed on the other axes.",
+    needTwoMeasurements: "Enter at least two readings: one point does not make a line.",
+    needTwoSelected: "Mark two points on the chart to draw the line through.",
+    needFlowRate: "Enter the discharge Q — transmissivity cannot be computed without it.",
+    needSlope: "Drawdown does not grow with time: the slope is zero and T is undefined.",
+    plateauEstimate: "T from the derivative plateau",
+    unitTransmissivity: "m²/day",
+    plateauMismatch:
+      "This estimate differs from the straight-line result by more than a quarter — the line is most likely drawn outside the radial flow segment.",
+    regimeRadial: "Radial flow",
+    regimeRadialSign: "The derivative has reached a plateau and holds it.",
+    regimeRadialAdvice:
+      "The aquifer behaves as unbounded — Cooper — Jacob applies, and the line may be drawn through all late points.",
+    regimeBarrier: "No-flow boundary",
+    regimeBarrierSign: "The derivative plateau has risen %{ratio}-fold.",
+    regimeBarrierAdvice:
+      "Drawdown has reached the edge of the aquifer. Compute T from the early segment: late points halve it. The Barrage tab estimates the distance to the boundary.",
+    regimeRecharge: "Aquifer is being recharged",
+    regimeRechargeSign: "The derivative is falling — drawdown stops growing.",
+    regimeRechargeAdvice:
+      "Water enters the aquifer: leakage through the aquitard or a nearby water body. Late points overestimate T — use the segment before the bend, and assess leakage in the Leakage tab.",
+    regimeWellbore: "Wellbore storage dominates",
+    regimeWellboreSign: "The derivative rises at 45° across most of the record.",
+    regimeWellboreAdvice:
+      "The well is still emptying itself and the aquifer has not responded. These readings cannot be interpreted — keep pumping.",
+    regimeUnclear: "Regime undetermined",
+    regimeUnclearSign: "Too few readings, or they scatter.",
+    regimeUnclearAdvice:
+      "At least five readings are needed, spaced several times apart: 1, 2, 5, 10, 30 minutes.",
+
+    // ===== CONE OF DEPRESSION =====
+    coneSection: "Cone of depression",
+    coneStaticLevel: "static water level",
+    coneAxis: "distance from the well, m",
+    coneEmpty: "Fill in discharge, transmissivity, storativity and time — the section appears at once.",
+    coneInfluence: "Radius of influence ≈ %{radius} m — beyond it drawdown is negligible.",
+
+    // ===== JOURNAL LIST =====
+    measurementsCount: "%{count} readings",
+    noMeasurements: "no readings",
+    createFailed: "Could not create the journal. Please try again.",
+
+    // ===== ACCOUNT =====
+    accountSection: "Account",
+    accountTitle: "Account",
+    signIn: "Sign in",
+    signUp: "Sign up",
+    signOut: "Sign out",
+    signInToSync: "Sign in",
+    syncAcrossDevices: "Sync across devices",
+    password: "Password",
+    authFillFields: "Enter email and password",
+    authInvalidCredentials: "Wrong email or password",
+    authEmailNotConfirmed:
+      "Email is not confirmed. Open the link from the letter — or turn off email confirmation in your Supabase project settings.",
+    authEmailTaken: "This email is already registered",
+    authWeakPassword: "Password is shorter than 6 characters",
+    authBadEmail: "Check the email address",
+    authNetwork: "No connection to the server",
+    authCheckEmail: "Confirm your address via the emailed link, then sign in",
+    accountPurpose: "An account keeps your journals and points on all your devices. Without signing in the app works locally.",
+    syncNotConfigured: "Sync is not configured",
+    syncNotConfiguredHint: "Sync is not configured: server keys are missing. The app works locally.",
+
+    // ===== SETTINGS (redesign) =====
+    appearance: "Appearance",
+    themeLight: "Light",
+    themeDark: "Dark",
+    themeSystem: "System",
+    appLanguage: "Interface language",
+    basicVersion: "Basic version",
+    premiumPitch: "Upgrade to Premium: inflow, cutoff, leakage",
+    dataAndCalc: "Data & calculations",
+    settingTablet: "Tablet layout",
+    settingAutoLocation: "Auto-detect coordinates",
+    settingTabularNums: "Monospace numbers",
+    aboutApp: "About the app",
+
+    // ===== HOME (redesign) =====
+    mainScenario: "Main scenario",
+    createPumping: "Create pumping test",
+    createPumpingSub: "Journal and OFR processing",
+    desktopBanner: "Full Windows version — calculations on desktop",
+    desktopBannerTitle: "Windows version",
+    desktopBannerSub: "Full calculations on desktop",
+
+    // ===== COMMON ACTIONS =====
+    add: "Add",
+    confirm: "Confirm",
+    total: "Total",
+
+    // ===== CALCULATOR: tabs and fields =====
+    tabFiltration: "Conductivity units",
+    tabParams: "Parameter estimation",
+    tabForecast: "Drawdown forecast",
+    tabPit: "Pit inflow",
+    tabBarrage: "Barrier",
+    tabLeakage: "Leakage",
+
+    // ===== BARRIER AND BOUNDARY CONDITIONS =====
+    distanceToBoundary: "Distance to boundary L",
+    boundaryType: "Boundary type",
+    boundaryBarrier: "Impermeable",
+    boundaryRecharge: "Constant head",
+    withoutBoundary: "Without boundary",
+    boundaryEffect: "Boundary contribution",
+    boundaryNotReachedNote:
+      "The cone of depression has not reached the boundary yet — it does not affect drawdown so far.",
+    observationBeyondBoundaryNote:
+      "The observation point lies beyond the aquifer boundary: r must be smaller than L.",
+    barrageRiseTitle: "Head build-up upstream of the structure",
+    naturalGradient: "Natural gradient i",
+    barrierLength: "Structure length b",
+
+    // ===== LEAKAGE =====
+    aquitardThickness: "Aquitard thickness m′",
+    aquitardK: "Aquitard conductivity k′",
+    steadyDrawdown: "Steady state",
+    leakageVolumeTitle: "Leakage volume",
+    leakageArea: "Area F",
+    leakageTotal: "Total over the area",
+    value: "Value",
+    result: "Result",
+    convertedToAllUnits: "Converted to all units",
+    thickness: "Thickness m",
+    influenceRadius: "Radius of influence R",
+    penetrationRatio: "Penetration ratio l/m",
+    transmissivity: "Transmissivity T",
+    storativity: "Storativity S",
+    filtrationCoefficient: "Conductivity k",
+    pitDrawdown: "Drawdown s₀",
+    pitRadius: "Pit radius r₀",
+    defaultInfluenceRatioNote: "R and r₀ are not set — a ratio R/r₀ = 300 is assumed. Enter actual values for an accurate result.",
+    drawdownExceedsThicknessNote: "Drawdown exceeds aquifer thickness — check the input data.",
+    unitMDay: "m/day",
+    unitMHour: "m/hour",
+    unitMSec: "m/sec",
+    unitCmDay: "cm/day",
+    unitCmSec: "cm/sec",
+    unitMmDay: "mm/day",
+    unitFtDay: "ft/day",
+    unitFtSec: "ft/sec",
+    unitMeinzer: "meinzer",
+
+    // ===== FIELD DIARY: map and points =====
+    pointTypeWell: "Well",
+    pointTypeSpring: "Spring",
+    pointTypePit: "Pit",
+    pointTypeObservationPoint: "Observation",
+    pointType_well: "Well",
+    pointType_spring: "Spring",
+    pointType_pit: "Pit",
+    pointType_observation: "Point",
+    pointsCount: "points",
+    typesCount: "types",
+    lastRecord: "record",
+    observationPoints: "Observation points",
+    pointTitlePlaceholder: "Point name",
+    markMyLocation: "Mark my location",
+    centerOnMyLocation: "Show my location on the map",
+    tapMapToMark: "Tap the map to mark a point",
+    mapExpand: "Expand the map to full screen",
+    mapCollapse: "Collapse the map",
+    tapMapToAddPoint: "Tap the map to add a point",
+    mapNativeOnly: "The map is available in the mobile app",
+    locationDenied:
+      "No access to your location. Allow it in settings, or mark the point by tapping the map.",
+    locationFailed:
+      "Could not determine your location. Underground and indoors there may be no signal — place the point on the map.",
+    locating: "Getting coordinates…",
+
+    // ===== FIELD DIARY: interface =====
+    filterByTypes: "Filter by type",
+    fieldDiaryStats: "Field diary statistics",
+    addPoint: "Add point",
+    editPoint: "Edit point",
+    pointTypeLabel: "Point type:",
+
+    // ===== CALCULATOR =====
+    imperfectWell: "Partially penetrating well",
+
+    // ===== COMMON =====
+    loadingSettings: "Loading settings...",
+
+    // ===== FIELD DIARY: point types =====
+    pointTypeObservation: "Observation",
+    pointTypeSample: "Sample",
+    pointTypeMeasurement: "Measurement",
+    pointTypePhoto: "Photo",
+    pointTypeNote: "Note",
+
+    // ===== BOTTOM MENU =====
+    help: "Help",
+    exit: "Exit",
+    // ===== ACCOUNT AND SYNC =====
+    accountManage: "Sync, password, deletion",
+    signInAction: "Sign in",
+    signUpAction: "Create account",
+    subscribeNeedsAccount: "Sign in first: the subscription is tied to your account.",
+    billingPending: "Payments are being connected through the App Store and Google Play. For now, use a promo code in the Account section.",
+    cancelViaStore: "Subscriptions are cancelled in App Store or Google Play settings — store rules require it.",
+    syncSection: "Sync",
+    syncIdle: "Ready to sync",
+    syncInProgress: "Syncing…",
+    syncUpToDate: "Everything is up to date",
+    syncConflicts: "Conflicting changes",
+    syncFailed: "Sync failed",
+    syncLast: "Last sync",
+    syncNever: "not yet",
+    syncJustNow: "just now",
+    syncMinutesAgo: "%{count} min ago",
+    syncPending: "waiting to upload",
+    syncNow: "Sync now",
+    conflictsSection: "Conflicts",
+    conflictQuestion: "This record changed here and on another device. Which version should stay?",
+    keepLocal: "This one",
+    keepRemote: "From the other device",
+    passwordSection: "Password",
+    newPassword: "New password",
+    changePassword: "Change password",
+    passwordChanged: "Password changed",
+    passwordTooShort: "At least 6 characters",
+    forgotPassword: "Forgot your password?",
+    enterEmailFirst: "Enter your email",
+    resetSent: "A reset link has been sent. Check your inbox.",
+    dangerSection: "Account management",
+    deleteAccount: "Delete account",
+    deleteAccountTitle: "Delete account?",
+    deleteAccountMessage: "Your account and all server-side data will be deleted permanently.",
+    deleteAccountHint: "Journals and points stay on this device. Server data is deleted for good.",
+    planBasic: "Basic access",
+    planPremium: "Premium access",
+    premiumActive: "Sync and advanced calculations unlocked",
+    promoSection: "Promo code",
+    promoPlaceholder: "Partner code",
+    promoApply: "Apply",
+    promoApplied: "Promo code applied",
+    signOutTitle: "Sign out?",
+    signOutMessage:
+      "Journals and points stay on the device. Syncing pauses until you sign in again.",
+
+    // ===== HOME =====
+    welcome: "Welcome",
+    desktop: "Desktop",
+    subscriptionStatus: "Subscription status",
+    active: "Active",
+    inactive: "Inactive",
+
+    // ===== SETTINGS =====
+    settings: "Settings",
+    settingsDescription: "Customize the appearance and behavior of the app",
+    theme: "Theme",
+    language: "Language",
+    version: "Version",
+    developer: "Developer",
+    website: "Website",
+    change: "Change",
+    settingsInfo: "Settings changes are applied immediately and saved automatically.",
+
+    // ===== PUMPING TEST MODULE (main screen) =====
+    loadProject: "Load project",
+    processing: "Processing",
+    ofrType: "Test type",
+    projectJournalName: "Project/journal name",
+    stepOfTotal: "Step %{current} of %{total}",
+    drawdownData: "Drawdown data",
+    projectReview: "Project review",
+    processingTypeAndDates: "Processing type and dates",
     // Home page
     search: "Search",
     searchButton: "Search",
@@ -773,7 +1545,7 @@ const i18n = new I18n({
     field: "Field diary",
     programAddsDesc: "Program for daily hydrogeological calculations for windows.",
     programAdds: "ANSDIMAT",
-    fieldDesc: "Recording data in the field",
+    fieldDesc: "Observation points with coordinates",
     aboutDesc: "Application information",
     contactDesc: "Contact the developers",
     appDescription: "Software package for analyzing and processing hydrogeological data",
@@ -781,16 +1553,18 @@ const i18n = new I18n({
     orderTitle: "ANSDIMAT Order Form",
     fullName: "Full Name",
     organization: "Organization",
-    email: "E-mail",
     phone: "Phone",
-    address: "Address",
-    licenseType: "License Type:",
+    licenseType: "License type",
     singleLicense: "Single User",
     multiLicense: "Multi User",
     comment: "Comment",
     submit: "Submit",
     orderSent: "Order Sent",
-    orderThanks: "Thank you! We will contact you.",
+    orderIntro:
+      "The request opens as a letter in your mail app. Fields marked with an asterisk are required for us to reply.",
+    orderThanks: "Thank you, %{name}! The letter is open in your mail app — send it and we will get back to you.",
+    fieldRequired: "This field is required",
+    emailInvalid: "Check the email address",
     import: "Import",
     // Download
     downloadText: "Download ANSDIMAT using the link below:",
@@ -836,26 +1610,12 @@ const i18n = new I18n({
       "Pumping Test Processing is a tool for processing pumping test data.",
     
     // PumpingTestProcessing - Section Headers
-    observationJournal: "Observation Journal",
-    dataProcessing: "Data Processing",
     journalCreationWizard: "Journal Creation Wizard", 
-    projectManagement: "Project Management",
-    exportData: "Export Data",
-    journalManagement: "Journal Management",
     
     // PumpingTestProcessing - Wizard Step Headers
-    basicParameters: "Basic Parameters",
-    observationJournalStep: "Observation Journal",
-    distancesBetweenWells: "Distances Between Wells",
     
     // PumpingTestProcessing - Export
     availableExportFormats: "Available Export Formats",
-    exportProjectJSON: "Export Project (JSON)",
-    exportProjectJSONDesc: "Complete project export with all journals and data",
-    exportJournalsCSV: "Export Journals (CSV)",
-    exportJournalsCSVDesc: "Export all journals in CSV format for Excel analysis",
-    exportAnalysisPDF: "Export Analysis (PDF)",
-    exportAnalysisPDFDesc: "Detailed report with charts and analysis results",
     exportInformation: "Export Information",
     exportInfoText: "• JSON format preserves complete data structure\n• CSV format is suitable for analysis in spreadsheets\n• PDF reports contain charts and detailed analysis\n• All exported files can be imported back",
     
@@ -863,7 +1623,6 @@ const i18n = new I18n({
     measurementCount: "Measurement Count",
     
     // PumpingTestProcessing - Distances
-    distanceTo: "Distance to",
 
     // Project Management
     projectManagement: "Management",
@@ -872,8 +1631,7 @@ const i18n = new I18n({
     journalProcessing: "Journal Processing",
     journalProcessingSubtitle: "Create a new journal in 3 steps",
     journalProcessingDescription: "Module for analyzing the results of pumping test data. Create projects, record observation journals and get detailed reports.",
-    projectNamePlaceholder: "Enter project name",
-    noProjects: "No projects",
+    projectNamePlaceholder: "For example: Well 7C pumping",
     activeProject: "Active Project",
     selectProject: "Select Project",
     deleteProject: "Delete Project",
@@ -881,7 +1639,6 @@ const i18n = new I18n({
     projectDeleted: "Project deleted",
     projectCreated: "Project created",
     exportProject: "Export Project",
-    importProject: "Import Project",
     favoriteProject: "Add to Favorites",
     unfavoriteProject: "Remove from Favorites",
     addToFavorites: "Add to Favorites",
@@ -896,16 +1653,7 @@ const i18n = new I18n({
     step3: "Step 3: Boundary Conditions",
     step4: "Step 4: Data Table",
     step5: "Step 5: Confirmation",
-    next: "Next",
-    back: "Back",
     finish: "Finish",
-    cancel: "Cancel",
-    aquiferType: "Aquifer Type",
-    confined: "Confined",
-    unconfined: "Unconfined",
-    aquiferTypeLabel: "Aquifer Type",
-    observationWells: "Observation Wells",
-    startDate: "Start Date",
     // Test Types
     testType: "Test Type",
     pumpingTest: "Pumping Test",
@@ -913,9 +1661,6 @@ const i18n = new I18n({
     packerTest: "Packer Test",
 
     // Layer Types
-    layerType: "Layer Type",
-    confined: "Confined",
-    unconfined: "Unconfined",
     leaky: "Leaky",
 
     // Boundary Conditions
@@ -923,17 +1668,12 @@ const i18n = new I18n({
     infinite: "Infinite Aquifer",
     constantHead: "Constant Head",
     noFlow: "No Flow",
-    dataType: "Data Type",
 
     // Data Table
     dataTable: "Data Table",
-    time: "Time (min)",
-    drawdown: "Drawdown (m)",
     addRow: "Add Row",
     deleteRow: "Delete Row",
-    noData: "No Data",
     rows: "rows",
-    selectDateTime: "Select date/time",
     dataType: "Data Type",
     data: "Data",
     dataRows: "Data Rows",
@@ -942,44 +1682,29 @@ const i18n = new I18n({
     confirmation: "Confirmation",
     journalCreated: "Journal created",
     journalSaved: "Journal saved to project",
-    noActiveProject: "No active project",
     selectProjectFirst: "Select a project first",
 
     // Data Processing
     dataProcessing: "Processing",
-    pumpingTestDesc: "Hydrogeological data processing",
     processingTitle: "Journal Processing",
-    project: "Project",
     noProjects: 'No projects',
     createFirstProject: 'Create your first project using the wizard above',
     journal: "Journal",
-    createJournal: "Create Journal",
     createJournalSubtitle: "Create a new journal in 3 steps",
     journalManagement: "Journals",
     journalDetails: "Journal Details",
     editJournal: "Edit Journal",
     importJournal: "Import Journal",
     dataPreview: "Data Preview",
-    journalUpdated: "Journal updated",
-    selectTwoPoints:
-      "Click on two points for graphical analysis (slope and intercept)",
     results: "Graphical Analysis Results",
-    slope: "Slope (k)",
-    firstStep: "On the first step, the expected type of aquifer is selected (confined, unconfined).",
-    secondStep: "Next, the well name (e.g., well.1) and its discharge are set. The discharge can be set in m³/day.",
-    journalWillBeAddedToActiveProject: "Journal will be added to active project",
-    newProjectWillBeCreated: "Since there is no active project, a new project will be created for this pumping test journal.",
+    slope: "Slope a",
     intercept: "Intercept (b)",
     formula: "Formula: s = k·log₁₀(t) + b",
     deleteJournal: "Delete Journal",
-    deleteJournalConfirm: "Delete journal '{name}'?",
-    journalDeleted: "Journal deleted",
     noJournals: "No saved journals in project",
     function: "Function",
     units: "Units",
-    time: "Time",
     distance: "Distance",
-    scale: "Scale",
     dragLine: "or drag the line",
     slopeUp: "Slope +",
     slopeDown: "Slope -",
@@ -1000,18 +1725,12 @@ const i18n = new I18n({
     exportAnalysisPdf: "Analysis Report (PDF)",
     exportAnalysisPdfDesc: "Generate report with analysis results",
     exportSuccess: "Export completed",
-    exportError: "Export error",
-    projectNotFound: "Project not found",
-    invalidJsonFile: "File is not a valid JSON",
     notAnsdimatProject: "File is not an ANSDIMAT project",
     projectIdExists: "Project with this ID already exists",
     projectImported: "Project imported successfully!",
-    importError: "Error importing file",
-    noDataToExport: "No data to export",
     projectInfo: "Project Information",
     created: "Created",
     journalsCount: "Journals",
-    information: "Information",
     infoText:
       "• JSON export contains all project data\n• CSV format is suitable for Excel and other spreadsheet editors\n• Chart and PDF export functions will be added later\n• All data is stored locally on the device",
 
@@ -1042,18 +1761,18 @@ const i18n = new I18n({
     price: "Price",
     perMonth: "per month",
     perYear: "per year",
-    saveWithYearly: "Save with yearly subscription",
+    saveWithYearly: "Better value yearly",
+    yearlySavings: "Save %{amount} a year",
+    subscriptionAutoRenew:
+      "The subscription renews automatically unless cancelled at least 24 hours before the end of the paid period.",
     trialPeriod: "Trial period",
     daysFree: "days free",
     premiumFeature: "Premium Feature",
-    premiumFeatureCSV: "CSV export is available only for subscription users",
-    premiumFeaturePDF: "PDF export is available only for subscription users",
     premiumFeatureInfiltration:
       "Infiltration leakage is available only for premium users",
     premiumFeaturePitInflow: "Pit inflow is available only for premium users",
     goToPremium: "Go to Premium",
     premiumOnly: "Premium users only",
-    subscription: "Subscription",
     subscriptionNavigation: "Subscription navigation will be added later",
 
     // Contacts
@@ -1068,17 +1787,11 @@ const i18n = new I18n({
 
     // Errors and messages
     linkOpenError: "Error opening link",
-    mailClientError: "Could not open mail client",
-    mailSendError: "Could not send email",
+    mailClientError: "The mail app did not open. Send your request manually to",
+    mailSendError: "Could not open the letter. Send your request manually to",
     invalidJsonFile: "File is not a valid JSON",
-    notAnsdimatJournal: "File is not an ANSDIMAT journal",
     journalImportedSuccess: "Journal imported successfully!",
     importFileError: "Error importing file",
-    noData: "No data",
-    createJournalInWizard: 'Create a journal in the "Data Entry" section',
-    noGalleryAccess: "No access to gallery",
-    chartSavedSuccess: "Chart saved to gallery!",
-    chartSaveError: "Could not save chart",
 
     // Project limits
     projectLimit: "Project limit",
@@ -1086,7 +1799,6 @@ const i18n = new I18n({
       "Free users can create a maximum of 3 projects. Upgrade to premium for unlimited projects.",
 
     // Units for charts
-    minutes: "min",
     meters: "m",
     minutesSqrt: "min¹/²",
     logMinutes: "lg(min)",
@@ -1096,8 +1808,6 @@ const i18n = new I18n({
     logMinutesPerMeterSquared: "lg(min/m^2)",
     metersSqrt: "m¹/²",
     metersPowerN: "m^n",
-    seconds: "sec",
-    hours: "hour",
     centimeters: "cm",
     millimeters: "mm",
 
@@ -1111,7 +1821,6 @@ const i18n = new I18n({
     saveChartToGallery: "Save chart (PNG)",
     scale: "Scale",
     move: "Move",
-    dragging: "Dragging",
     chartInstruction: "Use gestures to zoom and pan the chart",
     
     // Дополнительные переводы для DataProcessing
@@ -1125,6 +1834,7 @@ const i18n = new I18n({
 
     // Units for functions
     unitMinutes: "min",
+    unitFlowRate: "m³/day",
     unitMeters: "m",
     unitMinutesSqrt: "min¹/²",
     unitLogMinutes: "lg(min)",
@@ -1146,7 +1856,6 @@ const i18n = new I18n({
     // Common
     save: "Save",
     edit: "Edit",
-    delete: "Delete",
     create: "Create",
     loading: "Loading...",
     error: "Error",
@@ -1184,8 +1893,6 @@ const i18n = new I18n({
     infiltrationLeakageTab: "Infiltration Leakage",
     
     // Additional translations for PumpingTestProcessing
-    wellNamePlaceholder: "For example: Well #1",
-    journalCreationInfo: "After filling in all data, a pumping test journal will be created that can be processed in the \"Data Processing\" section.",
     selectDateTime: "Select date and time",
     noData: "No data",
     testTypeLabel: "Test type",
@@ -1203,7 +1910,6 @@ const i18n = new I18n({
     journalImported: "Journal imported",
     importError: "Failed to import file",
     selectProjectInManagement: "Select a project in the \"Project Management\" section",
-    noActiveProject: "No active project",
     projectExported: "Project exported!",
     exportProjectError: "Failed to export project",
     premiumFeatureCSV: "CSV export is available only in premium version",
@@ -1225,7 +1931,7 @@ const i18n = new I18n({
     exportJournalsCSVDesc: "Export all journals in CSV format for Excel analysis",
     exportAnalysisPDF: "Export analysis (PDF)",
     exportAnalysisPDFDesc: "Detailed report with charts and analysis results",
-    enterProjectName: "Enter project name",
+    enterProjectName: "Enter a journal name",
     createProjectError: "Failed to create project",
     projectNotFound: "Project not found",
     projectSelected: "Project \"{name}\" selected",
@@ -1250,53 +1956,30 @@ const i18n = new I18n({
     projectUpdated: "Project updated",
     invalidJSONFormat: "Invalid JSON format",
     invalidProjectFile: "Invalid project file",
-    pumping: "Pumping",
     lugeon: "Lugeon",
     express: "Express",
-    injection: "Injection",
+    injection: "Infiltration test",
+    packer: "Packer test",
     aquiferType: "Aquifer type",
-    confined: "Confined",
-    unconfined: "Unconfined",
     confinedAquifer: "Confined aquifer",
     unconfinedAquifer: "Unconfined aquifer",
     aquiferTypeLabel: "Aquifer type",
-    basicParameters: "Basic parameters",
-    aquiferTypeLabel: "Aquifer type",
-    confined: "Confined",
-    unconfined: "Unconfined",
     wellNameLabel: "Well Name",
     flowRateLabel: "Flow Rate",
     aquiferThicknessLabel: "Aquifer Thickness",
-    observationJournal: "Observation Journal",
-    distances: "Distances",
-    wellName: "Well Name",
-    flowRate: "Flow Rate",
-    aquiferThickness: "Aquifer Thickness",
-    project: "Project",
-    newProject: "New project will be created automatically",
     startDate: "Start Date",
     dateAndTimeSelection: "Date and Time Selection",
-    pumping: "Pumping",
-    recovery: "Recovery",
     addObservationWells: "Add Observation Wells",
     measurement: "Measurement",
     time: "Time",
     drawdown: "Drawdown",
-    distancesInfo: "Specify the distances from the experimental well to each observation well in kilometers.",
-    information: "Information",
     distanceTo: "Distance to",
     km: "km",
     distancesInfo: "Specify the distances from the experimental well to each observation well in kilometers.",
-    information: "Information",
-    project: "Project",
-    newProject: "New project will be created automatically",
     pumpingJournalCreated: "Pumping journal created",
     inNewProject: "in new project",
     successfully: "successfully",
     failedToSaveJournal: "Failed to save journal",
-    previous: "Previous",
-    createJournal: "Create journal",
-    back: "Back",
     observationJournal: "Observation Journal",
     
     // Мастер создания проектов - английские переводы
@@ -1344,7 +2027,6 @@ const i18n = new I18n({
     recovery: "Recovery",
     pumpingStart: "Pumping Start",
     recoveryStart: "Recovery Start",
-    pumpingDuration: "Pumping Duration",
     experimentalWell: "Experimental Well",
     observationWells: "Observation Wells",
     measurements: "Measurements",

@@ -1,255 +1,367 @@
-import React, { useContext } from 'react';
+/**
+ * Настройки (settings)
+ *
+ * Воссоздаёт экран из дизайн-прототипа:
+ * - «Оформление»: сегменты темы (Светлая/Тёмная/Системная) + язык RU/EN
+ * - «Подписка»: бордовый Premium-баннер
+ * - «Данные и расчёты»: тумблеры (планшет, автокоординаты, моноширинные цифры)
+ * - «О приложении»: карточка с логотипом и версией
+ *
+ * Тумблеры хранятся в SQLite (repository db/settings), тема и язык — в контекстах.
+ */
+
+import React, { useContext, useEffect, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ScrollView,
-  Switch,
-  Platform,
-  BackHandler,
-  Alert,
+  TouchableOpacity,
+  StatusBar,
+  Image,
+  useWindowDimensions,
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
-import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
-import I18n from '../Localization';
-import { LanguageContext } from '../LanguageContext';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialIcons } from '@expo/vector-icons';
 import { ThemeContext } from '../ThemeContext';
-import { getThemeSwitchLabel } from '../theme.js';
-
+import { LanguageContext } from '../LanguageContext';
+import { useAuth } from '../AuthContext';
+import { useEntitlements } from '../billing/EntitlementsContext';
+import I18n from '../Localization';
+import Segmented from '../components/ui/Segmented';
+import Toggle from '../components/ui/Toggle';
+import { getSettings, setSetting } from '../db/settings';
+import { fontFamily, brandHeader } from '../theme';
 
 export default function SettingsScreen({ navigation }) {
-  const { locale, toggleLanguage, isLoading: languageLoading } = useContext(LanguageContext);
-  const { themeMode, toggleTheme, isLoading: themeLoading } = useContext(ThemeContext);
-  const theme = useTheme();
+  const { colors } = useTheme();
+  const { themeMode, setMode } = useContext(ThemeContext);
+  const { locale, setLanguage } = useContext(LanguageContext);
+  const { user } = useAuth();
+  const { entitlements } = useEntitlements();
+  const { width } = useWindowDimensions();
+  const contentMaxWidth = width >= 700 ? 620 : undefined;
 
+  const [flags, setFlags] = useState({ tablet: true, autoLocation: true, tabularNums: true });
 
+  useEffect(() => {
+    getSettings()
+      .then((s) => setFlags({ tablet: s.tablet, autoLocation: s.autoLocation, tabularNums: s.tabularNums }))
+      .catch(() => {});
+  }, []);
 
-  const settingsGroups = [
-    {
-      title: I18n.t('appearance', { defaultValue: 'Внешний вид' }),
-      items: [
-        {
-          title: I18n.t('theme', { defaultValue: 'Тема' }),
-          subtitle: getThemeSwitchLabel(themeMode, locale),
-          type: 'button',
-          onPress: toggleTheme,
-          icon: themeMode === 'dark' ? 'dark-mode' : themeMode === 'light' ? 'light-mode' : 'settings-brightness',
-        },
-      ],
-    },
-    {
-      title: I18n.t('language', { defaultValue: 'Язык' }),
-      items: [
-        {
-          title: I18n.t('appLanguage', { defaultValue: 'Язык приложения' }),
-          subtitle: locale === 'ru' ? 'Русский' : 'English',
-          type: 'button',
-          onPress: toggleLanguage,
-          icon: 'language',
-        },
-      ],
-    },
-    {
-      title: I18n.t('about', { defaultValue: 'О приложении' }),
-      items: [
-        {
-          title: I18n.t('version', { defaultValue: 'Версия' }),
-          subtitle: '1.0.0',
-          type: 'info',
-          icon: 'info',
-        },
-        {
-          title: I18n.t('website', { defaultValue: 'Сайт' }),
-          subtitle: 'ansdimat.com',
-          type: 'info',
-          icon: 'public',
-        },
-      ],
-    },
+  const toggleFlag = (key) => {
+    const next = !flags[key];
+    setFlags((prev) => ({ ...prev, [key]: next }));
+    setSetting(key, next).catch(() => {});
+  };
+
+  const themeOptions = [
+    { key: 'light', label: I18n.t('themeLight', { defaultValue: 'Светлая' }) },
+    { key: 'dark', label: I18n.t('themeDark', { defaultValue: 'Тёмная' }) },
+    { key: 'system', label: I18n.t('themeSystem', { defaultValue: 'Системная' }) },
   ];
 
-  const renderSettingItem = (item, index) => {
-    return (
-      <View key={index} style={[styles.settingItem, { borderBottomColor: theme.colors.border }]}>
-        <View style={styles.settingContent}>
-          <View style={styles.settingLeft}>
-            <MaterialIcons 
-              name={item.icon} 
-              size={24} 
-              color={theme.colors.primary}
-              style={styles.settingIcon}
-            />
-            <View style={styles.settingText}>
-              <Text style={[styles.settingTitle, { color: theme.colors.text }]}>
-                {item.title}
-              </Text>
-              <Text style={[styles.settingSubtitle, { color: theme.colors.text }]}>
-                {item.subtitle}
-              </Text>
-            </View>
-          </View>
-          
-          {item.type === 'switch' && (
-            <Switch
-              value={item.value}
-              onValueChange={item.onToggle}
-              trackColor={{ false: '#E0E0E0', true: theme.colors.primary + '40' }}
-              thumbColor={item.value ? theme.colors.primary : '#F4F3F4'}
-            />
-          )}
-          
-          {item.type === 'button' && (
-            <TouchableOpacity
-              style={[styles.settingButton, { borderColor: theme.colors.border }]}
-              onPress={item.onPress}
-            >
-              <Text style={[styles.settingButtonText, { color: theme.colors.primary }]}>
-                {I18n.t('change', { defaultValue: 'Изменить' })}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-    );
-  };
+  const toggleRows = [
+    { key: 'tablet', icon: 'tablet-mac', label: I18n.t('settingTablet', { defaultValue: 'Адаптация под планшет' }) },
+    { key: 'autoLocation', icon: 'my-location', label: I18n.t('settingAutoLocation', { defaultValue: 'Автоопределение координат' }) },
+    { key: 'tabularNums', icon: 'pin', label: I18n.t('settingTabularNums', { defaultValue: 'Моноширинные цифры' }) },
+  ];
 
-  const renderSettingGroup = (group, groupIndex) => {
-    return (
-      <View key={groupIndex} style={styles.settingGroup}>
-        <Text style={[styles.groupTitle, { color: theme.colors.primary }]}>
-          {group.title}
-        </Text>
-        <View style={[styles.groupContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-          {group.items.map((item, index) => renderSettingItem(item, index))}
-        </View>
-      </View>
-    );
-  };
-
-  // Показываем индикатор загрузки пока загружаются настройки
-  if (languageLoading || themeLoading) {
-    return (
-      <View style={[styles.container, { backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={{ color: theme.colors.text, fontSize: 16 }}>Загрузка настроек...</Text>
-      </View>
-    );
-  }
+  const Eyebrow = ({ children, style }) => (
+    <Text style={[styles.eyebrow, { color: colors.textSecondary }, style]}>{children}</Text>
+  );
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContainer}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Существующий контент */}
-        <View style={styles.content}>
-          {settingsGroups.map(renderSettingGroup)}
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar backgroundColor={brandHeader} barStyle="light-content" />
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+        <View style={[styles.content, contentMaxWidth && { maxWidth: contentMaxWidth }]}>
+          {/* Оформление */}
+          <Eyebrow style={{ marginTop: 0 }}>
+            {I18n.t('appearance', { defaultValue: 'Оформление' })}
+          </Eyebrow>
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.rowLabel, { color: colors.text, marginBottom: 11 }]}>
+              {I18n.t('theme', { defaultValue: 'Тема' })}
+            </Text>
+            <Segmented options={themeOptions} value={themeMode} onChange={setMode} />
+
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+            <View style={styles.langRow}>
+              <Text style={[styles.rowLabel, { color: colors.text }]}>
+                {I18n.t('appLanguage', { defaultValue: 'Язык интерфейса' })}
+              </Text>
+              <View style={styles.langChips}>
+                {['ru', 'en'].map((lg) => {
+                  const active = lg === locale;
+                  return (
+                    <TouchableOpacity
+                      key={lg}
+                      onPress={() => setLanguage(lg)}
+                      style={[
+                        styles.langChip,
+                        { backgroundColor: active ? colors.primary : colors.surfaceSunken },
+                      ]}
+                      activeOpacity={0.8}
+                    >
+                      <Text
+                        style={[
+                          styles.langChipText,
+                          { color: active ? '#FFFFFF' : colors.textSecondary },
+                        ]}
+                      >
+                        {lg.toUpperCase()}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+
+          {/* Аккаунт */}
+          <Eyebrow>{I18n.t('accountSection', { defaultValue: 'Аккаунт' })}</Eyebrow>
+          <TouchableOpacity
+            style={[styles.card, styles.accountCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            onPress={() => navigation.navigate(user ? 'Account' : 'Auth')}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+          >
+            <View style={[styles.accountAvatar, { backgroundColor: user ? colors.secondary : colors.surfaceSunken }]}>
+              <MaterialIcons
+                name={user ? 'person' : 'login'}
+                size={22}
+                color={user ? '#FFFFFF' : colors.textSecondary}
+              />
+            </View>
+            <View style={styles.accountText}>
+              <Text style={[styles.rowLabel, { color: colors.text }]} numberOfLines={1}>
+                {user
+                  ? user.email
+                  : I18n.t('signInToSync', { defaultValue: 'Войти в аккаунт' })}
+              </Text>
+              <Text style={[styles.accountHint, { color: colors.textSecondary }]} numberOfLines={2}>
+                {user
+                  ? I18n.t('accountManage', { defaultValue: 'Синхронизация, пароль, удаление' })
+                  : I18n.t('syncAcrossDevices', { defaultValue: 'Синхронизация между устройствами' })}
+              </Text>
+            </View>
+            <MaterialIcons name="chevron-right" size={20} color={colors.faint} />
+          </TouchableOpacity>
+
+          {/* Подписка */}
+          <Eyebrow>{I18n.t('subscription', { defaultValue: 'Подписка' })}</Eyebrow>
+          <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.navigate('Subscription')}>
+            <LinearGradient
+              colors={['#8A0A3D', '#4A001F']}
+              start={{ x: 0.1, y: 0 }}
+              end={{ x: 0.9, y: 1 }}
+              style={styles.premiumCard}
+            >
+              <MaterialIcons name="workspace-premium" size={30} color="#E0A83C" />
+              <View style={styles.premiumText}>
+                <Text style={styles.premiumTitle}>
+                  {entitlements.premium
+                    ? I18n.t('planPremium', { defaultValue: 'Премиум-доступ' })
+                    : I18n.t('basicVersion', { defaultValue: 'Базовая версия' })}
+                </Text>
+                <Text style={styles.premiumSub}>
+                  {entitlements.premium
+                    ? I18n.t('premiumActive', { defaultValue: 'Синхронизация и расширенные расчёты открыты' })
+                    : I18n.t('premiumPitch', { defaultValue: 'Расширьте до Premium: приток, барраж, утечки' })}
+                </Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={22} color="rgba(255,255,255,0.8)" />
+            </LinearGradient>
+          </TouchableOpacity>
+
+          {/* Данные и расчёты */}
+          <Eyebrow>{I18n.t('dataAndCalc', { defaultValue: 'Данные и расчёты' })}</Eyebrow>
+          <View style={[styles.card, styles.cardFlush, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            {toggleRows.map((row, i) => (
+              <View
+                key={row.key}
+                style={[
+                  styles.toggleRow,
+                  i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+                ]}
+              >
+                <View style={styles.toggleLeft}>
+                  <MaterialIcons name={row.icon} size={22} color={colors.primaryAccent} />
+                  <Text style={[styles.toggleLabel, { color: colors.text }]}>{row.label}</Text>
+                </View>
+                <Toggle
+                  value={flags[row.key]}
+                  onValueChange={() => toggleFlag(row.key)}
+                  accessibilityLabel={row.label}
+                />
+              </View>
+            ))}
+          </View>
+
+          {/* О приложении */}
+          <Eyebrow>{I18n.t('aboutApp', { defaultValue: 'О приложении' })}</Eyebrow>
+          <TouchableOpacity
+            style={[styles.card, styles.aboutCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            onPress={() => navigation.navigate('About')}
+            activeOpacity={0.85}
+          >
+            <Image source={require('../assets/logo-mark.png')} style={styles.aboutLogo} resizeMode="contain" />
+            <View style={styles.aboutText}>
+              <Text style={[styles.aboutTitle, { color: colors.text }]}>
+                {I18n.t('homeTitle', { defaultValue: 'АНСДИМАТ' })}
+              </Text>
+              <Text style={[styles.aboutSub, { color: colors.textSecondary }]}>
+                {I18n.t('appSubtitle', { defaultValue: 'полевой калькулятор гидрогеолога' })}
+              </Text>
+            </View>
+            <Text style={[styles.version, { color: colors.faint }]}>v1.0.0</Text>
+          </TouchableOpacity>
         </View>
-
-        {/* Нижний отступ */}
-        <View style={{ height: 100 }} />
       </ScrollView>
-
-
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContainer: {
-    padding: 20,
-  },
-  content: {
-    // Существующие стили контента
-  },
-  header: {
-    paddingVertical: 24,
+  container: { flex: 1 },
+  scroll: {
+    paddingHorizontal: 18,
+    paddingTop: 20,
+    paddingBottom: 128,
     alignItems: 'center',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 8,
+  content: { width: '100%' },
+
+  eyebrow: {
+    fontFamily: fontFamily.mono,
+    fontSize: 10.5,
+    fontWeight: '600',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    marginTop: 22,
+    marginBottom: 10,
+    marginLeft: 4,
   },
-  subtitle: {
-    fontSize: 16,
-    textAlign: 'center',
-    opacity: 0.8,
-    lineHeight: 22,
+
+  card: {
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 16,
+    shadowColor: '#14070E',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 2,
   },
-  settingGroup: {
-    marginBottom: 24,
+  cardFlush: { padding: 0, overflow: 'hidden' },
+
+  accountCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
   },
-  groupTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
-    paddingHorizontal: 4,
+  accountAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  groupContainer: {
-    borderRadius: 12,
-    borderWidth: 1,
-    overflow: 'hidden',
+  accountText: { flex: 1 },
+  accountHint: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    marginTop: 1,
   },
-  settingItem: {
-    borderBottomWidth: 1,
+
+  rowLabel: {
+    fontFamily: fontFamily.bold,
+    fontSize: 14,
+    fontWeight: '700',
   },
-  settingContent: {
+  divider: { height: StyleSheet.hairlineWidth, marginVertical: 16 },
+
+  langRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
   },
-  settingLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
+  langChips: { flexDirection: 'row', gap: 6 },
+  langChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
   },
-  settingIcon: {
-    marginRight: 12,
-  },
-  settingText: {
-    flex: 1,
-  },
-  settingTitle: {
-    fontSize: 16,
+  langChipText: {
+    fontFamily: fontFamily.monoSemibold,
+    fontSize: 12,
     fontWeight: '600',
-    marginBottom: 2,
-  },
-  settingSubtitle: {
-    fontSize: 14,
-    opacity: 0.7,
-  },
-  settingButton: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  settingButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  infoSection: {
-    backgroundColor: 'rgba(128, 0, 32, 0.05)',
-    borderRadius: 12,
-    padding: 16,
-    marginVertical: 20,
-    marginBottom: 40,
-  },
-  infoText: {
-    fontSize: 14,
-    lineHeight: 20,
-    opacity: 0.8,
-    textAlign: 'center',
   },
 
-}); 
+  premiumCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    borderRadius: 18,
+    padding: 16,
+    shadowColor: '#4A001F',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    elevation: 6,
+  },
+  premiumText: { flex: 1 },
+  premiumTitle: {
+    fontFamily: fontFamily.extrabold,
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  premiumSub: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.75)',
+    marginTop: 1,
+  },
+
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+  },
+  toggleLeft: { flexDirection: 'row', alignItems: 'center', gap: 13, flex: 1 },
+  toggleLabel: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 14.5,
+    fontWeight: '600',
+  },
+
+  aboutCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  aboutLogo: { width: 42, height: 42 },
+  aboutText: { flex: 1 },
+  aboutTitle: {
+    fontFamily: fontFamily.extrabold,
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  aboutSub: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    marginTop: 1,
+  },
+  version: {
+    fontFamily: fontFamily.mono,
+    fontSize: 11.5,
+  },
+});

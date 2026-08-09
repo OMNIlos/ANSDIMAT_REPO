@@ -1,154 +1,217 @@
 /**
- * Компонент экрана загрузки (Splash Screen)
- * 
- * Этот компонент отображается при запуске приложения и содержит:
- * - Логотип приложения
- * - Название приложения
- * - Подзаголовок с описанием
- * - Информацию о сайте и копирайте
- * 
- * Автоматически скрывается через 2.5 секунды и вызывает onFinish callback
- * 
- * @param {Function} onFinish - Callback функция, вызываемая по истечении таймера
+ * Экран загрузки (Splash Screen)
+ *
+ * Композиция по макету заказчика: логотип со скруглёнными углами, название,
+ * тонкая линия, слоган; внизу — адрес сайта и копирайт с текущим годом.
+ *
+ * Год подставляется автоматически, поэтому его не нужно править вручную
+ * каждый январь.
+ *
+ * Появление собрано одной последовательностью — логотип, затем название
+ * и слоган: спокойный вход вместо набора разрозненных эффектов.
+ *
+ * Системный экран запуска (expo-splash-screen) показывает тот же знак того же
+ * размера на том же фоне и прячется, когда этот экран уже отрисован. Раньше
+ * пользователь видел две разные заставки подряд — системную и эту.
+ *
+ * @param {Function} onFinish - Вызывается по истечении таймера показа
  */
 
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, StatusBar, Dimensions, Image } from 'react-native';
-import { useTheme } from 'react-native-paper';
+import React, { useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  StatusBar,
+  Image,
+  Animated,
+  Easing,
+  AccessibilityInfo,
+} from 'react-native';
+import * as NativeSplash from 'expo-splash-screen';
 import I18n from '../Localization';
+import DrawdownCurve from './DrawdownCurve';
+import { palette, spacing, type } from '../theme';
 
-// Получаем размеры экрана для адаптивного дизайна
-const { width, height } = Dimensions.get('window');
+const SPLASH_DURATION = 2200;
 
 export default function SplashScreen({ onFinish }) {
-  // Получаем текущую тему для адаптивного дизайна
-  const theme = useTheme();
-  // Получаем текущий год для копирайта
   const currentYear = new Date().getFullYear();
-  
-  /**
-   * Эффект для автоматического скрытия экрана загрузки
-   * Устанавливает таймер на 2.5 секунды, после чего вызывает onFinish
-   */
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      onFinish(); // Вызываем callback для перехода к основному приложению
-    }, 2500); // Время отображения экрана загрузки (2.5 секунды)
 
-    // Очищаем таймер при размонтировании компонента
-    return () => clearTimeout(timer);
-  }, [onFinish]);
+  const logoAnim = useRef(new Animated.Value(0)).current;
+  const textAnim = useRef(new Animated.Value(0)).current;
+
+  // Системная заставка убирается только после первой отрисовки этой —
+  // иначе между ними мелькает пустой экран
+  useEffect(() => {
+    NativeSplash.hideAsync().catch(() => {
+      // Уже скрыта — не ошибка
+    });
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    // Уважаем системную настройку «уменьшить движение»
+    AccessibilityInfo.isReduceMotionEnabled().then((reduceMotion) => {
+      if (cancelled) return;
+
+      if (reduceMotion) {
+        logoAnim.setValue(1);
+        textAnim.setValue(1);
+        return;
+      }
+
+      Animated.sequence([
+        Animated.timing(logoAnim, {
+          toValue: 1,
+          duration: 520,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(textAnim, {
+          toValue: 1,
+          duration: 420,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
+
+    const timer = setTimeout(onFinish, SPLASH_DURATION);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [onFinish, logoAnim, textAnim]);
+
+  const rise = (anim) => ({
+    opacity: anim,
+    transform: [
+      {
+        translateY: anim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [12, 0],
+        }),
+      },
+    ],
+  });
 
   return (
-    // Основной контейнер с фоном в цвете primary (бордовый)
-    <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
-      {/* Настройка статус-бара для соответствия дизайну */}
-      <StatusBar backgroundColor={theme.colors.primary} barStyle="light-content" />
-      
-      {/* Контейнер для логотипа и текста */}
-      <View style={styles.logoContainer}>
-        {/* Контейнер для логотипа с прозрачным фоном */}
-        <View style={[styles.logoBackground, { backgroundColor: 'transparent' }]}>
-          {/* Логотип приложения */}
-          <Image
-            source={require('../assets/splash.png')}
-            style={{ width: 120, height: 120, borderRadius: 25 }}
-            resizeMode="contain"
-          />
-        </View>
-        
-        {/* Название приложения */}
-        <Text style={[styles.appName, { color: theme.colors.white }]}>
-          {I18n.t('homeTitle')}
-        </Text>
-        
-        {/* Подзаголовок с описанием приложения */}
-        <Text style={[styles.subtitle, { color: theme.colors.white }]}>
-          {I18n.t('appSubtitle')}
-        </Text>
+    <View style={styles.container}>
+      <StatusBar backgroundColor={palette.wine} barStyle="light-content" />
+
+      {/* Кривая понижения — фирменный фон, приглушённый до фактуры */}
+      <View style={styles.ambient} pointerEvents="none">
+        <DrawdownCurve
+          width="100%"
+          height={220}
+          color="#FFFFFF"
+          opacity={0.16}
+          grid
+          stretch
+          strokeWidth={0.8}
+        />
       </View>
-      
-      {/* Футер с информацией о сайте и копирайтом */}
+
+      <View style={styles.center}>
+        <Animated.View style={rise(logoAnim)}>
+          <Image
+            source={require('../assets/splash-logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+            accessibilityRole="image"
+            accessibilityLabel={I18n.t('homeTitle', { defaultValue: 'АНСДИМАТ' })}
+          />
+        </Animated.View>
+
+        <Animated.View style={[styles.titleBlock, rise(textAnim)]}>
+          <Text style={styles.appName}>
+            {I18n.t('homeTitle', { defaultValue: 'АНСДИМАТ' })}
+          </Text>
+
+          <View style={styles.rule} />
+
+          <Text style={styles.subtitle}>
+            {I18n.t('appSubtitle', { defaultValue: 'полевой калькулятор гидрогеолога' })}
+          </Text>
+        </Animated.View>
+      </View>
+
       <View style={styles.footer}>
-        {/* Ссылка на сайт */}
-        <Text style={[styles.website, { color: theme.colors.white }]}>
-          ansdimat.com
-        </Text>
-        {/* Копирайт с текущим годом */}
-        <Text style={[styles.copyright, { color: theme.colors.white }]}>
-          © {currentYear} {I18n.t('homeTitle')}
+        <Text style={styles.website}>ansdimat.com</Text>
+        <Text style={styles.copyright}>
+          © {currentYear} {I18n.t('homeTitle', { defaultValue: 'АНСДИМАТ' })}
         </Text>
       </View>
     </View>
   );
 }
 
-/**
- * Стили для компонента SplashScreen
- * 
- * Определяют внешний вид и расположение всех элементов экрана загрузки
- */
 const styles = StyleSheet.create({
-  // Основной контейнер - занимает весь экран с центрированным содержимым
   container: {
-    flex: 1, // Занимает все доступное пространство
-    justifyContent: 'center', // Центрирует содержимое по вертикали
-    alignItems: 'center', // Центрирует содержимое по горизонтали
-    paddingHorizontal: 20, // Отступы по бокам для адаптивности
+    flex: 1,
+    backgroundColor: palette.wine,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
   },
-  
-  // Контейнер для логотипа и текста - центрирует элементы
-  logoContainer: {
-    alignItems: 'center', // Центрирует элементы по горизонтали
-    justifyContent: 'center', // Центрирует элементы по вертикали
-    flex: 1, // Занимает все доступное пространство
+  ambient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 220,
+    overflow: 'hidden',
   },
-  
-  // Контейнер для логотипа с закругленными углами
-  logoBackground: {
-    width: 120, // Ширина логотипа
-    height: 120, // Высота логотипа
-    borderRadius: 20, // Радиус закругления углов
-    justifyContent: 'center', // Центрирует логотип по вертикали
-    alignItems: 'center', // Центрирует логотип по горизонтали
-    marginBottom: 30, // Отступ снизу для разделения с текстом
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-
-  // Стиль для названия приложения
+  logo: {
+    width: 132,
+    height: 132,
+    borderRadius: 30,
+  },
+  titleBlock: {
+    alignItems: 'center',
+    marginTop: spacing.xl,
+  },
   appName: {
-    fontSize: 32, // Размер шрифта
-    fontWeight: 'bold', // Жирный шрифт
-    textAlign: 'center', // Выравнивание по центру
-    marginBottom: 15, // Отступ снизу
-    letterSpacing: 2, // Расстояние между буквами
+    fontSize: 34,
+    lineHeight: 40,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 3,
+    textAlign: 'center',
   },
-  
-  // Стиль для подзаголовка
+  rule: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    alignSelf: 'stretch',
+    marginVertical: spacing.md,
+  },
   subtitle: {
-    fontSize: 16, // Размер шрифта
-    textAlign: 'center', // Выравнивание по центру
-    opacity: 0.9, // Прозрачность для визуальной иерархии
-    maxWidth: width * 0.8, // Максимальная ширина (80% от ширины экрана)
-    lineHeight: 22, // Высота строки для читаемости
+    ...type.body,
+    color: 'rgba(255, 255, 255, 0.9)',
+    textAlign: 'center',
   },
-  
-  // Контейнер для футера - позиционируется внизу экрана
   footer: {
-    position: 'absolute', // Абсолютное позиционирование
-    bottom: 50, // Отступ от низа экрана
-    alignItems: 'center', // Центрирует элементы по горизонтали
+    alignItems: 'center',
+    paddingBottom: spacing.xxl,
   },
-  
-  // Стиль для ссылки на сайт
   website: {
-    fontSize: 16, // Размер шрифта
-    fontWeight: '600', // Полужирный шрифт
-    marginBottom: 5, // Отступ снизу
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
+    marginBottom: spacing.xs,
   },
-  
-  // Стиль для копирайта
   copyright: {
-    fontSize: 12, // Размер шрифта
-    opacity: 0.8, // Прозрачность для визуальной иерархии
+    ...type.numeric,
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.75)',
   },
-}); 
+});

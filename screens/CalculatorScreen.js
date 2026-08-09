@@ -1,1123 +1,943 @@
-import React, { useRef, useState } from "react";
+/**
+ * Калькулятор гидрогеолога — расчёты, нужные в поле
+ *
+ * 1. Коэффициент фильтрации — пересчёт значения по всем единицам сразу.
+ * 2. Оценка параметров — k по данным опытной откачки.
+ * 3. Прогноз понижения — метод Тейса.
+ * 4. Приток в котлован — стационарная формула Дюпюи.
+ * 5. Барраж — граничные условия пласта методом отображений и подпор
+ *    уровня перед непроницаемым сооружением.
+ * 6. Инфильтрационные утечки — пласт с перетеканием (Хантуш — Джейкоб).
+ *
+ * Вся математика вынесена в `calc/` и покрыта тестами: экран только
+ * собирает ввод и показывает результат, поэтому формулы проверяются
+ * отдельно от интерфейса.
+ */
+
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
-  Alert,
   TextInput,
+  TouchableOpacity,
   Switch,
-  Image,
-} from "react-native";
-import { createMaterialTopTabNavigator } from "@react-navigation/material-top-tabs";
-import { captureRef } from "react-native-view-shot";
-import * as Sharing from "expo-sharing";
-import * as FileSystem from "expo-file-system";
-import Svg, { Rect, Text as SvgText, Polyline } from "react-native-svg";
-import I18n from "../Localization";
-import { SubscriptionManager } from "../utils/SubscriptionManager";
-import PremiumBanner from "../components/PremiumBanner";
-import { useTheme } from "react-native-paper";
+  useWindowDimensions,
+} from 'react-native';
+import { useTheme } from 'react-native-paper';
+import I18n from '../Localization';
+import { convertToAllUnits, FILTRATION_UNITS } from '../calc/units';
+import {
+  estimateConductivity,
+  predictDrawdownTheis,
+  pitInflow,
+  AQUIFER_TYPES,
+} from '../calc/aquifer';
+import { wellFunction } from '../calc/wellFunction';
+import { BOUNDARY_TYPES, barrageRise, drawdownWithBoundary } from '../calc/boundaries';
+import { leakageFactor, leakageRate, leakyDrawdown, steadyLeakyDrawdown } from '../calc/leakage';
+import DepressionCone from '../components/DepressionCone';
+import { spacing, radius, type, elevation, numericAt } from '../theme';
 
-
-const Tab = createMaterialTopTabNavigator();
-
-// --- Перевод величин (как раньше) ---
-const FILTRATION_UNITS = [
-  {
-    key: "m_day",
-    label: () => I18n.t("mDay"),
-    factor: 1,
-  },
-  {
-    key: "m_hour",
-    label: () => I18n.t("mHour"),
-    factor: 1 / 24,
-  },
-  {
-    key: "m_min",
-    label: () => I18n.t("mMin"),
-    factor: 1 / 1440,
-  },
-  {
-    key: "m_sec",
-    label: () => I18n.t("mSec"),
-    factor: 1 / 86400,
-  },
-  {
-    key: "cm_day",
-    label: () => I18n.t("cmDay"),
-    factor: 100,
-  },
-  {
-    key: "cm_hour",
-    label: () => I18n.t("cmHour"),
-    factor: 100 / 24,
-  },
-  {
-    key: "cm_min",
-    label: () => I18n.t("cmMin"),
-    factor: 100 / 1440,
-  },
-  {
-    key: "cm_sec",
-    label: () => I18n.t("cmSec"),
-    factor: 100 / 86400,
-  },
-  {
-    key: "mm_day",
-    label: () => I18n.t("mmDay"),
-    factor: 1000,
-  },
-  {
-    key: "mm_hour",
-    label: () => I18n.t("mmHour"),
-    factor: 1000 / 24,
-  },
-  {
-    key: "mm_min",
-    label: () => I18n.t("mmMin"),
-    factor: 1000 / 1440,
-  },
-  {
-    key: "mm_sec",
-    label: () => I18n.t("mmSec"),
-    factor: 1000 / 86400,
-  },
-  {
-    key: "ft_day",
-    label: () => I18n.t("ftDay"),
-    factor: 3.28084,
-  },
-  {
-    key: "ft_hour",
-    label: () => I18n.t("ftHour"),
-    factor: 3.28084 / 24,
-  },
-  {
-    key: "ft_min",
-    label: () => I18n.t("ftMin"),
-    factor: 3.28084 / 1440,
-  },
-  {
-    key: "ft_sec",
-    label: () => I18n.t("ftSec"),
-    factor: 3.28084 / 86400,
-  },
-  {
-    key: "meynser",
-    label: () => I18n.t("meynser"),
-    factor: 24.54239,
-  },
+const TABS = [
+  { key: 'filtration', labelKey: 'tabFiltration' },
+  { key: 'params', labelKey: 'tabParams' },
+  { key: 'forecast', labelKey: 'tabForecast' },
+  { key: 'pit', labelKey: 'tabPit' },
+  { key: 'barrage', labelKey: 'tabBarrage' },
+  { key: 'leakage', labelKey: 'tabLeakage' },
 ];
 
-function UnitConverterScreen() {
-  const [inputValue, setInputValue] = useState("1");
-  const [inputUnit, setInputUnit] = useState("m_day");
-  let value = parseFloat(inputValue.replace(",", "."));
-  if (isNaN(value)) value = 0;
-  const base =
-    value / (FILTRATION_UNITS.find((u) => u.key === inputUnit)?.factor || 1);
-  const results = FILTRATION_UNITS.map((u) => ({
-    key: u.key,
-    label: u.label(),
-    value: (base * u.factor).toPrecision(8).replace(/\.0+$/, ""),
-  }));
+/**
+ * Разбирает число, принимая запятую как разделитель
+ *
+ * @param {string} text - введённый текст
+ * @returns {number} число или NaN
+ */
+function parseNumber(text) {
+  if (typeof text !== 'string') return Number(text);
+  const normalized = text.replace(',', '.').trim();
+  return normalized === '' ? NaN : Number(normalized);
+}
+
+/**
+ * Форматирует результат расчёта
+ *
+ * Очень малые и очень большие значения показываем в экспоненциальной
+ * записи: коэффициент фильтрации в м/сек — это порядка 10⁻⁵.
+ *
+ * @param {number} value - значение
+ * @returns {string} отформатированное значение
+ */
+function formatValue(value) {
+  if (!isFinite(value)) return '—';
+  const abs = Math.abs(value);
+  if (abs !== 0 && (abs < 0.001 || abs >= 1e6)) return value.toExponential(4);
+  if (abs >= 1000) return value.toFixed(1);
+  if (abs >= 1) return value.toFixed(3);
+  return value.toPrecision(4);
+}
+
+export default function CalculatorScreen() {
   const theme = useTheme();
-  return (
-    <View style={{ flex: 1, padding: 16, backgroundColor: theme.colors.background }}>
-      <View
-        style={{ flexDirection: "row", alignItems: "center", marginBottom: 16 }}
-      >
-        <TextInput
-          style={{...styles.input, borderColor: theme.colors.border}}
-          value={inputValue}
-          onChangeText={setInputValue}
-          keyboardType="numeric"
-          placeholder="1"
-        />
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={{ marginLeft: 8 }}
-        >
-          {FILTRATION_UNITS.map((u) => (
-            <TouchableOpacity
-              key={u.key}
-              style={[
-                styles.unitBtn,
-                inputUnit === u.key && styles.unitBtnActive,
-              ]}
-              onPress={() => setInputUnit(u.key)}
-            >
-              <Text style={{ color: inputUnit === u.key ? theme.colors.text : theme.colors.reverse }}>
-                {u.label()}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-      <ScrollView style={{ maxHeight: 400 }}>
-        {results.map((r) => (
-          <View key={r.key} style={styles.resultRow}>
-            <Text style={{...styles.resultValue, color: theme.colors.reverse}}>{r.value}</Text>
-            <Text style={{...styles.resultUnit, color: theme.colors.text}}>{r.label}</Text>
-          </View>
-        ))}
-      </ScrollView>
-      
+  const { width } = useWindowDimensions();
+  const [tab, setTab] = useState('filtration');
+
+  // Та же ширина, что у карточек: контент ограничен 720 px и отбит полями
+  const contentWidth = Math.min(width, 720) - spacing.lg * 2;
+
+  // Коэффициент фильтрации
+  const [kValue, setKValue] = useState('5');
+  const [kUnit, setKUnit] = useState('m_day');
+
+  // Оценка параметров
+  const [pQ, setPQ] = useState('100');
+  const [pS, setPS] = useState('15');
+  const [pM, setPM] = useState('20');
+  const [pR, setPR] = useState('');
+  const [pR0, setPR0] = useState('');
+  const [aquifer, setAquifer] = useState(AQUIFER_TYPES.UNCONFINED);
+  const [imperfect, setImperfect] = useState(false);
+  const [penetration, setPenetration] = useState('0.5');
+
+  // Прогноз по Тейсу
+  const [fQ, setFQ] = useState('1000');
+  const [fT, setFT] = useState('500');
+  const [fS, setFS] = useState('0.0001');
+  const [fR, setFR] = useState('50');
+  const [fTime, setFTime] = useState('1');
+
+  // Приток в котлован
+  const [ck, setCk] = useState('10');
+  const [cm, setCm] = useState('15');
+  const [cs0, setCs0] = useState('5');
+  const [cR, setCR] = useState('400');
+  const [cr0, setCr0] = useState('20');
+
+  // Барраж и граничные условия
+  const [bQ, setBQ] = useState('1000');
+  const [bT, setBT] = useState('500');
+  const [bS, setBS] = useState('0.0001');
+  const [bR, setBR] = useState('50');
+  const [bTime, setBTime] = useState('1');
+  const [bL, setBL] = useState('200');
+  const [boundary, setBoundary] = useState(BOUNDARY_TYPES.BARRIER);
+  const [bGradient, setBGradient] = useState('0.005');
+  const [bLength, setBLength] = useState('150');
+
+  // Инфильтрационные утечки (пласт с перетеканием)
+  const [lQ, setLQ] = useState('1000');
+  const [lT, setLT] = useState('500');
+  const [lS, setLS] = useState('0.0001');
+  const [lR, setLR] = useState('50');
+  const [lTime, setLTime] = useState('1');
+  const [lThickness, setLThickness] = useState('5');
+  const [lK, setLK] = useState('0.01');
+  const [lArea, setLArea] = useState('10000');
+
+  /**
+   * Поле ввода с подписью и единицей измерения
+   */
+  const renderField = (label, value, onChange, unit) => (
+    <View style={[styles.field, { borderBottomColor: theme.colors.border }]} key={label}>
+      <Text style={[type.body, styles.fieldLabel, { color: theme.colors.text }]}>{label}</Text>
+      <TextInput
+        value={value}
+        onChangeText={onChange}
+        keyboardType="decimal-pad"
+        placeholder="0"
+        placeholderTextColor={theme.colors.textSecondary}
+        style={[styles.fieldInput, { color: theme.colors.secondary }]}
+      />
+      {unit ? (
+        <Text style={[styles.fieldUnit, { color: theme.colors.textSecondary }]}>{unit}</Text>
+      ) : null}
     </View>
   );
-}
 
-// --- Оценка параметров ---
-function ParameterEstimationScreen() {
-  const chartRef = useRef();
-  const [Q, setQ] = useState("100");
-  const [s, setS] = useState("15");
-  const [m, setM] = useState("20");
-  const [aquifer, setAquifer] = useState("unconfined");
-  const [imperfect, setImperfect] = useState(false);
-  const theme = useTheme();
-  // Формулы
-  let k = 0;
-  let formula = "";
-  if (aquifer === "unconfined") {
-    // k = 2.43Q / (s(2m-s))
-    const Qn = parseFloat(Q.replace(",", "."));
-    const sn = parseFloat(s.replace(",", "."));
-    const mn = parseFloat(m.replace(",", "."));
-    if (sn > 0 && mn > 0 && 2 * mn - sn !== 0) {
-      k = (2.43 * Qn) / (sn * (2 * mn - sn));
-      formula = `k = 2.43Q / (s(2m-s))`;
-    }
-  } else {
-    // k = Q / (1.814 * m * s)
-    const Qn = parseFloat(Q.replace(",", "."));
-    const sn = parseFloat(s.replace(",", "."));
-    const mn = parseFloat(m.replace(",", "."));
-    if (sn > 0 && mn > 0) {
-      k = Qn / (1.814 * mn * sn);
-      formula = `k = Q / (1.814ms)`;
-    }
-  }
-  if (imperfect) {
-    formula += " (несовершенная скважина)";
-    // Можно добавить поправку, если формула известна
-  }
-  const result = { k, Q, s, m, aquifer, imperfect };
-
-  function exportJSONResult() {
-    return exportJSON(result, "parameter_estimation.json");
-  }
-  function exportPNGResult() {
-    return exportPNG(chartRef, "parameter_estimation.png");
-  }
-
-  return (
-    <ScrollView style={{ flex: 1, padding: 16 }}>
-      <View style={{ marginBottom: 12 }}>
-        <Text style={{color: theme.colors.text}}>Q, м³/сут:</Text>
-        <TextInput
-          style={styles.input}
-          value={Q}
-          onChangeText={setQ}
-          keyboardType="numeric"
-        />
-        <Text style={{color: theme.colors.text}}>s, м:</Text>
-        <TextInput
-          style={styles.input}
-          value={s}
-          onChangeText={setS}
-          keyboardType="numeric"
-        />
-        <Text style={{color: theme.colors.text}}>m, м:</Text>
-        <TextInput
-          style={styles.input}
-          value={m}
-          onChangeText={setM}
-          keyboardType="numeric"
-        />
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            marginVertical: 8,
-          }}
-        >
-          <TouchableOpacity
-            onPress={() => setAquifer("unconfined")}
-            style={[
-              styles.aquiferBtn,
-              aquifer === "unconfined" && styles.aquiferBtnActive,
-            ]}
-          >
-            <Text
-              style={{ color: aquifer === "unconfined" ? "#fff" : "#800020" }}
-            >
-              Безнапорный
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setAquifer("confined")}
-            style={[
-              styles.aquiferBtn,
-              aquifer === "confined" && styles.aquiferBtnActive,
-            ]}
-          >
-            <Text
-              style={{ color: aquifer === "confined" ? "#fff" : "#800020" }}
-            >
-              Напорный
-            </Text>
-          </TouchableOpacity>
-        </View>
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            marginBottom: 8,
-          }}
-        >
-          <Switch value={imperfect} onValueChange={setImperfect} />
-          <Text style={{ marginLeft: 8 }}>Несовершенная скважина</Text>
-        </View>
+  /**
+   * Синяя карточка результата с формулой
+   */
+  const renderResult = (label, value, unit, formula) => (
+    <View style={[styles.resultCard, elevation.dataButton, { backgroundColor: theme.colors.secondary }]}>
+      <Text style={styles.resultCaption}>{I18n.t('result', { defaultValue: 'Результат' })}</Text>
+      <View style={styles.resultValueRow}>
+        <Text style={styles.resultLabel}>{label} =</Text>
+        <Text style={styles.resultValue}>{value}</Text>
+        <Text style={styles.resultUnit}>{unit}</Text>
       </View>
-      <Text style={{ marginBottom: 8, color: "#800020", fontWeight: "bold" }}>
-        {formula}
-      </Text>
-      <View
-        ref={chartRef}
-        collapsable={false}
-        style={{ alignItems: "center", marginVertical: 24 }}
-      >
-        <Svg width={260} height={100}>
-          <Rect
-            x={20}
-            y={20}
-            width={220}
-            height={60}
-            fill="#e0f7fa"
-            stroke="#800020"
-            strokeWidth={2}
-          />
-          <SvgText
-            x={130}
-            y={50}
-            fontSize="15"
-            fill="#800020"
-            textAnchor="middle"
-          >
-            k
-          </SvgText>
-          <SvgText
-            x={130}
-            y={75}
-            fontSize="20"
-            fill="#800020"
-            textAnchor="middle"
-          >
-            {k ? k.toPrecision(5) : "-"}
-          </SvgText>
-        </Svg>
-      </View>
-      <TouchableOpacity style={styles.exportBtn} onPress={exportJSONResult}>
-        <Text style={styles.exportBtnText}>Экспорт в JSON</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.exportBtn} onPress={exportPNGResult}>
-        <Text style={styles.exportBtnText}>Экспорт в PNG</Text>
-      </TouchableOpacity>
-    </ScrollView>
+      {formula ? <Text style={styles.resultFormula}>{formula}</Text> : null}
+    </View>
   );
-}
 
-function exportJSON(data, filename = "result.json") {
-  const fileUri = FileSystem.cacheDirectory + filename;
-  return FileSystem.writeAsStringAsync(fileUri, JSON.stringify(data, null, 2), {
-    encoding: FileSystem.EncodingType.UTF8,
-  }).then(() => Sharing.shareAsync(fileUri, { mimeType: "application/json" }));
-}
+  /**
+   * Вкладка пересчёта коэффициента фильтрации
+   */
+  const renderFiltration = () => {
+    const converted = convertToAllUnits(parseNumber(kValue), kUnit);
 
-function exportPNG(ref, filename = "result.png") {
-  return captureRef(ref, { format: "png", quality: 1 })
-    .then((uri) => Sharing.shareAsync(uri, { mimeType: "image/png" }))
-            .catch(() => Alert.alert(I18n.t("error"), I18n.t("savePNGError")));
-}
-
-// --- Вспомогательная функция W(u) для уравнения Тейса ---
-function wellFunction(u) {
-  // Аппроксимация экспоненциального интеграла W(u)
-  if (u < 1e-6) return 0; // избежать логарифма нуля
-  if (u < 1) {
-    // Ряд Тейлора
-    let sum = 0;
-    let term = u;
-    for (let n = 1; n <= 6; n++) {
-      const prev = term;
-      term *= -u / (n * n);
-      sum += term;
-      if (Math.abs(term - prev) < 1e-10) break;
-    }
-    return -0.5772156649 - Math.log(u) + u - (u * u) / 4 + sum;
-  }
-  // Для u>=1 используем экспоненциальное затухание
-  return Math.exp(-u) / u;
-}
-
-function DrawdownForecastScreen() {
-  const chartRef = useRef();
-  const [Q, setQ] = useState("500");
-  const [t, setT] = useState("10");
-  const [r, setR] = useState("30");
-  const [T, setTval] = useState("50");
-  const [S, setS] = useState("0.0001");
-  const [Ss, setSs] = useState("0.000004");
-  const theme = useTheme();
-  const Qn = parseFloat(Q.replace(",", "."));
-  const tn = parseFloat(t.replace(",", "."));
-  const rn = parseFloat(r.replace(",", "."));
-  const Tn = parseFloat(T.replace(",", "."));
-  const Sn = parseFloat(S.replace(",", "."));
-
-  let s = 0;
-  if (tn > 0 && rn > 0 && Tn > 0 && Sn > 0) {
-    const u = (rn * rn * Sn) / (4 * Tn * tn);
-    const W = wellFunction(u);
-    s = (Qn / (4 * Math.PI * Tn)) * W;
-  }
-  const result = { Q: Qn, t: tn, r: rn, T: Tn, S: Sn, s };
-
-  return (
-    <ScrollView style={{ flex: 1, padding: 16 }}>
-      <Text style={{color: theme.colors.text}}>Q, м³/сут:</Text>
-      <TextInput
-        style={styles.input}
-        value={Q}
-        onChangeText={setQ}
-        keyboardType="numeric"
-      />
-      <Text style={{color: theme.colors.text}}>t, сут:</Text>
-      <TextInput
-        style={styles.input}
-        value={t}
-        onChangeText={setT}
-        keyboardType="numeric"
-      />
-      <Text style={{color: theme.colors.text}}>r, м:</Text>
-      <TextInput
-        style={styles.input}
-        value={r}
-        onChangeText={setR}
-        keyboardType="numeric"
-      />
-      <Text style={{color: theme.colors.text}}>T, м²/сут:</Text>
-      <TextInput
-        style={styles.input}
-        value={T}
-        onChangeText={setTval}
-        keyboardType="numeric"
-      />
-      <Text style={{color: theme.colors.text}}>S, - :</Text>
-      <TextInput
-        style={styles.input}
-        value={S}
-        onChangeText={setS}
-        keyboardType="numeric"
-      />
-      <View
-        ref={chartRef}
-        collapsable={false}
-        style={{ alignItems: "center", marginVertical: 24 }}
-      >
-        <Svg width={260} height={90}>
-          <Rect
-            x={20}
-            y={20}
-            width={220}
-            height={50}
-            fill="#f3f8e6"
-            stroke="#800020"
-            strokeWidth={2}
-          />
-          <SvgText
-            x={130}
-            y={50}
-            fontSize="16"
-            fill="#800020"
-            textAnchor="middle"
-          >
-            s = {s ? s.toPrecision(5) : "-"} м
-          </SvgText>
-        </Svg>
-      </View>
-      <TouchableOpacity
-        style={styles.exportBtn}
-        onPress={() => exportJSON(result, "forecast_drawdown.json")}
-      >
-        <Text style={styles.exportBtnText}>{I18n.t("exportToJSON")}</Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={styles.exportBtn}
-        onPress={() => exportPNG(chartRef, "forecast_drawdown.png")}
-      >
-        <Text style={styles.exportBtnText}>{I18n.t("exportToPNG")}</Text>
-      </TouchableOpacity>
-    </ScrollView>
-  );
-}
-
-function PitInflowScreen() {
-  const chartRef = useRef();
-  const theme = useTheme();
-  const [k, setK] = useState("5");
-  const [m, setM] = useState("20");
-  const [ro, setRo] = useState("118.3");
-  const [R, setR] = useState("5723");
-  const [s0, setS0] = useState("10");
-  const [hasPremiumAccess, setHasPremiumAccess] = useState(false);
-
-  // Проверяем доступ к премиум функциям
-  React.useEffect(() => {
-    async function checkPremiumAccess() {
-      const hasAccess = await SubscriptionManager.hasPremiumAccess();
-      setHasPremiumAccess(hasAccess);
-    }
-    checkPremiumAccess();
-  }, []);
-
-  const kn = parseFloat(k.replace(",", "."));
-  const mn = parseFloat(m.replace(",", "."));
-  const ron = parseFloat(ro.replace(",", "."));
-  const Rn = parseFloat(R.replace(",", "."));
-  const s0n = parseFloat(s0.replace(",", "."));
-
-  let Q = 0;
-  if (kn > 0 && mn > 0 && ron > 0 && Rn > ron) {
-    Q = (2 * Math.PI * kn * mn * s0n) / Math.log(Rn / ron);
-  }
-  const result = { k: kn, m: mn, ro: ron, R: Rn, s0: s0n, Q };
-
-  return (
-    <ScrollView style={{ flex: 1, padding: 16 }}>
-      {!hasPremiumAccess && (
-        <PremiumBanner
-          title={I18n.t("pitInflowTab")}
-          description={I18n.t("premiumFeaturePitInflow")}
-          style={{ marginBottom: 16 }}
-        />
-      )}
-
-      {hasPremiumAccess ? (
-        <>
-          <Text style={{color: theme.colors.text}}>k, м/сут:</Text>
+    return (
+      <>
+        <View
+          style={[
+            styles.card,
+            elevation.card,
+            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+          ]}
+        >
+          <Text style={[type.eyebrow, { color: theme.colors.textSecondary }]}>
+            {I18n.t('value', { defaultValue: 'Значение' })}
+          </Text>
           <TextInput
-            style={styles.input}
-            value={k}
-            onChangeText={setK}
-            keyboardType="numeric"
+            value={kValue}
+            onChangeText={setKValue}
+            keyboardType="decimal-pad"
+            style={[styles.bigInput, { color: theme.colors.text }]}
           />
-          <Text style={{color: theme.colors.text}}>m, м:</Text>
-          <TextInput
-            style={styles.input}
-            value={m}
-            onChangeText={setM}
-            keyboardType="numeric"
-          />
-          <Text style={{color: theme.colors.text}}>ro, м:</Text>
-          <TextInput
-            style={styles.input}
-            value={ro}
-            onChangeText={setRo}
-            keyboardType="numeric"
-          />
-          <Text style={{color: theme.colors.text}}>R, м:</Text>
-          <TextInput
-            style={styles.input}
-            value={R}
-            onChangeText={setR}
-            keyboardType="numeric"
-          />
-          <Text style={{color: theme.colors.text}}>s0, м:</Text>
-          <TextInput
-            style={styles.input}
-            value={s0}
-            onChangeText={setS0}
-            keyboardType="numeric"
-          />
-          <View
-            ref={chartRef}
-            collapsable={false}
-            style={{ alignItems: "center", marginVertical: 24 }}
-          >
-            <Svg width={260} height={90}>
-              <Rect
-                x={20}
-                y={20}
-                width={220}
-                height={50}
-                fill="#e8e6f8"
-                stroke="#800020"
-                strokeWidth={2}
-              />
-              <SvgText
-                x={130}
-                y={50}
-                fontSize="16"
-                fill="#800020"
-                textAnchor="middle"
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.unitRow}>
+            {FILTRATION_UNITS.map((unit) => {
+              const active = unit.key === kUnit;
+              return (
+                <TouchableOpacity
+                  key={unit.key}
+                  onPress={() => setKUnit(unit.key)}
+                  style={[
+                    styles.unitChip,
+                    {
+                      backgroundColor: active ? theme.colors.primary : 'transparent',
+                      borderColor: active ? theme.colors.primary : theme.colors.border,
+                    },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                >
+                  <Text
+                    style={[
+                      styles.unitChipText,
+                      { color: active ? '#FFFFFF' : theme.colors.textSecondary },
+                    ]}
+                  >
+                    {I18n.t(unit.labelKey)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+
+        <Text style={[type.eyebrow, styles.sectionLabel, { color: theme.colors.textSecondary }]}>
+          {I18n.t('convertedToAllUnits', { defaultValue: 'Пересчёт по всем единицам' })}
+        </Text>
+
+        <View
+          style={[
+            styles.card,
+            styles.listCard,
+            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+          ]}
+        >
+          {converted.map((row) => {
+            const active = row.key === kUnit;
+            return (
+              <View
+                key={row.key}
+                style={[
+                  styles.convertRow,
+                  {
+                    borderBottomColor: theme.colors.border,
+                    backgroundColor: active ? theme.colors.primaryWash : 'transparent',
+                  },
+                ]}
               >
-                Q = {Q ? Q.toPrecision(5) : "-"} м³/сут
-              </SvgText>
-            </Svg>
+                <Text style={[type.body, { color: theme.colors.text }]}>{I18n.t(row.labelKey)}</Text>
+                <Text style={[styles.convertValue, { color: theme.colors.text }]}>
+                  {formatValue(row.value)}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      </>
+    );
+  };
+
+  /**
+   * Вкладка оценки коэффициента фильтрации по данным откачки
+   */
+  const renderParams = () => {
+    const { k, formula, warnings } = estimateConductivity({
+      Q: parseNumber(pQ),
+      s: parseNumber(pS),
+      m: parseNumber(pM),
+      aquiferType: aquifer,
+      R: parseNumber(pR),
+      r0: parseNumber(pR0),
+      imperfect,
+      penetrationRatio: parseNumber(penetration),
+    });
+
+    return (
+      <>
+        <View
+          style={[
+            styles.card,
+            elevation.card,
+            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+          ]}
+        >
+          {renderField(I18n.t('flowRate'), pQ, setPQ, 'м³/сут')}
+          {renderField(I18n.t('drawdown'), pS, setPS, 'м')}
+          {renderField(I18n.t('thickness', { defaultValue: 'Мощность m' }), pM, setPM, 'м')}
+          {renderField(I18n.t('influenceRadius', { defaultValue: 'Радиус влияния R' }), pR, setPR, 'м')}
+          {renderField(I18n.t('wellRadius'), pR0, setPR0, 'м')}
+
+          <Text style={[type.body, styles.groupLabel, { color: theme.colors.text }]}>
+            {I18n.t('aquiferType', { defaultValue: 'Тип пласта' })}
+          </Text>
+          <View style={[styles.segment, { backgroundColor: theme.colors.surfaceSunken }]}>
+            {[
+              { key: AQUIFER_TYPES.UNCONFINED, labelKey: 'unconfined' },
+              { key: AQUIFER_TYPES.CONFINED, labelKey: 'confined' },
+            ].map((option) => {
+              const active = option.key === aquifer;
+              return (
+                <TouchableOpacity
+                  key={option.key}
+                  onPress={() => setAquifer(option.key)}
+                  style={[styles.segmentItem, active && { backgroundColor: theme.colors.surface }]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                >
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      { color: active ? theme.colors.primaryAccent : theme.colors.textSecondary },
+                    ]}
+                  >
+                    {I18n.t(option.labelKey)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
+
+          <View style={styles.switchRow}>
+            <Text style={[type.body, { color: theme.colors.text }]}>{I18n.t('imperfectWell')}</Text>
+            <Switch
+              value={imperfect}
+              onValueChange={setImperfect}
+              trackColor={{ true: theme.colors.primary }}
+            />
+          </View>
+
+          {imperfect &&
+            renderField(
+              I18n.t('penetrationRatio', { defaultValue: 'Доля вскрытия l/m' }),
+              penetration,
+              setPenetration,
+              ''
+            )}
+        </View>
+
+        {renderResult('k', formatValue(k), 'м/сут', formula)}
+
+        {warnings.includes('defaultInfluenceRatio') && (
+          <Text style={[type.caption, styles.warning, { color: theme.colors.textSecondary }]}>
+            {I18n.t('defaultInfluenceRatioNote', {
+              defaultValue:
+                'R и r₀ не заданы — принято отношение R/r₀ = 300. Для точного результата укажите фактические значения.',
+            })}
+          </Text>
+        )}
+        {warnings.includes('drawdownExceedsThickness') && (
+          <Text style={[type.caption, styles.warning, { color: theme.colors.error }]}>
+            {I18n.t('drawdownExceedsThicknessNote', {
+              defaultValue: 'Понижение больше мощности пласта — проверьте исходные данные.',
+            })}
+          </Text>
+        )}
+      </>
+    );
+  };
+
+  /**
+   * Вкладка прогноза понижения по методу Тейса
+   */
+  const renderForecast = () => {
+    const { s, u, W } = predictDrawdownTheis(
+      {
+        Q: parseNumber(fQ),
+        T: parseNumber(fT),
+        S: parseNumber(fS),
+        r: parseNumber(fR),
+        t: parseNumber(fTime),
+      },
+      wellFunction
+    );
+
+    return (
+      <>
+        <View
+          style={[
+            styles.card,
+            elevation.card,
+            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+          ]}
+        >
+          {renderField(I18n.t('flowRate'), fQ, setFQ, 'м³/сут')}
+          {renderField(
+            I18n.t('transmissivity', { defaultValue: 'Водопроводимость T' }),
+            fT,
+            setFT,
+            'м²/сут'
+          )}
+          {renderField(I18n.t('storativity', { defaultValue: 'Водоотдача S' }), fS, setFS, '')}
+          {renderField(I18n.t('distance', { defaultValue: 'Расстояние r' }), fR, setFR, 'м')}
+          {renderField(I18n.t('time'), fTime, setFTime, 'сут')}
+        </View>
+
+        {renderResult('s', formatValue(s), 'м', 's = Q/(4π·T) · W(u),  u = r²S/(4Tt)')}
+
+        <View style={styles.auxRow}>
+          <Text style={[styles.auxText, { color: theme.colors.textSecondary }]}>
+            u = {formatValue(u)}
+          </Text>
+          <Text style={[styles.auxText, { color: theme.colors.textSecondary }]}>
+            W(u) = {formatValue(W)}
+          </Text>
+        </View>
+
+        {/* Одно число не отвечает на главный вопрос проектировщика — куда
+            воронка дотягивается. Разрез отвечает */}
+        <Text style={[type.eyebrow, styles.sectionLabel, { color: theme.colors.textSecondary }]}>
+          {I18n.t('coneSection', { defaultValue: 'Разрез депрессионной воронки' })}
+        </Text>
+        <DepressionCone
+          Q={parseNumber(fQ)}
+          T={parseNumber(fT)}
+          S={parseNumber(fS)}
+          t={parseNumber(fTime)}
+          markerR={parseNumber(fR)}
+          width={contentWidth}
+        />
+      </>
+    );
+  };
+
+  /**
+   * Вкладка притока в котлован
+   */
+  const renderPit = () => {
+    const { Q, formula } = pitInflow({
+      k: parseNumber(ck),
+      m: parseNumber(cm),
+      s0: parseNumber(cs0),
+      R: parseNumber(cR),
+      r0: parseNumber(cr0),
+    });
+
+    return (
+      <>
+        <View
+          style={[
+            styles.card,
+            elevation.card,
+            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+          ]}
+        >
+          {renderField(
+            I18n.t('filtrationCoefficient', { defaultValue: 'Коэф. фильтрации k' }),
+            ck,
+            setCk,
+            'м/сут'
+          )}
+          {renderField(I18n.t('thickness', { defaultValue: 'Мощность m' }), cm, setCm, 'м')}
+          {renderField(I18n.t('pitDrawdown', { defaultValue: 'Понижение s₀' }), cs0, setCs0, 'м')}
+          {renderField(I18n.t('influenceRadius', { defaultValue: 'Радиус влияния R' }), cR, setCR, 'м')}
+          {renderField(I18n.t('pitRadius', { defaultValue: 'Радиус котлована r₀' }), cr0, setCr0, 'м')}
+        </View>
+
+        {renderResult('Q', formatValue(Q), 'м³/сут', formula)}
+      </>
+    );
+  };
+
+  /**
+   * Сегментированный переключатель
+   *
+   * @param {Array<{key: string, labelKey: string}>} options - варианты
+   * @param {string} value - выбранный ключ
+   * @param {Function} onChange - обработчик выбора
+   */
+  const renderSegment = (options, value, onChange) => (
+    <View style={[styles.segment, { backgroundColor: theme.colors.surfaceSunken }]}>
+      {options.map((option) => {
+        const active = option.key === value;
+        return (
           <TouchableOpacity
-            style={styles.exportBtn}
-            onPress={() => exportJSON(result, "pit_inflow.json")}
+            key={option.key}
+            onPress={() => onChange(option.key)}
+            style={[styles.segmentItem, active && { backgroundColor: theme.colors.surface }]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
           >
-            <Text style={styles.exportBtnText}>{I18n.t("exportToJSON")}</Text>
+            <Text
+              style={[
+                styles.segmentText,
+                { color: active ? theme.colors.primaryAccent : theme.colors.textSecondary },
+              ]}
+            >
+              {I18n.t(option.labelKey)}
+            </Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.exportBtn}
-            onPress={() => exportPNG(chartRef, "pit_inflow.png")}
-          >
-            <Text style={styles.exportBtnText}>{I18n.t("exportToPNG")}</Text>
-          </TouchableOpacity>
-        </>
-      ) : null}
-    </ScrollView>
+        );
+      })}
+    </View>
   );
-}
 
-function BarrageScreen() {
-  const chartRef = useRef();
-  const theme = useTheme();
-  const [k, setK] = useState("0.1");
-  const [q, setQ] = useState("0.4");
-  const [m, setM] = useState("20");
+  /**
+   * Вкладка «Барраж»: пласт с прямолинейной границей и подпор перед стеной
+   */
+  const renderBarrage = () => {
+    const { s, sInfinite, effect, rImage, warnings } = drawdownWithBoundary({
+      Q: parseNumber(bQ),
+      T: parseNumber(bT),
+      S: parseNumber(bS),
+      r: parseNumber(bR),
+      t: parseNumber(bTime),
+      L: parseNumber(bL),
+      boundary,
+    });
 
-  const kn = parseFloat(k.replace(",", "."));
-  const qn = parseFloat(q.replace(",", "."));
-  const mn = parseFloat(m.replace(",", "."));
-  let smax = 0;
-  if (kn > 0) smax = (qn * mn) / kn;
+    const { rise, formula: riseFormula } = barrageRise({
+      gradient: parseNumber(bGradient),
+      barrierLength: parseNumber(bLength),
+    });
 
-  const result = { k: kn, q: qn, m: mn, smax };
+    const isBarrier = boundary === BOUNDARY_TYPES.BARRIER;
 
-  return (
-    <ScrollView style={{ flex: 1, padding: 16 }}>
-      <Text style={{color: theme.colors.text}}>k, м/сут:</Text>
-      <TextInput
-        style={styles.input}
-        value={k}
-        onChangeText={setK}
-        keyboardType="numeric"
-      />
-      <Text style={{color: theme.colors.text}}>q, м²/сут:</Text>
-      <TextInput
-        style={styles.input}
-        value={q}
-        onChangeText={setQ}
-        keyboardType="numeric"
-      />
-      <Text style={{color: theme.colors.text}}>m, м:</Text>
-      <TextInput
-        style={styles.input}
-        value={m}
-        onChangeText={setM}
-        keyboardType="numeric"
-      />
-      <View
-        ref={chartRef}
-        collapsable={false}
-        style={{ alignItems: "center", marginVertical: 24 }}
-      >
-        <Svg width={260} height={90}>
-          <Rect
-            x={20}
-            y={20}
-            width={220}
-            height={50}
-            fill="#fcefdc"
-            stroke="#800020"
-            strokeWidth={2}
-          />
-          <SvgText
-            x={130}
-            y={50}
-            fontSize="16"
-            fill="#800020"
-            textAnchor="middle"
-          >
-            sₘₐₓ = {smax ? smax.toPrecision(5) : "-"} м
-          </SvgText>
-        </Svg>
-      </View>
-      <TouchableOpacity
-        style={styles.exportBtn}
-        onPress={() => exportJSON(result, "barrage.json")}
-      >
-        <Text style={styles.exportBtnText}>{I18n.t("exportToJSON")}</Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={styles.exportBtn}
-        onPress={() => exportPNG(chartRef, "barrage.png")}
-      >
-        <Text style={styles.exportBtnText}>{I18n.t("exportToPNG")}</Text>
-      </TouchableOpacity>
-    </ScrollView>
-  );
-}
+    return (
+      <>
+        <View
+          style={[
+            styles.card,
+            elevation.card,
+            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+          ]}
+        >
+          {renderField(I18n.t('flowRate'), bQ, setBQ, 'м³/сут')}
+          {renderField(
+            I18n.t('transmissivity', { defaultValue: 'Водопроводимость T' }),
+            bT,
+            setBT,
+            'м²/сут'
+          )}
+          {renderField(I18n.t('storativity', { defaultValue: 'Водоотдача S' }), bS, setBS, '')}
+          {renderField(I18n.t('distance', { defaultValue: 'Расстояние r' }), bR, setBR, 'м')}
+          {renderField(I18n.t('time'), bTime, setBTime, 'сут')}
+          {renderField(
+            I18n.t('distanceToBoundary', { defaultValue: 'Расстояние до границы L' }),
+            bL,
+            setBL,
+            'м'
+          )}
 
-function InfiltrationLeakageScreen() {
-  const chartRef = useRef();
-  const theme = useTheme();
-  const [e, setE] = useState("0.1"); // ε (м/сут)
-  const [percentInfiltration, setPercentInfiltration] = useState("10"); // Процент инфильтрации
-  const [Sy, setSy] = useState("0.2"); // Sy
-  const [A, setA] = useState("10"); // A (м)
-  const [k, setK] = useState("5"); // k (м/сут)
-  const [m, setM] = useState("20"); // m (м)
-  const [t, setT] = useState("100"); // t (сут)
-  const [x, setX] = useState("0"); // x (м)
-  const [steady, setSteady] = useState(true); // Стационар/Нестационар
-  const [hasPremiumAccess, setHasPremiumAccess] = useState(false);
+          <Text style={[type.body, styles.groupLabel, { color: theme.colors.text }]}>
+            {I18n.t('boundaryType', { defaultValue: 'Тип границы' })}
+          </Text>
+          {renderSegment(
+            [
+              { key: BOUNDARY_TYPES.BARRIER, labelKey: 'boundaryBarrier' },
+              { key: BOUNDARY_TYPES.RECHARGE, labelKey: 'boundaryRecharge' },
+            ],
+            boundary,
+            setBoundary
+          )}
+        </View>
 
-  // Проверяем доступ к премиум функциям
-  React.useEffect(() => {
-    async function checkPremiumAccess() {
-      const hasAccess = await SubscriptionManager.hasPremiumAccess();
-      setHasPremiumAccess(hasAccess);
-    }
-    checkPremiumAccess();
-  }, []);
+        {renderResult(
+          's',
+          formatValue(s),
+          'м',
+          isBarrier ? 's = Q/(4π·T) · [W(u) + W(u′)]' : 's = Q/(4π·T) · [W(u) − W(u′)]'
+        )}
 
-  const en = parseFloat(e.replace(",", "."));
-  const percentInfiltrationn = parseFloat(
-    percentInfiltration.replace(",", ".")
-  );
-  const Syn = parseFloat(Sy.replace(",", "."));
-  const An = parseFloat(A.replace(",", "."));
-  const kn = parseFloat(k.replace(",", "."));
-  const mn = parseFloat(m.replace(",", "."));
-  const tn = parseFloat(t.replace(",", "."));
-  const xn = parseFloat(x.replace(",", "."));
+        <View style={styles.auxRow}>
+          <Text style={[styles.auxText, { color: theme.colors.textSecondary }]}>
+            {I18n.t('withoutBoundary', { defaultValue: 'Без границы' })} = {formatValue(sInfinite)} м
+          </Text>
+          <Text style={[styles.auxText, { color: theme.colors.textSecondary }]}>
+            {I18n.t('boundaryEffect', { defaultValue: 'Вклад границы' })} = {formatValue(effect)} м
+          </Text>
+          <Text style={[styles.auxText, { color: theme.colors.textSecondary }]}>
+            r′ = {formatValue(rImage)} м
+          </Text>
+        </View>
 
-  // Пересчет ε в мм/год
-  const e_mm_year = en * 365;
+        {warnings.includes('boundaryNotReached') && (
+          <Text style={[type.caption, styles.warning, { color: theme.colors.textSecondary }]}>
+            {I18n.t('boundaryNotReachedNote', {
+              defaultValue:
+                'Возмущение ещё не дошло до границы — она пока не влияет на понижение.',
+            })}
+          </Text>
+        )}
+        {warnings.includes('observationBeyondBoundary') && (
+          <Text style={[type.caption, styles.warning, { color: theme.colors.error }]}>
+            {I18n.t('observationBeyondBoundaryNote', {
+              defaultValue: 'Точка наблюдения оказалась за границей пласта: r должно быть меньше L.',
+            })}
+          </Text>
+        )}
 
-  // Расчет P (мм/год) по проценту инфильтрации
-  const P_mm_year = (e_mm_year * percentInfiltrationn) / 100;
+        {/* Подпор перед непроницаемым сооружением */}
+        <Text style={[type.eyebrow, styles.sectionLabel, { color: theme.colors.textSecondary }]}>
+          {I18n.t('barrageRiseTitle', { defaultValue: 'Подпор перед сооружением' })}
+        </Text>
+        <View
+          style={[
+            styles.card,
+            elevation.card,
+            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+          ]}
+        >
+          {renderField(
+            I18n.t('naturalGradient', { defaultValue: 'Уклон потока i' }),
+            bGradient,
+            setBGradient,
+            ''
+          )}
+          {renderField(
+            I18n.t('barrierLength', { defaultValue: 'Длина сооружения b' }),
+            bLength,
+            setBLength,
+            'м'
+          )}
+        </View>
 
-  // Диффузивность пласта (м²/сут). Проверяем Sy>0, иначе D=0
-  const D = Syn > 0 ? (mn * mn) / (2 * Syn) : 0;
+        {renderResult('ΔH', formatValue(rise), 'м', riseFormula)}
+      </>
+    );
+  };
 
-  let s_max_steady = 0;
-  let s_max_transient = 0;
-  let s_profile = [];
+  /**
+   * Вкладка «Инфильтрационные утечки»: пласт с перетеканием
+   */
+  const renderLeakage = () => {
+    const T = parseNumber(lT);
+    const aquitardThickness = parseNumber(lThickness);
+    const aquitardK = parseNumber(lK);
 
-  if (kn > 0 && mn > 0 && Syn > 0) {
-    if (steady) {
-      s_max_steady = (en * mn) / kn;
-    } else {
-      s_max_transient =
-        Syn > 0 ? ((2 * en) / Syn) * Math.sqrt((D * tn) / Math.PI) : 0;
-    }
-  }
+    const B = leakageFactor({ T, aquitardThickness, aquitardK });
+    const { s, beta, W } = leakyDrawdown({
+      Q: parseNumber(lQ),
+      T,
+      S: parseNumber(lS),
+      r: parseNumber(lR),
+      t: parseNumber(lTime),
+      B,
+    });
+    const steady = steadyLeakyDrawdown({ Q: parseNumber(lQ), T, r: parseNumber(lR), B });
+    const { rate, total, formula: rateFormula } = leakageRate({
+      s,
+      aquitardThickness,
+      aquitardK,
+      area: parseNumber(lArea),
+    });
 
-  if (Syn > 0 && tn > 0) {
-    const x_values = [];
-    const s_values = [];
-    const dx = An / 10; // Шаг по x
-    for (let x = -An; x <= An; x += dx) {
-      let s = 0;
-      if (steady) {
-        s =
-          Syn > 0 && D > 0
-            ? ((en * tn) / Syn) * Math.exp((-x * x) / (4 * D * tn))
-            : 0;
-      } else {
-        s =
-          Syn > 0 && D > 0
-            ? ((en * tn) / (2 * Math.PI * Syn)) *
-              Math.exp((-x * x) / (4 * D * tn))
-            : 0;
-      }
-      x_values.push(x);
-      s_values.push(s);
-    }
-    s_profile = x_values.map((x, index) => ({ x, s: s_values[index] }));
-  }
+    return (
+      <>
+        <View
+          style={[
+            styles.card,
+            elevation.card,
+            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+          ]}
+        >
+          {renderField(I18n.t('flowRate'), lQ, setLQ, 'м³/сут')}
+          {renderField(
+            I18n.t('transmissivity', { defaultValue: 'Водопроводимость T' }),
+            lT,
+            setLT,
+            'м²/сут'
+          )}
+          {renderField(I18n.t('storativity', { defaultValue: 'Водоотдача S' }), lS, setLS, '')}
+          {renderField(I18n.t('distance', { defaultValue: 'Расстояние r' }), lR, setLR, 'м')}
+          {renderField(I18n.t('time'), lTime, setLTime, 'сут')}
+          {renderField(
+            I18n.t('aquitardThickness', { defaultValue: 'Мощность слабопроницаемого слоя m′' }),
+            lThickness,
+            setLThickness,
+            'м'
+          )}
+          {renderField(
+            I18n.t('aquitardK', { defaultValue: 'Коэф. фильтрации слоя k′' }),
+            lK,
+            setLK,
+            'м/сут'
+          )}
+        </View>
 
-  const result = {
-    e: en,
-    percentInfiltration: percentInfiltrationn,
-    Sy: Syn,
-    A: An,
-    k: kn,
-    m: mn,
-    t: tn,
-    x: xn,
-    steady: steady,
-    e_mm_year: e_mm_year,
-    P_mm_year: P_mm_year,
-    s_max_steady: s_max_steady,
-    s_max_transient: s_max_transient,
-    s_profile: s_profile,
+        {renderResult('s', formatValue(s), 'м', 's = Q/(4π·T) · W(u, r/B)')}
+
+        <View style={styles.auxRow}>
+          <Text style={[styles.auxText, { color: theme.colors.textSecondary }]}>
+            B = {formatValue(B)} м
+          </Text>
+          <Text style={[styles.auxText, { color: theme.colors.textSecondary }]}>
+            r/B = {formatValue(beta)}
+          </Text>
+          <Text style={[styles.auxText, { color: theme.colors.textSecondary }]}>
+            W(u, r/B) = {formatValue(W)}
+          </Text>
+          <Text style={[styles.auxText, { color: theme.colors.textSecondary }]}>
+            {I18n.t('steadyDrawdown', { defaultValue: 'Стационар' })} = {formatValue(steady.s)} м
+          </Text>
+        </View>
+
+        {/* Расход перетекания */}
+        <Text style={[type.eyebrow, styles.sectionLabel, { color: theme.colors.textSecondary }]}>
+          {I18n.t('leakageVolumeTitle', { defaultValue: 'Расход перетекания' })}
+        </Text>
+        <View
+          style={[
+            styles.card,
+            elevation.card,
+            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+          ]}
+        >
+          {renderField(I18n.t('leakageArea', { defaultValue: 'Площадь F' }), lArea, setLArea, 'м²')}
+        </View>
+
+        {renderResult('w', formatValue(rate), 'м/сут', rateFormula)}
+
+        <View style={styles.auxRow}>
+          <Text style={[styles.auxText, { color: theme.colors.textSecondary }]}>
+            {I18n.t('leakageTotal', { defaultValue: 'Расход по площади' })} = {formatValue(total)} м³/сут
+          </Text>
+        </View>
+      </>
+    );
   };
 
   return (
-    <ScrollView style={{ flex: 1, padding: 16, marginBottom: 100 }}>
-      {!hasPremiumAccess && (
-        <PremiumBanner
-          title={I18n.t("infiltrationLeakageTab")}
-          description={I18n.t("premiumOnly")}
-          style={{ marginBottom: 16 }}
-        />
-      )}
-
-      {hasPremiumAccess ? (
-        <>
-          <View style={{ marginBottom: 12 }}>
-            <Text style={{color: theme.colors.text}}>ε (м/сут):</Text>
-            <TextInput
-              style={styles.input}
-              value={e}
-              onChangeText={setE}
-              keyboardType="numeric"
-            />
-            <Text style={{color: theme.colors.text}}>Процент инфильтрации (%):</Text>
-            <TextInput
-              style={styles.input}
-              value={percentInfiltration}
-              onChangeText={setPercentInfiltration}
-              keyboardType="numeric"
-            />
-            <Text style={{color: theme.colors.text}}>Sy, - :</Text>
-            <TextInput
-              style={styles.input}
-              value={Sy}
-              onChangeText={setSy}
-              keyboardType="numeric"
-            />
-            <Text style={{color: theme.colors.text}}>A, м (полуширина области):</Text>
-            <TextInput
-              style={styles.input}
-              value={A}
-              onChangeText={setA}
-              keyboardType="numeric"
-            />
-            <Text style={{color: theme.colors.text}}>k, м/сут:</Text>
-            <TextInput
-              style={styles.input}
-              value={k}
-              onChangeText={setK}
-              keyboardType="numeric"
-            />
-            <Text style={{color: theme.colors.text}}>m, м:</Text>
-            <TextInput
-              style={styles.input}
-              value={m}
-              onChangeText={setM}
-              keyboardType="numeric"
-            />
-            <Text style={{color: theme.colors.text}}>t, сут:</Text>
-            <TextInput
-              style={styles.input}
-              value={t}
-              onChangeText={setT}
-              keyboardType="numeric"
-            />
-            <Text style={{color: theme.colors.text}}>x, м:</Text>
-            <TextInput
-              style={styles.input}
-              value={x}
-              onChangeText={setX}
-              keyboardType="numeric"
-            />
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                marginVertical: 8,
-              }}
+    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+      {/* Вкладки */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={[styles.tabBar, { borderBottomColor: theme.colors.border }]}
+        contentContainerStyle={styles.tabBarContent}
+      >
+        {TABS.map((item) => {
+          const active = item.key === tab;
+          return (
+            <TouchableOpacity
+              key={item.key}
+              onPress={() => setTab(item.key)}
+              style={[styles.tab, { backgroundColor: active ? theme.colors.primary : 'transparent' }]}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
             >
-              <TouchableOpacity
-                onPress={() => setSteady(true)}
-                style={[styles.steadyBtn, steady && styles.steadyBtnActive]}
+              <Text
+                style={[styles.tabText, { color: active ? '#FFFFFF' : theme.colors.textSecondary }]}
               >
-                <Text style={{ color: steady ? "#fff" : "#800020" }}>
-                  Стационарный
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setSteady(false)}
-                style={[styles.steadyBtn, !steady && styles.steadyBtnActive]}
-              >
-                <Text style={{ color: !steady ? "#fff" : "#800020" }}>
-                  Нестационарный
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-          <Text
-            style={{ marginBottom: 8, color: theme.colors.text, fontWeight: "bold" }}
-          >
-            Результаты:
-          </Text>
-          <View style={styles.resultRow}>
-            <Text style={{...styles.resultValue, color: theme.colors.text}}>
-              {I18n.t("e_mm_year", { defaultValue: "ε (мм/год)" })}:
-            </Text>
-            <Text style={{...styles.resultValue, color: theme.colors.reverse}}>{e_mm_year.toPrecision(5)}</Text>
-            <Text style={{...styles.resultUnit, color: theme.colors.text}}>мм/год</Text>
-          </View>
-          <View style={styles.resultRow}>
-            <Text style={{...styles.resultValue, color: theme.colors.text}}>
-              {I18n.t("P_mm_year", { defaultValue: "P (мм/год)" })}:
-            </Text>
-            <Text style={{...styles.resultValue, color: theme.colors.reverse}}>{P_mm_year.toPrecision(5)}</Text>
-            <Text style={{...styles.resultUnit, color: theme.colors.text}}>мм/год</Text>
-          </View>
-          <View style={styles.resultRow}>
-            <Text style={{...styles.resultValue, color: theme.colors.text}}>
-              {I18n.t("sMaxSteady", { defaultValue: "s_max (steady)" })}:
-            </Text>
-            <Text style={{...styles.resultValue, color: theme.colors.reverse}}>
-              {s_max_steady.toPrecision(5)}
-            </Text>
-            <Text style={{...styles.resultUnit, color: theme.colors.text}}>м</Text>
-          </View>
-          <View style={styles.resultRow}>
-            <Text style={{...styles.resultValue, color: theme.colors.text}}>
-              {I18n.t("sMaxTransient", { defaultValue: "s_max (transient)" })}:
-            </Text>
-            <Text style={{...styles.resultValue, color: theme.colors.reverse}}>
-              {s_max_transient.toPrecision(5)}
-            </Text>
-            <Text style={{...styles.resultUnit, color: theme.colors.text}}>м</Text>
-          </View>
-          <View
-            ref={chartRef}
-            collapsable={false}
-            style={{ alignItems: "center", marginVertical: 24 }}
-          >
-            <Svg width={260} height={150}>
-              <Rect
-                x={20}
-                y={20}
-                width={220}
-                height={120}
-                fill="#e6f9f8"
-                stroke="#800020"
-                strokeWidth={2}
-              />
-              <SvgText
-                x={130}
-                y={140}
-                fontSize="16"
-                fill="#800020"
-                textAnchor="middle"
-              >
-                s(x)
-              </SvgText>
-              {/* Polyline график профиля */}
-              {s_profile.length > 1 && (
-                <Polyline
-                  points={s_profile
-                    .map((p) => `${130 + p.x * 5},${140 - p.s * 10}`)
-                    .join(" ")}
-                  fill="none"
-                  stroke="#800020"
-                  strokeWidth="2"
-                />
-              )}
-            </Svg>
-          </View>
-          <TouchableOpacity
-            style={styles.exportBtn}
-            onPress={() => exportJSON(result, "infiltration_leakage.json")}
-          >
-            <Text style={styles.exportBtnText}>{I18n.t("exportToJSON")}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.exportBtn}
-            onPress={() => exportPNG(chartRef, "infiltration_leakage.png")}
-          >
-            <Text style={styles.exportBtnText}>{I18n.t("exportToPNG")}</Text>
-          </TouchableOpacity>
-        </>
-      ) : null}
-    </ScrollView>
-  );
-}
+                {I18n.t(item.labelKey)}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
 
-export default function CalculatorScreen({ navigation }) {
-  const theme = useTheme();
-  return (
-    <View style={{ flex: 1 }}>
-      <Tab.Navigator
-      screenOptions={{
-        tabBarStyle: { backgroundColor: theme.colors.background },
-        tabBarActiveTintColor: theme.colors.primary,
-        tabBarIndicatorStyle: { backgroundColor: theme.colors.primary, height: 3 },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: "600",
-          textTransform: "none",
-        },
-        tabBarScrollEnabled: true,
-      }}
-    >
-      <Tab.Screen
-        name="UnitConverter"
-        component={UnitConverterScreen}
-        options={{
-          title: I18n.t("filtrationCoeff"),
-        }}
-      />
-      <Tab.Screen
-        name="ParameterEstimation"
-        component={ParameterEstimationScreen}
-        options={{
-          title: I18n.t("parameterEstimationTab"),
-        }}
-      />
-      <Tab.Screen
-        name="DrawdownForecast"
-        component={DrawdownForecastScreen}
-        options={{
-          title: I18n.t("drawdownForecastTab"),
-        }}
-      />
-      <Tab.Screen
-        name="PitInflow"
-        component={PitInflowScreen}
-        options={{
-          title: I18n.t("pitInflowTab"),
-        }}
-      />
-      <Tab.Screen
-        name="Barrage"
-        component={BarrageScreen}
-        options={{ title: I18n.t("barrageTab") }}
-      />
-      <Tab.Screen
-        name="InfiltrationLeakage"
-        component={InfiltrationLeakageScreen}
-        options={{
-          title: I18n.t("infiltrationLeakageTab"),
-        }}
-      />
-      </Tab.Navigator>
-
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        {tab === 'filtration' && renderFiltration()}
+        {tab === 'params' && renderParams()}
+        {tab === 'forecast' && renderForecast()}
+        {tab === 'pit' && renderPit()}
+        {tab === 'barrage' && renderBarrage()}
+        {tab === 'leakage' && renderLeakage()}
+        <View style={{ height: 120 }} />
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  title: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#800020",
-    marginBottom: 16,
-    textAlign: "center",
+  // Высота задана явно: горизонтальная прокрутка с flexGrow: 0 на Android
+  // меряет себя короче содержимого, и у букв срезало нижние выносные
+  // элементы — «фильтрации», «параметров». 18 (строка) + 12×2 (поля) + 12
+  tabBar: {
+    flexGrow: 0,
+    height: 54,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  input: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 10,
-    width: 120,
-    fontSize: 16,
-    backgroundColor: "#fff",
-    marginBottom: 12,
-    marginTop: 2,
+  tabBarContent: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    gap: spacing.sm,
   },
-  inputRow: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
-  label: { width: 80, fontSize: 15, color: "#222", marginRight: 8 },
-  unitBtn: {
-    borderWidth: 1,
-    borderColor: "#800020",
-    borderRadius: 8,
-    paddingHorizontal: 10,
+  tab: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.chip,
+  },
+  tabText: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600',
+  },
+  content: {
+    padding: spacing.lg,
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
+  },
+  card: {
+    padding: spacing.lg,
+    borderRadius: radius.card,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  listCard: {
+    padding: 0,
+    overflow: 'hidden',
+  },
+  bigInput: {
+    ...numericAt(34),
+    fontWeight: '600',
+    paddingVertical: spacing.sm,
+  },
+  unitRow: {
+    marginTop: spacing.sm,
+  },
+  unitChip: {
+    paddingHorizontal: spacing.md,
     paddingVertical: 6,
-    marginRight: 6,
-    backgroundColor: "#fff",
+    borderRadius: radius.chip,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginRight: spacing.sm,
   },
-  unitBtnActive: { backgroundColor: "#800020" },
-  resultRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+  unitChipText: {
+    ...type.numeric,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  sectionLabel: {
+    marginTop: spacing.xl,
+    marginBottom: spacing.sm,
+  },
+  convertRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  convertValue: {
+    ...type.numeric,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  field: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  fieldLabel: {
+    flex: 1,
+  },
+  fieldInput: {
+    ...type.numeric,
+    fontSize: 17,
+    fontWeight: '600',
+    textAlign: 'right',
+    minWidth: 80,
+  },
+  fieldUnit: {
+    ...type.numeric,
+    fontSize: 12,
+    marginLeft: spacing.sm,
+    minWidth: 46,
+  },
+  groupLabel: {
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  segment: {
+    flexDirection: 'row',
+    borderRadius: radius.chip,
+    padding: 3,
+  },
+  segmentItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    borderRadius: radius.chip,
+  },
+  segmentText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.lg,
+  },
+  resultCard: {
+    marginTop: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: radius.card,
+  },
+  resultCaption: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.75)',
+  },
+  resultValueRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginTop: spacing.sm,
+    gap: spacing.sm,
+  },
+  resultLabel: {
+    ...numericAt(20),
+    color: '#FFFFFF',
   },
   resultValue: {
-    width: 110,
-    fontWeight: "bold",
-    color: "#800020",
-    fontSize: 16,
+    ...numericAt(30),
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
-  resultUnit: { fontSize: 15, color: "#333", marginLeft: 8 },
-  exportBtn: {
-    backgroundColor: "#800020",
-    borderRadius: 8,
-    padding: 12,
-    marginVertical: 6,
-    alignItems: "center",
-    minWidth: 160,
+  resultUnit: {
+    ...type.numeric,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
   },
-  exportBtnText: { color: "#fff", fontWeight: "bold" },
-  aquiferBtn: {
-    borderWidth: 1,
-    borderColor: "#800020",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginRight: 6,
-    backgroundColor: "#fff",
+  resultFormula: {
+    ...type.numeric,
+    fontSize: 12,
+    // Формула набрана моноширинным со скобками и дробями: при высоте строки
+    // от родительского токена нижние края скобок срезались
+    lineHeight: 18,
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: spacing.md,
   },
-  aquiferBtnActive: { backgroundColor: "#800020" },
-  banner: {
-    marginVertical: 15,
-    width: "100%",
-    justifyContent: "center",
-    alignItems: "center",
+  warning: {
+    marginTop: spacing.md,
   },
-  svgBox: {
-    alignItems: "center",
-    marginVertical: 18,
-    padding: 8,
-    backgroundColor: "#f9f9f9",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#eee",
+  auxRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: spacing.md,
   },
-  exportBtnGroup: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 12,
-    marginBottom: 10,
+  auxText: {
+    ...type.numeric,
+    fontSize: 12,
   },
-  shapeBtn: {
-    borderWidth: 1,
-    borderColor: "#800020",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginRight: 6,
-    backgroundColor: "#fff",
-  },
-  shapeBtnActive: { backgroundColor: "#800020" },
-  steadyBtn: {
-    borderWidth: 1,
-    borderColor: "#800020",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginRight: 6,
-    backgroundColor: "#fff",
-  },
-  steadyBtnActive: { backgroundColor: "#800020" },
 });
