@@ -7,11 +7,35 @@ import {
   lineThroughPoints,
   transmissivityFromSlope,
   storativityFromIntercept,
+  diffusivityFromIntercept,
   transformTime,
   processDrawdown,
   COOPER_JACOB_FACTOR,
   X_MODES,
 } from '../cooperJacob';
+
+/**
+ * Замеры «идеальной» откачки по формуле Купера — Джейкоба
+ *
+ * s = 0.183·Q/T · lg(2.25·a·t/r²), время внутри формулы в сутках, а на выходе
+ * — в минутах, как в журнале ОФР. Ряд ложится на прямую точно, поэтому по
+ * нему видно не качество приближения, а правильность самих формул.
+ *
+ * @param {Object} params
+ * @param {number} params.Q - дебит, м³/сут
+ * @param {number} params.T - водопроводимость, м²/сут
+ * @param {number} params.S - водоотдача, безразмерная
+ * @param {number} params.r - расстояние до скважины, м
+ * @param {Array<number>} params.times - моменты времени, мин
+ * @returns {Array<{t: number, s: number}>} замеры: время в минутах
+ */
+function cooperJacobSeries({ Q, T, S, r, times }) {
+  const a = T / S;
+  return times.map((t) => ({
+    t,
+    s: ((COOPER_JACOB_FACTOR * Q) / T) * Math.log10((2.25 * a * (t / 1440)) / (r * r)),
+  }));
+}
 
 describe('COOPER_JACOB_FACTOR', () => {
   test('равен 0.183 — это 2.3/(4π), а не подгоночное число', () => {
@@ -154,6 +178,47 @@ describe('storativityFromIntercept', () => {
   });
 });
 
+describe('diffusivityFromIntercept', () => {
+  test('обратная проверка: восстанавливает заданную пьезопроводность', () => {
+    const a = 5e6;
+    const r = 50;
+    const slope = 0.4;
+    // lg a = A/C + lg 1440 + lg(r²/2.25) — отсюда свободный член,
+    // отвечающий заданной пьезопроводности
+    const intercept =
+      slope * (Math.log10(a) - Math.log10(1440) - Math.log10((r * r) / 2.25));
+
+    expect(diffusivityFromIntercept(slope, intercept, r)).toBeCloseTo(a, 1);
+  });
+
+  test('поправка на минуты: без lg 1440 значение вышло бы в 1440 раз меньше', () => {
+    // Тот же ряд, поданный в минутах и в сутках, описывает один и тот же
+    // пласт. Прямая по нему разная — свободный член сдвигается, — а
+    // пьезопроводность обязана совпасть
+    const r = 50;
+    const slope = 0.4;
+    const interceptMinutes = -0.3;
+    // A_сут = A_мин + C·lg 1440
+    const interceptDays = interceptMinutes + slope * Math.log10(1440);
+
+    const fromMinutes = diffusivityFromIntercept(slope, interceptMinutes, r);
+    // Прямая в сутках даёт то же самое только с поправкой на смену единицы:
+    // здесь она снимается вручную, чтобы промах в 1440 раз был виден числом
+    const fromDays = Math.pow(
+      10,
+      interceptDays / slope + Math.log10((r * r) / 2.25)
+    );
+
+    expect(fromMinutes / fromDays).toBeCloseTo(1, 9);
+  });
+
+  test('без расстояния и при нулевом наклоне не считается', () => {
+    expect(diffusivityFromIntercept(0.4, -0.3, 0)).toBeNaN();
+    expect(diffusivityFromIntercept(0.4, -0.3, undefined)).toBeNaN();
+    expect(diffusivityFromIntercept(0, -0.3, 50)).toBeNaN();
+  });
+});
+
 describe('processDrawdown', () => {
   test('восстанавливает T из синтетического ряда Купера — Джейкоба', () => {
     const Q = 1200;
@@ -196,5 +261,64 @@ describe('processDrawdown', () => {
     ];
     const result = processDrawdown({ measurements, Q: 1000, mode: X_MODES.LOG });
     expect(result.count).toBe(2);
+  });
+
+  test('с расстоянием возвращает водоотдачу и пьезопроводность', () => {
+    const Q = 1000;
+    const T = 500;
+    const S = 1e-4;
+    const r = 50;
+    const measurements = cooperJacobSeries({
+      Q,
+      T,
+      S,
+      r,
+      times: [30, 60, 120, 300, 600, 1200],
+    });
+
+    const result = processDrawdown({ measurements, Q, r });
+
+    expect(result.T).toBeCloseTo(T, 6);
+    expect(result.S).toBeCloseTo(S, 12);
+    // Пьезопроводность и есть T/S: промах на lg 1440 сдвинул бы её в 1440 раз
+    expect(result.a / (T / S)).toBeCloseTo(1, 9);
+  });
+
+  test('без расстояния пьезопроводность не считается', () => {
+    const measurements = cooperJacobSeries({
+      Q: 1000,
+      T: 500,
+      S: 1e-4,
+      r: 50,
+      times: [30, 60, 120],
+    });
+
+    const result = processDrawdown({ measurements, Q: 1000 });
+
+    expect(result.T).toBeCloseTo(500, 6);
+    expect(result.a).toBeNaN();
+    expect(result.S).toBeNaN();
+  });
+
+  test('заданная прямая заменяет регрессию', () => {
+    // Прямая, проведённая геологом по двум точкам, а не по всему ряду:
+    // расчёт обязан идти по ней, иначе на экране числа от чужой прямой
+    const measurements = cooperJacobSeries({
+      Q: 1000,
+      T: 500,
+      S: 1e-4,
+      r: 50,
+      times: [30, 60, 120, 300],
+    });
+    const line = { slope: 0.5, intercept: -0.1 };
+
+    const result = processDrawdown({ measurements, Q: 1000, r: 50, line });
+
+    expect(result.slope).toBeCloseTo(0.5, 12);
+    expect(result.intercept).toBeCloseTo(-0.1, 12);
+    expect(result.T).toBeCloseTo((COOPER_JACOB_FACTOR * 1000) / 0.5, 9);
+    // Качество аппроксимации относится к регрессии: у прямой по двум точкам
+    // его нет, и показывать чужое r² нельзя
+    expect(result.r2).toBeNaN();
   });
 });

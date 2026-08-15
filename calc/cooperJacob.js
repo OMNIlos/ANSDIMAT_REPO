@@ -16,6 +16,19 @@
 /** Множитель Купера — Джейкоба: 2.3/(4π) */
 export const COOPER_JACOB_FACTOR = 2.3 / (4 * Math.PI);
 
+/**
+ * Логарифм числа минут в сутках — поправка на единицу времени журнала
+ *
+ * Формулы способа прямой линии написаны для времени в сутках, а журнал ОФР
+ * ведётся в минутах, и регрессия идёт по lg t в минутах. Наклону это
+ * безразлично: он берётся на логарифмический цикл, а смена единицы сдвигает
+ * ось на постоянную. Свободный член сдвигается вместе с осью:
+ *   A_сут = A_мин + C·lg 1440
+ * Без этой поправки пьезопроводность выходит ровно в 1440 раз меньше, и на
+ * глаз это не видно: a меняется на порядки от пласта к пласту.
+ */
+export const LG_MINUTES_PER_DAY = Math.log10(1440);
+
 export const X_MODES = {
   LOG: 'lg',
   LINEAR: 't',
@@ -147,27 +160,64 @@ export function storativityFromIntercept(T, slope, intercept, r) {
 }
 
 /**
+ * Рассчитывает пьезопроводность по свободному члену прямой
+ *
+ * Табл. 4.1 АНСДИМАТ, столбец временнóго прослеживания:
+ *   lg a = A/C + lg(r²/2.25), время в сутках.
+ * Регрессия идёт по времени в минутах, поэтому добавляется lg 1440,
+ * см. LG_MINUTES_PER_DAY.
+ *
+ * @param {number} slope - наклон прямой s = C·lg t + A, время в минутах
+ * @param {number} intercept - свободный член A той же прямой
+ * @param {number} r - расстояние до наблюдательной скважины, м
+ * @returns {number} пьезопроводность a, м²/сут; NaN при некорректных данных
+ */
+export function diffusivityFromIntercept(slope, intercept, r) {
+  if (!(r > 0) || !isFinite(slope) || Math.abs(slope) < 1e-9 || !isFinite(intercept)) {
+    return NaN;
+  }
+  const logA =
+    intercept / slope + LG_MINUTES_PER_DAY + Math.log10((r * r) / 2.25);
+  const a = Math.pow(10, logA);
+  return isFinite(a) ? a : NaN;
+}
+
+/**
  * Полная обработка ряда замеров методом Купера — Джейкоба
+ *
+ * Это временнóе прослеживание из табл. 4.1: график s — lg t. Площадное и
+ * комбинированное живут в [`tracking.js`](./tracking.js) — там в абсциссу
+ * входит расстояние, и точки собираются не из одного журнала.
  *
  * @param {Object} params
  * @param {Array<{t: number, s: number}>} params.measurements - замеры
  * @param {number} params.Q - дебит, м³/сут
  * @param {string} [params.mode] - режим оси X
  * @param {number} [params.r] - расстояние до наблюдательной скважины, м
+ * @param {{slope: number, intercept: number}} [params.line] - прямая, проведённая
+ *   геологом по двум точкам: подменяет регрессию, а не дополняет её
  * @returns {{slope: number, intercept: number, r2: number, T: number, S: number,
- *   applicable: boolean, note: string}}
+ *   a: number, applicable: boolean, note: string, count: number}}
  *   applicable — можно ли считать T: только в режиме lg t
  */
-export function processDrawdown({ measurements, Q, mode = X_MODES.LOG, r }) {
+export function processDrawdown({ measurements, Q, mode = X_MODES.LOG, r, line }) {
   const points = measurements
     .map((m) => ({ x: transformTime(m.t, mode), y: m.s }))
     .filter((p) => p.x != null && isFinite(p.y));
 
-  const { slope, intercept, r2, count } = linearRegression(points);
+  const regression = linearRegression(points);
+  // Прямая по двум выбранным точкам заменяет регрессию целиком: показывать
+  // рядом с ней r² регрессии значило бы приписывать ей чужое качество
+  const manual = line && isFinite(line.slope) && isFinite(line.intercept);
+  const slope = manual ? line.slope : regression.slope;
+  const intercept = manual ? line.intercept : regression.intercept;
+  const r2 = manual ? NaN : regression.r2;
+  const count = regression.count;
   const applicable = mode === X_MODES.LOG;
 
   const T = applicable ? transmissivityFromSlope(Q, slope) : NaN;
-  const S = applicable && isFinite(r) ? storativityFromIntercept(T, slope, intercept, r) : NaN;
+  const S = applicable ? storativityFromIntercept(T, slope, intercept, r) : NaN;
+  const a = applicable ? diffusivityFromIntercept(slope, intercept, r) : NaN;
 
   let note;
   if (!applicable) {
@@ -178,5 +228,5 @@ export function processDrawdown({ measurements, Q, mode = X_MODES.LOG, r }) {
     note = 'cooperJacob';
   }
 
-  return { slope, intercept, r2, T, S, applicable, note, count };
+  return { slope, intercept, r2, T, S, a, applicable, note, count };
 }

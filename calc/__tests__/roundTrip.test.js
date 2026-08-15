@@ -15,6 +15,7 @@
 import { wellFunction } from '../wellFunction';
 import { predictDrawdownTheis } from '../aquifer';
 import { processDrawdown, transmissivityFromSlope, storativityFromIntercept } from '../cooperJacob';
+import { processAreaTracking, processCombinedTracking } from '../tracking';
 import { processRecovery } from '../recovery';
 import { diagnose, transmissivityFromPlateau, REGIMES } from '../diagnostics';
 
@@ -112,6 +113,105 @@ describe('сквозной расчёт по синтетической отка
     const { plateau } = diagnose(TIMES.map((t) => ({ t, s: drawdownAt(t) })));
     const T = transmissivityFromPlateau(Q, plateau);
     expect(Math.abs(T - T_TRUE) / T_TRUE).toBeLessThan(0.05);
+  });
+});
+
+describe('сквозной расчёт по синтетическому кусту', () => {
+  /**
+   * Расстояния до наблюдательных скважин куста, м
+   *
+   * Разброс на порядок: площадному прослеживанию нужен размах по оси lg r,
+   * иначе прямая проводится по пятну.
+   */
+  const CLUSTER = [10, 25, 50, 100];
+
+  /**
+   * Понижение в скважине куста
+   *
+   * @param {number} tMinutes - время от начала откачки, мин
+   * @param {number} r - расстояние до опытной скважины, м
+   * @returns {number} понижение, м
+   */
+  function drawdownAtWell(tMinutes, r) {
+    return predictDrawdownTheis(
+      { Q, T: T_TRUE, S: S_TRUE, r, t: tMinutes / 1440 },
+      wellFunction
+    ).s;
+  }
+
+  /**
+   * Выполняется ли условие применимости способа прямой линии
+   *
+   * @param {number} tMinutes - время от начала откачки, мин
+   * @param {number} r - расстояние до опытной скважины, м
+   * @returns {boolean} верно ли приближение логарифмом
+   */
+  function applicable(tMinutes, r) {
+    return (r * r * S_TRUE) / (4 * T_TRUE * (tMinutes / 1440)) < 0.01;
+  }
+
+  /** Пьезопроводность по определению */
+  const A_TRUE = T_TRUE / S_TRUE;
+
+  test('площадное прослеживание возвращает те же параметры пласта', () => {
+    // Срез по кусту на 600-й минуте: к этому моменту приближение верно
+    // даже в самой дальней скважине
+    const MOMENT = 600;
+    const points = CLUSTER.filter((r) => applicable(MOMENT, r)).map((r) => ({
+      x: r,
+      s: drawdownAtWell(MOMENT, r),
+    }));
+    expect(points.length).toBe(CLUSTER.length);
+
+    const { T, S, a } = processAreaTracking({ points, Q, time: MOMENT });
+
+    expect(Math.abs(T - T_TRUE) / T_TRUE).toBeLessThan(0.01);
+    expect(Math.abs(S - S_TRUE) / S_TRUE).toBeLessThan(0.05);
+    expect(Math.abs(a - A_TRUE) / A_TRUE).toBeLessThan(0.05);
+  });
+
+  test('комбинированное прослеживание сводит все скважины к одному пласту', () => {
+    const points = CLUSTER.flatMap((r) =>
+      TIMES.filter((t) => applicable(t, r)).map((t) => ({
+        x: t / (r * r),
+        s: drawdownAtWell(t, r),
+      }))
+    );
+
+    const { T, S, a, r2 } = processCombinedTracking({ points, Q });
+
+    expect(r2).toBeGreaterThan(0.999);
+    expect(Math.abs(T - T_TRUE) / T_TRUE).toBeLessThan(0.01);
+    expect(Math.abs(S - S_TRUE) / S_TRUE).toBeLessThan(0.05);
+    expect(Math.abs(a - A_TRUE) / A_TRUE).toBeLessThan(0.05);
+  });
+
+  test('все три вида прослеживания дают одну пьезопроводность', () => {
+    // Разные графики одного опыта обязаны сойтись: если где-то потеряна
+    // поправка на минуты, разойдутся именно эти три числа
+    const MOMENT = 600;
+    const byTime = processDrawdown({
+      measurements: VALID_TIMES.map((t) => ({ t, s: drawdownAt(t) })),
+      Q,
+      r: R,
+    }).a;
+    const byArea = processAreaTracking({
+      points: CLUSTER.map((r) => ({ x: r, s: drawdownAtWell(MOMENT, r) })),
+      Q,
+      time: MOMENT,
+    }).a;
+    const byCombined = processCombinedTracking({
+      points: CLUSTER.flatMap((r) =>
+        TIMES.filter((t) => applicable(t, r)).map((t) => ({
+          x: t / (r * r),
+          s: drawdownAtWell(t, r),
+        }))
+      ),
+      Q,
+    }).a;
+
+    expect(Math.abs(byArea - byTime) / byTime).toBeLessThan(0.1);
+    expect(Math.abs(byCombined - byTime) / byTime).toBeLessThan(0.1);
   });
 });
 
