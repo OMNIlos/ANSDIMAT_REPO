@@ -16,10 +16,16 @@
  * точек, и подписи. Здесь при зуме меняется только положение элементов:
  * линии остаются той же толщины, точки того же размера, оси стоят на месте.
  *
- * Прямую можно строить двумя способами: автоматически по всем замерам
- * (наименьшие квадраты) или вручную по двум выбранным точкам — начало
- * откачки и выход на границу пласта в прямую не ложатся, и там ручной
- * выбор участка даёт более достоверный наклон.
+ * Прямую строят в двух режимах, см. FIT_MODES. В обычном она идёт по всем
+ * замерам, а отметив две точки, геолог заменяет её прямой через них: начало
+ * откачки и выход на границу пласта в прямую не ложатся, и там ручной выбор
+ * участка даёт более достоверный наклон. В свободном прямую держат две точки,
+ * поставленные где угодно на плоскости и перетаскиваемые пальцем.
+ *
+ * Масштаб меняется тремя способами: кнопками — равномерно, щипком — по каждой
+ * оси в меру разброса пальцев вдоль неё, и перетаскиванием полосы оси — только
+ * по этой оси. Последние два взяты у Desmos: чтобы вытянуть поздний участок
+ * записи по времени, не теряя размаха по понижению.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -34,11 +40,19 @@ import { transformTime, linearRegression, lineThroughPoints, X_MODES } from '../
 import {
   valueToPixelX,
   valueToPixelY,
+  pixelToValue,
+  anchorsOnLine,
   zoomView,
   panView,
   findNearestPoint,
   toggleSelection,
+  groupPoints,
+  logTicks,
+  pickDragTarget,
+  DRAG_TARGETS,
+  shouldRefitView,
 } from '../calc/chartGeometry';
+import { niceStep, formatTick, formatLogTick } from '../calc/chartScene';
 import { spacing, radius, type, fontFamily } from '../theme';
 
 const DEFAULT_HEIGHT = 230;
@@ -54,42 +68,67 @@ const SYNC_INTERVAL_MS = 16;
 /** Радиус захвата точки пальцем, px */
 const TAP_RADIUS = 26;
 
-export const FIT_MODES = { AUTO: 'auto', TWO_POINTS: 'twoPoints' };
+/**
+ * Способы построения прямой
+ *
+ * `auto` — прямая идёт по всем замерам методом наименьших квадратов, и это
+ * состояние по умолчанию. Отметив две точки, геолог заменяет её прямой через
+ * них: начало откачки и выход на границу пласта в прямую не ложатся, и там
+ * ручной выбор участка достовернее. Сняв отметки, он возвращает прямую по
+ * всем точкам — отдельной кнопки для этого не нужно.
+ *
+ * `freedom` — прямая ведётся через две точки, поставленные где угодно на
+ * координатной плоскости и свободно перетаскиваемые. Замеры её не держат:
+ * так проводят прямую по глазу, когда точки ложатся на две ветви и ни один
+ * автоматический подбор не отвечает замыслу.
+ */
+export const FIT_MODES = { AUTO: 'auto', FREEDOM: 'freedom' };
+
+/** Радиус захвата свободной точки пальцем, px */
+const ANCHOR_RADIUS = 30;
 
 /**
- * Подбирает «красивый» шаг сетки: 1, 2, 5 или 10, умноженное на степень десяти
+ * Наименьший разброс пальцев, при котором ось ещё масштабируется, px
  *
- * @param {number} range - охватываемый диапазон значений
- * @returns {number} шаг деления
+ * Пальцы почти на одной линии — разброс вдоль неё случайный, и масштаб по этой
+ * оси прыгал бы от дрожания руки.
  */
-export function niceStep(range) {
-  if (!(range > 0)) return 1;
-  const raw = range / 4.5;
-  const magnitude = Math.pow(10, Math.floor(Math.log10(raw)));
-  const normalized = raw / magnitude;
-  const step = normalized < 1.5 ? 1 : normalized < 3 ? 2 : normalized < 7 ? 5 : 10;
-  return step * magnitude;
-}
+const MIN_PINCH_SPAN = 40;
 
 /**
- * Форматирует число для подписи оси
+ * Цвета кривых соседних скважин
  *
- * @param {number} value - значение
- * @returns {string} подпись
+ * Фиксированный набор, а не цвета темы: кривых на плоскости столько, сколько
+ * в кусте наблюдательных скважин, и различать их надо между собой. Оттенки
+ * подобраны так, чтобы читались и на светлом, и на тёмном фоне.
  */
-function formatTick(value) {
-  if (!isFinite(value)) return '—';
-  const abs = Math.abs(value);
-  if (abs === 0) return '0';
-  if (abs < 0.001 || abs >= 100000) return value.toExponential(1);
-  if (abs >= 100) return value.toFixed(0);
-  if (abs >= 10) return value.toFixed(1);
-  if (abs >= 1) return value.toFixed(2);
-  return value.toFixed(3);
-}
+const SERIES_COLORS = ['#2E86AB', '#E07A5F', '#3D9970', '#B5179E', '#F4A261', '#5C6BC0'];
 
 export default function DrawdownChart({
+  /**
+   * Замеры ряда: [{ t, s }]
+   *
+   * У точки могут стоять `group` и `groupName` — тогда серия красится по
+   * группе и попадает в легенду, а ломаная ведётся внутри каждой группы
+   * отдельно. Так устроено комбинированное прослеживание: на плоскости лежат
+   * замеры всех скважин куста, и прямая ведётся по ним по всем сразу, а цвет
+   * показывает, чья точка. Подбор прямой и отметка точек от группировки не
+   * зависят: они идут по всему ряду.
+   */
   measurements = [],
+  /**
+   * Кривые остальных скважин куста: [{ id, name, measurements }]
+   *
+   * Прямая ведётся по одной скважине — той, что открыта в журнале, — поэтому
+   * подбор и отметки точек остаются за `measurements`. Соседние кривые нужны
+   * для сравнения: по кусту сразу видно, какая скважина выбивается из общей
+   * картины. В масштаб они входят наравне с основной, иначе часть графика
+   * уезжала бы за край.
+   */
+  extraSeries = [],
+  // Название открытой скважины: нужно только легенде, и только когда кривых
+  // больше одной
+  activeSeriesName,
   mode = X_MODES.LOG,
   width = 340,
   onFitChange,
@@ -104,9 +143,50 @@ export default function DrawdownChart({
   onFitModeChange,
   selected = [],
   onToggleSelect,
+  /**
+   * Свободные точки: [{ x, y }] в координатах графика
+   *
+   * Живут в состоянии экрана, а не графика: через них считается прямая, а
+   * через прямую — водопроводимость. Пусто — значит режим только что включён,
+   * и точки надо поставить на текущую прямую; график сам сообщит куда
+   */
+  anchors,
+  onAnchorsChange,
+  /**
+   * Чем задана нынешняя система координат
+   *
+   * Меняется при смене вида графика, фазы опыта, момента площадного среза и
+   * выбранных размерностей — то есть тогда, когда прежнее окно показывало бы
+   * не то. От правки замеров не меняется: масштаб геолог ставит руками, и
+   * терять его посреди работы с журналом нельзя. Собирает ключ экран: график
+   * не знает ни про фазы, ни про виды прослеживания
+   */
+  viewKey = '',
   // Подпись осей. По умолчанию выводится из режима, но на восстановлении
   // по оси X отложено отношение t/t′, а не время — там подпись своя
   caption,
+  /**
+   * Подпись величины у оси абсцисс: «t, мин», «r, м», «t/r², мин/м²»
+   *
+   * Заголовок над полотном называет график целиком (`s — lg r`), а это —
+   * что именно отложено по оси. Без неё на площадном и комбинированном
+   * графике числа на оси не с чем связать.
+   */
+  xAxisTitle,
+  /**
+   * Почему на полотне пусто
+   *
+   * Причин у пустого графика несколько, и общая подсказка «внесите замеры»
+   * врёт, когда замеры внесены, а не хватает расстояний или общего момента.
+   * Экран знает настоящую причину и передаёт её сюда.
+   */
+  emptyTitle,
+  emptyHint,
+  // Размерности осей для подписей. Приходят снаружи: экран знает выбор
+  // пользователя, график получает уже пересчитанные точки. Значения по
+  // умолчанию — базовые единицы приложения
+  timeUnit = 'мин',
+  drawdownUnit = 'м',
   // Развёрнут ли график на весь экран. В обычном виде он лежит внутри
   // прокручиваемого списка, и вертикальное перетаскивание достаётся списку —
   // развёрнутый график получает жесты целиком, как карта в дневнике
@@ -139,18 +219,70 @@ export default function DrawdownChart({
           x: transformTime(m.t, mode),
           y: m.s,
           t: m.t,
+          group: m.group,
+          groupName: m.groupName,
         }))
         .filter((p) => p.x != null && isFinite(p.x) && isFinite(p.y)),
     [measurements, mode]
   );
 
-  // Исходная видимая область с небольшим запасом по краям
+  // Разбивка ряда по скважинам. Пустая, пока признак группы не задан, —
+  // тогда ряд рисуется одним цветом, как раньше
+  const groups = useMemo(() => groupPoints(dataPoints, SERIES_COLORS), [dataPoints]);
+
+  /**
+   * Прямая по замерам: через две отмеченные точки либо по всем сразу
+   *
+   * Считается и вне свободного режима: при переходе в него свободные точки
+   * встают именно на эту прямую, чтобы переключение само по себе не меняло
+   * результат.
+   */
+  const autoLine = useMemo(() => {
+    if (selected.length === 2) {
+      const first = dataPoints.find((p) => p.index === selected[0]);
+      const second = dataPoints.find((p) => p.index === selected[1]);
+      return lineThroughPoints(first, second);
+    }
+    return linearRegression(dataPoints.map((p) => ({ x: p.x, y: p.y })));
+  }, [dataPoints, selected]);
+
+  // Цвет каждой точки — рядом с dataPoints, а не по индексу замера:
+  // из ряда выброшены точки с непригодным временем, и нумерация разошлась
+  const pointColors = useMemo(() => {
+    const colors = new Array(dataPoints.length).fill(null);
+    groups.forEach((series) => {
+      series.indices.forEach((i) => {
+        colors[i] = series.color;
+      });
+    });
+    return colors;
+  }, [groups, dataPoints.length]);
+
+  // То же самое для соседних скважин, но без индексов: отмечать точки на них
+  // нельзя — прямая строится по одной скважине
+  const extraPoints = useMemo(
+    () =>
+      extraSeries.map((series, seriesIndex) => ({
+        id: series.id,
+        name: series.name,
+        color: SERIES_COLORS[seriesIndex % SERIES_COLORS.length],
+        points: (series.measurements ?? [])
+          .map((m) => ({ x: transformTime(m.t, mode), y: m.s }))
+          .filter((p) => p.x != null && isFinite(p.x) && isFinite(p.y)),
+      })),
+    [extraSeries, mode]
+  );
+
+  // Исходная видимая область с небольшим запасом по краям.
+  // Считается по всем кривым сразу: кривая соседней скважины, не влезшая
+  // в масштаб основной, обрезалась бы краем полотна
   const baseView = useMemo(() => {
-    if (dataPoints.length === 0) {
+    const all = [...dataPoints, ...extraPoints.flatMap((series) => series.points)];
+    if (all.length === 0) {
       return { x0: 0, x1: 1, y0: 0, y1: 1 };
     }
 
-    const xs = dataPoints.map((p) => p.x);
+    const xs = all.map((p) => p.x);
     let x0 = Math.min(...xs);
     let x1 = Math.max(...xs);
     if (x1 - x0 < 1e-9) {
@@ -159,14 +291,14 @@ export default function DrawdownChart({
     }
     const padX = (x1 - x0) * 0.08;
 
-    const maxY = Math.max(...dataPoints.map((p) => p.y));
+    const maxY = Math.max(...all.map((p) => p.y));
     return {
       x0: x0 - padX,
       x1: x1 + padX,
       y0: 0,
       y1: maxY > 0 ? maxY * 1.12 : 1,
     };
-  }, [dataPoints]);
+  }, [dataPoints, extraPoints]);
 
   // Видимая область: на UI-потоке — для жестов, в state — для отрисовки
   const vx0 = useSharedValue(baseView.x0);
@@ -175,9 +307,52 @@ export default function DrawdownChart({
   const vy1 = useSharedValue(baseView.y1);
   // Накопленный масштаб прошлого кадра щипка
   const prevScale = useSharedValue(1);
+  // Разброс пальцев по осям на прошлом кадре: по нему считается масштаб
+  // каждой оси в отдельности
+  const spanX = useSharedValue(0);
+  const spanY = useSharedValue(0);
   const [view, setView] = useState(baseView);
 
   const lastSyncRef = useRef(0);
+
+  const freedom = fitMode === FIT_MODES.FREEDOM;
+
+  // Положение свободных точек в пикселях — для жеста на UI-потоке. Массив
+  // объектов в shared value держать неудобно, поэтому по значению на координату
+  const a0x = useSharedValue(0);
+  const a0y = useSharedValue(0);
+  const a1x = useSharedValue(0);
+  const a1y = useSharedValue(0);
+  // Что тащит текущий жест: индекс свободной точки, полоса оси или область.
+  // Значения — DRAG_*, AXIS_*
+  const dragAnchor = useSharedValue(DRAG_TARGETS.UNDECIDED);
+  // Смещение точки от пальца в момент захвата: без него точка прыгала бы
+  // центром под палец
+  const grabDX = useSharedValue(0);
+  const grabDY = useSharedValue(0);
+
+  // Область и полотно нужны переводу пикселей в значения на JS-потоке. Ссылка,
+  // а не замыкание: обработчик не должен пересобираться на каждый кадр жеста
+  const anchorStateRef = useRef({ view, plot, anchors });
+  anchorStateRef.current = { view, plot, anchors };
+
+  /**
+   * Переносит свободную точку туда, куда её утащил палец
+   *
+   * @param {number} index - какая из двух точек
+   * @param {number} px - новое положение, px
+   * @param {number} py - новое положение, px
+   */
+  const moveAnchor = useCallback(
+    (index, px, py) => {
+      const state = anchorStateRef.current;
+      if (state.anchors?.length !== 2) return;
+      const next = state.anchors.slice();
+      next[index] = pixelToValue({ px, py, view: state.view, plot: state.plot });
+      onAnchorsChange?.(next);
+    },
+    [onAnchorsChange]
+  );
 
   /**
    * Переносит видимую область в React не чаще заданного интервала:
@@ -196,14 +371,29 @@ export default function DrawdownChart({
     setView(next);
   }, []);
 
-  // Данные изменились — возвращаемся к исходному виду
+  // Под какой ключ область уже подогнана, см. shouldRefitView
+  const appliedKeyRef = useRef(null);
+
+  // Сменилась система координат — подгоняем область под данные. Правка замера
+  // её не трогает: масштаб поставлен руками, и терять его посреди работы с
+  // журналом нельзя
   useEffect(() => {
+    if (
+      !shouldRefitView({
+        key: viewKey,
+        appliedKey: appliedKeyRef.current,
+        hasData: dataPoints.length > 0,
+      })
+    ) {
+      return;
+    }
+    appliedKeyRef.current = viewKey;
     vx0.value = baseView.x0;
     vx1.value = baseView.x1;
     vy0.value = baseView.y0;
     vy1.value = baseView.y1;
     setView(baseView);
-  }, [baseView, vx0, vx1, vy0, vy1]);
+  }, [viewKey, dataPoints.length, baseView, vx0, vx1, vy0, vy1]);
 
   useAnimatedReaction(
     () => ({ x0: vx0.value, x1: vx1.value, y0: vy0.value, y1: vy1.value }),
@@ -242,14 +432,33 @@ export default function DrawdownChart({
           .onStart(() => {
             'worklet';
             prevScale.value = 1;
+            spanX.value = 0;
+            spanY.value = 0;
           })
-          .onUpdate((event) => {
+          // Оси растягиваются по отдельности, как в Desmos, поэтому щипок
+          // разбирается по касаниям, а не по общему event.scale: горизонтальный
+          // щипок тянет время, вертикальный — понижение, косой берёт обе оси и
+          // даёт привычное равномерное масштабирование
+          .onTouchesMove((event) => {
             'worklet';
-            // event.scale накоплен с начала жеста, поэтому берём приращение
-            // относительно прошлого кадра — иначе масштаб растёт лавинообразно
-            const delta = event.scale / prevScale.value;
-            prevScale.value = event.scale;
-            if (!isFinite(delta) || delta <= 0) return;
+            if (event.allTouches.length < 2) return;
+            const [first, second] = event.allTouches;
+            const nextSpanX = Math.abs(second.x - first.x);
+            const nextSpanY = Math.abs(second.y - first.y);
+
+            const hadX = spanX.value > MIN_PINCH_SPAN;
+            const hadY = spanY.value > MIN_PINCH_SPAN;
+            // Пальцы почти на одной линии — разброс вдоль неё случайный, и
+            // масштаб по этой оси прыгал бы от дрожания руки
+            const scaleX = hadX && nextSpanX > MIN_PINCH_SPAN ? nextSpanX / spanX.value : 1;
+            const scaleY = hadY && nextSpanY > MIN_PINCH_SPAN ? nextSpanY / spanY.value : 1;
+
+            spanX.value = nextSpanX;
+            spanY.value = nextSpanY;
+            if (scaleX === 1 && scaleY === 1) return;
+
+            const focalX = (first.x + second.x) / 2;
+            const focalY = (first.y + second.y) / 2;
 
             const next = zoomView({
               view: {
@@ -258,10 +467,11 @@ export default function DrawdownChart({
                 y0: vy0.value,
                 y1: vy1.value,
               },
-              scale: delta,
+              scaleX,
+              scaleY,
               // Точка между пальцами остаётся на месте: зум идёт туда, куда смотрят
-              focusX: Math.min(1, Math.max(0, (event.focalX - plotX) / plotW)),
-              focusY: Math.min(1, Math.max(0, (event.focalY - plotY) / plotH)),
+              focusX: Math.min(1, Math.max(0, (focalX - plotX) / plotW)),
+              focusY: Math.min(1, Math.max(0, (focalY - plotY) / plotH)),
               baseRange: { x: baseRangeX, y: baseRangeY },
               minZoom: MIN_ZOOM,
               maxZoom: MAX_ZOOM,
@@ -294,6 +504,8 @@ export default function DrawdownChart({
       vy0,
       vy1,
       prevScale,
+      spanX,
+      spanY,
       commitView,
       blockScroll,
     ]
@@ -309,15 +521,87 @@ export default function DrawdownChart({
           // и одиночный тап по точке никогда не срабатывает
           .activeOffsetX([-8, 8])
           .activeOffsetY([-8, 8])
+          .onBegin(() => {
+            'worklet';
+            dragAnchor.value = DRAG_TARGETS.UNDECIDED;
+          })
           .onUpdate((event) => {
             'worklet';
+            // Что именно тащим, решается на первом же кадре движения, а не при
+            // касании: жест начинается раньше активации, и между этими моментами
+            // касание может уйти соседнему обработчику. Точка начала
+            // восстанавливается из смещения — она надёжнее, чем состояние,
+            // выставленное в другом обработчике
+            if (dragAnchor.value === DRAG_TARGETS.UNDECIDED) {
+              const picked = pickDragTarget({
+                startX: event.x - event.translationX,
+                startY: event.y - event.translationY,
+                ax0: a0x.value,
+                ay0: a0y.value,
+                ax1: a1x.value,
+                ay1: a1y.value,
+                freedom,
+                plot: { x: plotX, y: plotY, h: plotH },
+                radius: ANCHOR_RADIUS,
+              });
+              dragAnchor.value = picked.target;
+              grabDX.value = picked.grabDX;
+              grabDY.value = picked.grabDY;
+            }
+
+            if (dragAnchor.value === 0 || dragAnchor.value === 1) {
+              // Положение берётся от пальца целиком, а не копится приращениями:
+              // React возвращает точку с задержкой в кадр, и накопленное
+              // смещение такой возврат откатывал бы. От абсолютного положения
+              // отставший кадр исправляется следующим же
+              const px = event.x + grabDX.value;
+              const py = event.y + grabDY.value;
+              if (dragAnchor.value === 0) {
+                a0x.value = px;
+                a0y.value = py;
+              } else {
+                a1x.value = px;
+                a1y.value = py;
+              }
+              runOnJS(moveAnchor)(dragAnchor.value, px, py);
+              return;
+            }
+
+            const view = {
+              x0: vx0.value,
+              x1: vx1.value,
+              y0: vy0.value,
+              y1: vy1.value,
+            };
+
+            // Растяжение одной оси: сдвиг вдоль полосы на её длину меняет
+            // масштаб вдвое — столько же даёт кнопка приближения
+            if (
+              dragAnchor.value === DRAG_TARGETS.AXIS_X ||
+              dragAnchor.value === DRAG_TARGETS.AXIS_Y
+            ) {
+              const alongX = dragAnchor.value === DRAG_TARGETS.AXIS_X;
+              const share = alongX ? event.changeX / plotW : event.changeY / plotH;
+              const factor = Math.pow(2, share);
+              const next = zoomView({
+                view,
+                scaleX: alongX ? factor : 1,
+                scaleY: alongX ? 1 : factor,
+                focusX: 0.5,
+                focusY: 0.5,
+                baseRange: { x: baseRangeX, y: baseRangeY },
+                minZoom: MIN_ZOOM,
+                maxZoom: MAX_ZOOM,
+              });
+              vx0.value = next.x0;
+              vx1.value = next.x1;
+              vy0.value = next.y0;
+              vy1.value = next.y1;
+              return;
+            }
+
             const next = panView({
-              view: {
-                x0: vx0.value,
-                x1: vx1.value,
-                y0: vy0.value,
-                y1: vy1.value,
-              },
+              view,
               dx: event.changeX,
               dy: event.changeY,
               plot: { w: plotW, h: plotH },
@@ -337,8 +621,18 @@ export default function DrawdownChart({
               y1: vy1.value,
             });
           })
+          // Приходит и когда жест завершился, и когда провалился: иначе после
+          // неудачного касания решение о захвате осталось бы от прошлого раза
+          .onFinalize(() => {
+            'worklet';
+            dragAnchor.value = DRAG_TARGETS.UNDECIDED;
+          })
       ),
-    [plotW, plotH, vx0, vx1, vy0, vy1, commitView, blockScroll]
+    [
+      plotX, plotY, plotW, plotH, baseRangeX, baseRangeY, freedom,
+      vx0, vx1, vy0, vy1, a0x, a0y, a1x, a1y, dragAnchor, grabDX, grabDY,
+      moveAnchor, commitView, blockScroll,
+    ]
   );
 
   /**
@@ -348,7 +642,7 @@ export default function DrawdownChart({
    */
   const togglePoint = useCallback(
     (index) => {
-      if (fitMode !== FIT_MODES.TWO_POINTS) return;
+      if (fitMode !== FIT_MODES.AUTO) return;
       onToggleSelect?.(index);
     },
     [fitMode, onToggleSelect]
@@ -373,7 +667,7 @@ export default function DrawdownChart({
 
   const selectNearest = useCallback((touchX, touchY) => {
     const state = tapStateRef.current;
-    if (state.fitMode !== FIT_MODES.TWO_POINTS || state.dataPoints.length === 0) return;
+    if (state.fitMode !== FIT_MODES.AUTO || state.dataPoints.length === 0) return;
 
     const nearest = findNearestPoint({
       points: state.dataPoints,
@@ -438,9 +732,19 @@ export default function DrawdownChart({
 
   // Всё, что зависит от видимой области: положения точек, сетка, подписи
   const scene = useMemo(() => {
-    // Замеров нет — рисовать нечего, показывается подсказка
+    // Замеров нет — рисовать нечего, показывается подсказка. Кривая соседней
+    // скважины сама по себе графика не делает: прямая и расчёт идут по
+    // открытой скважине, а без её замеров считать нечего
     if (dataPoints.length === 0) {
-      return { hasData: false, dots: [], xTicks: [], yTicks: [] };
+      return {
+        hasData: false,
+        dots: [],
+        polylines: [],
+        extraPaths: [],
+        anchorDots: [],
+        xTicks: [],
+        yTicks: [],
+      };
     }
 
     // Область просмотра могла выродиться посреди жеста: щипок двумя пальцами
@@ -459,28 +763,69 @@ export default function DrawdownChart({
     const toX = (value) => valueToPixelX(value, safeView, plot);
     const toY = (value) => valueToPixelY(value, safeView, plot);
 
-    const dots = dataPoints.map((point) => ({
+    const dots = dataPoints.map((point, i) => ({
       index: point.index,
       cx: toX(point.x),
       cy: toY(point.y),
+      color: pointColors[i],
     }));
 
-    const polyline =
-      dots.length > 1
-        ? 'M' + dots.map((d) => `${d.cx.toFixed(1)},${d.cy.toFixed(1)}`).join(' L')
+    /**
+     * Собирает ломаную по набору точек
+     *
+     * @param {Array<{cx: number, cy: number}>} chain - точки в порядке ряда
+     * @returns {string} путь SVG; пустая строка, если соединять нечего
+     */
+    const polylineOf = (chain) =>
+      chain.length > 1
+        ? 'M' + chain.map((d) => `${d.cx.toFixed(1)},${d.cy.toFixed(1)}`).join(' L')
         : '';
 
-    // Прямая: по всем точкам или по двум выбранным
+    // Ломаная своя у каждой скважины: через точки разных скважин её вести
+    // нельзя — на комбинированном графике получилась бы пила
+    const polylines = groups.length
+      ? groups.map((series) => ({
+          key: series.key ?? '',
+          color: series.color,
+          path: polylineOf(series.indices.map((i) => dots[i])),
+        }))
+      : [{ key: '', color: c.secondary, path: polylineOf(dots) }];
+
+    const extraPaths = extraPoints.map((series) => {
+      const seriesDots = series.points.map((point) => ({
+        cx: toX(point.x),
+        cy: toY(point.y),
+      }));
+      return {
+        id: series.id,
+        name: series.name,
+        color: series.color,
+        dots: seriesDots,
+        path:
+          seriesDots.length > 1
+            ? 'M' + seriesDots.map((d) => `${d.cx.toFixed(1)},${d.cy.toFixed(1)}`).join(' L')
+            : '',
+      };
+    });
+
+    // Прямая. В свободном режиме — через поставленные точки; в обычном через
+    // две отмеченные, а если отмечены не две — по всем замерам сразу.
+    // Одновременно двух прямых не бывает: подобранная исчезает, как только
+    // отмечена вторая точка, и возвращается, как только отметки сняты
     let fit = { slope: NaN, intercept: NaN };
     let fitSource = fitMode;
 
-    if (fitMode === FIT_MODES.TWO_POINTS && selected.length === 2) {
-      const first = dataPoints.find((p) => p.index === selected[0]);
-      const second = dataPoints.find((p) => p.index === selected[1]);
-      fit = lineThroughPoints(first, second);
-    } else if (fitMode === FIT_MODES.AUTO) {
-      fit = linearRegression(dataPoints.map((p) => ({ x: p.x, y: p.y })));
+    if (fitMode === FIT_MODES.FREEDOM) {
+      if (anchors?.length === 2) fit = lineThroughPoints(anchors[0], anchors[1]);
+    } else {
+      fit = autoLine;
     }
+
+    // Свободные точки в пикселях: их рисуют и по ним же ловят палец
+    const anchorDots =
+      fitMode === FIT_MODES.FREEDOM && anchors?.length === 2
+        ? anchors.map((anchor) => ({ cx: toX(anchor.x), cy: toY(anchor.y) }))
+        : [];
 
     let fitPath = '';
     if (isFinite(fit.slope) && isFinite(fit.intercept)) {
@@ -491,17 +836,29 @@ export default function DrawdownChart({
       ).toFixed(1)},${toY(yAtRight).toFixed(1)}`;
     }
 
-    // Деления: шаг «красивый», подписи не наезжают друг на друга
-    const stepX = niceStep(rangeX);
+    // Деления оси абсцисс. На логарифмической оси — как на логарифмической
+    // бумаге: подписи на степенях десяти, между ними мелкая сетка. Равномерный
+    // шаг по логарифму давал подписи 0.316 и 3.16 — числа, по которым не
+    // прикинуть значение на глаз
     const xTicks = [];
-    for (let v = Math.ceil(safeView.x0 / stepX) * stepX; v <= safeView.x1 + 1e-9; v += stepX) {
-      const px = toX(v);
-      if (px < plotX - 0.5 || px > plotX + plotW + 0.5) continue;
-      xTicks.push({
-        x: px,
-        label: mode === X_MODES.LOG ? formatTick(Math.pow(10, v)) : formatTick(v),
-      });
-      if (xTicks.length > 8) break;
+    if (mode === X_MODES.LOG) {
+      // Сколько подписей помещается по ширине: под каждой стоит число,
+      // и меньше пятидесяти пикселей на него давать нельзя
+      const room = Math.max(2, Math.floor(plotW / 56));
+      for (const tick of logTicks({ from: safeView.x0, to: safeView.x1, maxLabels: room })) {
+        xTicks.push({
+          x: toX(tick.log),
+          label: tick.labelled ? formatLogTick(tick.value) : null,
+        });
+      }
+    } else {
+      const stepX = niceStep(rangeX);
+      for (let v = Math.ceil(safeView.x0 / stepX) * stepX; v <= safeView.x1 + 1e-9; v += stepX) {
+        const px = toX(v);
+        if (px < plotX - 0.5 || px > plotX + plotW + 0.5) continue;
+        xTicks.push({ x: px, label: formatTick(v) });
+        if (xTicks.length > 8) break;
+      }
     }
 
     const stepY = niceStep(rangeY);
@@ -516,19 +873,19 @@ export default function DrawdownChart({
     return {
       hasData: true,
       dots,
-      polyline,
+      polylines,
+      extraPaths,
       fitPath,
       fit,
       fitSource,
+      anchorDots,
       xTicks,
       yTicks,
-      stepXLabel:
-        mode === X_MODES.LOG
-          ? `Δlg = ${formatTick(stepX)}`
-          : `${formatTick(stepX)} ${mode === X_MODES.SQRT ? '√мин' : 'мин'}`,
-      stepYLabel: `${formatTick(stepY)} м`,
     };
-  }, [view, baseView, dataPoints, plot, plotX, plotY, plotW, plotH, mode, fitMode, selected]);
+  }, [
+    view, baseView, dataPoints, extraPoints, plot, plotX, plotY, plotW, plotH,
+    mode, fitMode, selected, anchors, autoLine, groups, pointColors, c.secondary,
+  ]);
 
   // Наклон прямой нужен экрану для расчёта T
   const fitSlope = scene.fit?.slope;
@@ -542,7 +899,38 @@ export default function DrawdownChart({
     });
   }, [fitSlope, fitIntercept, fitMode, selected.length, onFitChange]);
 
-  const needsSelection = fitMode === FIT_MODES.TWO_POINTS && selected.length < 2;
+  // Свободный режим только что включён — ставим точки на ту прямую, что
+  // была на графике. Повторно не срабатывает: точки уже стоят
+  useEffect(() => {
+    if (fitMode !== FIT_MODES.FREEDOM || anchors?.length === 2) return;
+    onAnchorsChange?.(
+      anchorsOnLine({
+        slope: autoLine.slope,
+        intercept: autoLine.intercept,
+        x0: view.x0,
+        x1: view.x1,
+        y0: view.y0,
+        y1: view.y1,
+      })
+    );
+  }, [fitMode, anchors, autoLine, view, onAnchorsChange]);
+
+  // Пиксельное положение точек — только для того, чтобы поймать их пальцем.
+  // Пока точку тащат, обратно не пишем: React отдаёт положение с задержкой в
+  // кадр, и такая запись возвращала бы точку назад
+  const anchorDots = scene.anchorDots;
+  useEffect(() => {
+    if (anchorDots?.length !== 2) return;
+    if (dragAnchor.value === 0 || dragAnchor.value === 1) return;
+    a0x.value = anchorDots[0].cx;
+    a0y.value = anchorDots[0].cy;
+    a1x.value = anchorDots[1].cx;
+    a1y.value = anchorDots[1].cy;
+  }, [anchorDots, a0x, a0y, a1x, a1y, dragAnchor]);
+
+  // Одна точка отмечена — прямая через неё не проходит, и на графике всё ещё
+  // прямая по всем замерам. Без подсказки это выглядит как несработавший тап
+  const needsSelection = fitMode === FIT_MODES.AUTO && selected.length === 1;
 
   /**
    * Эскиз будущего графика для пустого состояния
@@ -553,11 +941,13 @@ export default function DrawdownChart({
    * а не расчёт.
    */
   const ghost = useMemo(() => {
-    // Эскиз занимает верхнюю половину поля: нижнюю закрывает плашка с текстом
+    // Эскиз занимает верхнюю половину поля: нижнюю закрывает плашка с текстом.
+    // Понижение растёт вверх, поэтому прямая идёт снизу вверх, а ранние точки
+    // приподняты над ней — ёмкость ствола завышает понижение в начале
     const x0 = plotX + plotW * 0.1;
     const x1 = plotX + plotW * 0.95;
-    const y0 = plotY + plotH * 0.12;
-    const y1 = plotY + plotH * 0.5;
+    const y0 = plotY + plotH * 0.5;
+    const y1 = plotY + plotH * 0.12;
 
     // Доли вдоль прямой и отклонение точек от неё (ёмкость ствола в начале)
     const samples = [0, 0.18, 0.36, 0.54, 0.72, 1];
@@ -565,7 +955,7 @@ export default function DrawdownChart({
 
     const dots = samples.map((s, i) => ({
       x: x0 + (x1 - x0) * s,
-      y: y0 + (y1 - y0) * s + plotH * bulge[i],
+      y: y0 + (y1 - y0) * s - plotH * bulge[i],
     }));
 
     return {
@@ -652,8 +1042,8 @@ export default function DrawdownChart({
               label: I18n.t('fitAuto', { defaultValue: 'По всем точкам' }),
             },
             {
-              key: FIT_MODES.TWO_POINTS,
-              label: I18n.t('fitTwoPoints', { defaultValue: 'По двум точкам' }),
+              key: FIT_MODES.FREEDOM,
+              label: I18n.t('fitFreedom', { defaultValue: 'Свободная прямая' }),
             },
           ].map((option) => {
             const active = option.key === fitMode;
@@ -732,6 +1122,8 @@ export default function DrawdownChart({
             )}
 
             <G clipPath="url(#plotClip)">
+              {/* Подписанные деления держат сетку, мелкие — только намекают
+                  на кратности внутри декады и не должны спорить с данными */}
               {scene.xTicks.map((tick, i) => (
                 <Line
                   key={`gx${i}`}
@@ -742,6 +1134,7 @@ export default function DrawdownChart({
                   stroke={c.border}
                   strokeWidth={0.5}
                   strokeDasharray="2 3"
+                  opacity={tick.label ? 1 : 0.45}
                 />
               ))}
               {scene.yTicks.map((tick, i) => (
@@ -766,19 +1159,53 @@ export default function DrawdownChart({
                 />
               ) : null}
 
-              {scene.polyline ? (
-                <Path
-                  d={scene.polyline}
-                  stroke={c.secondary}
-                  strokeWidth={2}
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                  fill="none"
-                />
-              ) : null}
+              {/* Соседние скважины рисуются под основной и тоньше: открытая
+                  в журнале кривая должна читаться первой */}
+              {scene.extraPaths?.map((series) => (
+                <React.Fragment key={series.id}>
+                  {series.path ? (
+                    <Path
+                      d={series.path}
+                      stroke={series.color}
+                      strokeWidth={1.5}
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                      fill="none"
+                      opacity={0.85}
+                    />
+                  ) : null}
+                  {series.dots.map((dot, i) => (
+                    <Circle
+                      key={`${series.id}-${i}`}
+                      cx={dot.cx}
+                      cy={dot.cy}
+                      r={2.6}
+                      fill={series.color}
+                      opacity={0.85}
+                    />
+                  ))}
+                </React.Fragment>
+              ))}
+
+              {scene.polylines?.map((line) =>
+                line.path ? (
+                  <Path
+                    key={`pl${line.key}`}
+                    d={line.path}
+                    stroke={line.color}
+                    strokeWidth={2}
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                    fill="none"
+                  />
+                ) : null
+              )}
 
               {scene.dots.map((dot) => {
                 const isSelected = selected.includes(dot.index);
+                // Отмеченная точка красится акцентом всегда: её надо видеть
+                // среди прочих, даже если у скважины свой цвет
+                const outline = dot.color ?? c.secondary;
                 return (
                   <Circle
                     key={`p${dot.index}`}
@@ -786,14 +1213,38 @@ export default function DrawdownChart({
                     cy={dot.cy}
                     r={isSelected ? 5.5 : 3.6}
                     fill={isSelected ? c.primaryAccent : c.surface}
-                    stroke={isSelected ? c.primaryAccent : c.secondary}
+                    stroke={isSelected ? c.primaryAccent : outline}
                     strokeWidth={2}
                   />
                 );
               })}
+
+              {/* Свободные точки крупнее замеров: их тащат пальцем, и попасть
+                  по ним надо с первого раза */}
+              {scene.anchorDots?.map((dot, i) => (
+                <React.Fragment key={`a${i}`}>
+                  <Circle
+                    cx={dot.cx}
+                    cy={dot.cy}
+                    r={11}
+                    fill={c.primaryAccent}
+                    opacity={0.18}
+                  />
+                  <Circle
+                    cx={dot.cx}
+                    cy={dot.cy}
+                    r={6.5}
+                    fill={c.plotBg}
+                    stroke={c.primaryAccent}
+                    strokeWidth={2.5}
+                  />
+                </React.Fragment>
+              ))}
             </G>
 
-            {/* Оси рисуются поверх клипа: они не двигаются и не масштабируются */}
+            {/* Оси рисуются поверх клипа: они не двигаются и не масштабируются.
+                Начало отсчёта — в левом нижнем углу, поэтому ось абсцисс идёт
+                понизу, а не поверху */}
             <Line
               x1={plotX}
               y1={plotY}
@@ -804,18 +1255,21 @@ export default function DrawdownChart({
             />
             <Line
               x1={plotX}
-              y1={plotY}
+              y1={plotY + plotH}
               x2={plotX + plotW}
-              y2={plotY}
+              y2={plotY + plotH}
               stroke={c.textSecondary}
               strokeWidth={1}
             />
           </Svg>
 
-          {/* Подписи делений — обычным текстом, чтобы работали табличные цифры */}
+          {/* Подписи делений — обычным текстом, чтобы работали табличные цифры.
+              У мелкой сетки подписи нет: она показывает кратности внутри
+              декады, и числа на ней стояли бы сплошной строкой */}
           {scene.hasData && (
             <>
-              {scene.xTicks.map((tick, i) => (
+              {scene.xTicks.map((tick, i) =>
+                tick.label == null ? null : (
                 <Text
                   key={`xl${i}`}
                   style={[
@@ -837,6 +1291,7 @@ export default function DrawdownChart({
                   {tick.label}
                 </Text>
               ))}
+
             </>
           )}
 
@@ -846,15 +1301,17 @@ export default function DrawdownChart({
                 style={[styles.emptyCard, { backgroundColor: c.surface, borderColor: c.border }]}
               >
                 <Text style={[styles.emptyTitle, { color: c.text }]}>
-                  {I18n.t('chartEmptyTitle', {
-                    defaultValue: 'График строится по двум замерам',
-                  })}
+                  {emptyTitle ??
+                    I18n.t('chartEmptyTitle', {
+                      defaultValue: 'График строится по двум замерам',
+                    })}
                 </Text>
                 <Text style={[type.caption, styles.emptyText, { color: c.textSecondary }]}>
-                  {I18n.t('chartEmptyHint', {
-                    defaultValue:
-                      'Внесите время и понижение в журнале выше — прямая и T появятся сразу.',
-                  })}
+                  {emptyHint ??
+                    I18n.t('chartEmptyHint', {
+                      defaultValue:
+                        'Внесите время и понижение в журнале выше — прямая и T появятся сразу.',
+                    })}
                 </Text>
               </View>
             </View>
@@ -862,26 +1319,86 @@ export default function DrawdownChart({
         </View>
       </GestureDetector>
 
+      {/* Легенда куста: какая кривая какой скважине принадлежит. Без неё
+          три линии на плоскости неразличимы.
+
+          Кривые бывают двух родов, и одновременно они не встречаются: либо
+          соседние скважины идут рядом с открытой (временнóе прослеживание),
+          либо весь ряд разбит по скважинам (комбинированное) */}
+      {scene.hasData && groups.length > 1 && (
+        <View style={styles.legend}>
+          {groups.map((series) => (
+            <View key={series.key ?? ''} style={styles.legendItem}>
+              <View style={[styles.legendMark, { backgroundColor: series.color }]} />
+              <Text style={[styles.legendText, { color: c.textSecondary }]} numberOfLines={1}>
+                {series.name}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {scene.hasData && groups.length === 0 && extraSeries.length > 0 && (
+        <View style={styles.legend}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendMark, { backgroundColor: c.secondary }]} />
+            <Text style={[styles.legendText, { color: c.text }]} numberOfLines={1}>
+              {activeSeriesName}
+            </Text>
+          </View>
+          {scene.extraPaths.map((series) => (
+            <View key={series.id} style={styles.legendItem}>
+              <View style={[styles.legendMark, { backgroundColor: series.color }]} />
+              <Text style={[styles.legendText, { color: c.textSecondary }]} numberOfLines={1}>
+                {series.name}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Что отложено по осям. Стрелки, а не подписи вдоль самих осей: места
+          на узком полотне телефона нет, поворот текста в react-native-svg на
+          вебе съезжает, а числа у делений без величины не читаются — по одному
+          «25» не понять, метры это, минуты или мин/м² */}
+      {scene.hasData && (
+        <View style={styles.axisRow}>
+          <Text style={[styles.axisText, { color: c.textSecondary }]} numberOfLines={1}>
+            {`↑ s, ${drawdownUnit}`}
+          </Text>
+          <Text style={[styles.axisText, { color: c.textSecondary }]} numberOfLines={1}>
+            {`→ ${
+              xAxisTitle ??
+              (mode === X_MODES.SQRT ? `√t, √${timeUnit}` : `t, ${timeUnit}`)
+            }`}
+          </Text>
+        </View>
+      )}
+
       {/* Подсказка под графиком, а не поверх: перекрывать данные,
           по которым надо попасть пальцем, — плохая идея */}
       {scene.hasData && needsSelection && (
         <View style={[styles.hint, { backgroundColor: c.primaryWash, borderColor: c.wineBorder }]}>
           <Text style={[styles.hintText, { color: c.primaryAccent }]}>
-            {I18n.t('selectTwoPoints', {
-              defaultValue: 'Коснитесь двух точек, через которые провести прямую',
+            {I18n.t('selectSecondPoint', {
+              defaultValue:
+                'Отметьте вторую точку — пока прямая идёт по всем замерам',
             })}
           </Text>
         </View>
       )}
 
-      {scene.hasData && (
-        <View style={styles.stepRow}>
-          <Text style={[styles.stepText, { color: c.textSecondary }]}>
-            {I18n.t('stepX', { defaultValue: 'Цена деления X' })}: {scene.stepXLabel}
+      {scene.hasData && freedom && (
+        <View style={[styles.hint, { backgroundColor: c.primaryWash, borderColor: c.wineBorder }]}>
+          <Text style={[styles.hintText, { color: c.primaryAccent }]}>
+            {I18n.t('freedomHint', {
+              defaultValue:
+                'Тяните точки — прямая идёт через них. Полосы осей растягивают свою ось',
+            })}
           </Text>
-          <Text style={[styles.stepText, { color: c.textSecondary }]}>Y: {scene.stepYLabel}</Text>
         </View>
       )}
+
     </View>
   );
 }
@@ -933,6 +1450,31 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },
+  // Легенда куста: переносится по строкам — скважин может быть много
+  legend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 8,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  legendMark: {
+    width: 10,
+    height: 3,
+    borderRadius: 2,
+  },
+  legendText: {
+    ...type.numeric,
+    fontSize: 11.5,
+    fontWeight: '600',
+    maxWidth: 120,
+  },
+
   tickLabel: {
     position: 'absolute',
     ...type.numeric,
@@ -948,6 +1490,17 @@ const styles = StyleSheet.create({
     left: 2,
     width: 40,
     textAlign: 'right',
+  },
+  axisRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.xs,
+  },
+  axisText: {
+    ...type.numeric,
+    fontSize: 11,
+    fontWeight: '600',
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
@@ -986,14 +1539,5 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.semibold,
     fontSize: 12,
     textAlign: 'center',
-  },
-  stepRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: spacing.sm,
-  },
-  stepText: {
-    ...type.numeric,
-    fontSize: 11,
   },
 });
