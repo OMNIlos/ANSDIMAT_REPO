@@ -1,0 +1,155 @@
+/**
+ * Проверка сборки серий для экрана обработки
+ *
+ * Главное здесь — фаза восстановления: журнал заполнялся, сохранялся и
+ * проверялся на полноту, но до графика не доходил никогда.
+ */
+
+import { chartRawSeries, recoveryAbscissa, FIT_SERIES } from '../useChartSeries';
+import { TRACKING_KINDS } from '../../../calc/tracking';
+import { SERIES_ROLES } from '../../../calc/chartSeries';
+
+const base = {
+  trackingKind: TRACKING_KINDS.TIME,
+  measurements: [
+    { t: 1, s: 1 },
+    { t: 10, s: 3 },
+    { t: 100, s: 5 },
+  ],
+  recoveryMeasurements: [
+    { t: 1, s: 0.5 },
+    { t: 10, s: 3 },
+    { t: 100, s: 4.8 },
+  ],
+  finalDrawdown: 5,
+  pumpingDuration: 100,
+  wellsWithDistance: [],
+  wellMeasurements: {},
+  moment: NaN,
+  isRecovery: false,
+  fitSeries: FIT_SERIES.PUMPING,
+  activeWellName: 'Скважина',
+};
+
+test('на откачке кривая одна', () => {
+  const series = chartRawSeries(base);
+  expect(series).toHaveLength(1);
+  expect(series[0].role).toBe(SERIES_ROLES.FIT);
+});
+
+test('на восстановлении кривых две', () => {
+  // Это и есть недостающий график: журнал восстановления до полотна не доходил
+  const series = chartRawSeries({ ...base, isRecovery: true });
+  expect(series).toHaveLength(2);
+  expect(series.map((s) => s.id)).toEqual(['pumping', 'recovery']);
+});
+
+test('кривая восстановления идёт остаточным понижением', () => {
+  const series = chartRawSeries({ ...base, isRecovery: true });
+  const recovery = series.find((s) => s.id === 'recovery');
+  expect(recovery.measurements.map((m) => m.s)).toEqual([
+    4.5,
+    2,
+    expect.closeTo(0.2, 10),
+  ]);
+});
+
+test('прямая по умолчанию идёт по откачке', () => {
+  const series = chartRawSeries({ ...base, isRecovery: true });
+  expect(series.find((s) => s.id === 'pumping').role).toBe(SERIES_ROLES.FIT);
+  expect(series.find((s) => s.id === 'recovery').role).toBe(SERIES_ROLES.REFERENCE);
+});
+
+test('выбор восстановления переводит график в координаты Тейса', () => {
+  // Остаточное понижение спрямляется только по lg(t/t′), и только там
+  // T = 0.183·Q/a верна: обе кривые на одной оси тут совместить нельзя
+  const series = chartRawSeries({
+    ...base,
+    isRecovery: true,
+    fitSeries: FIT_SERIES.RECOVERY,
+  });
+  expect(series).toHaveLength(1);
+  expect(series[0].id).toBe('recovery');
+  expect(series[0].role).toBe(SERIES_ROLES.FIT);
+  // t/t′ для замера через 1 минуту после остановки при откачке 100 минут
+  expect(series[0].measurements[0].t).toBeCloseTo(101, 10);
+});
+
+test('без понижения на остановке кривой восстановления нет', () => {
+  const series = chartRawSeries({ ...base, isRecovery: true, finalDrawdown: 0 });
+  expect(series.map((s) => s.id)).toEqual(['pumping']);
+});
+
+test('на откачке журнал восстановления игнорируется', () => {
+  const series = chartRawSeries(base);
+  expect(series.map((s) => s.id)).toEqual(['pumping']);
+});
+
+test('площадное прослеживание строит профиль воронки по кусту', () => {
+  const series = chartRawSeries({
+    ...base,
+    trackingKind: TRACKING_KINDS.AREA,
+    moment: 10,
+    wellsWithDistance: [
+      { id: 'far', name: '2p', distance: 100 },
+      { id: 'near', name: '1p', distance: 10 },
+    ],
+    wellMeasurements: {
+      near: [{ t: 10, s: 4 }],
+      far: [{ t: 10, s: 1 }],
+    },
+  });
+  // По возрастанию расстояния: ломаная по таким точкам и есть профиль
+  expect(series[0].measurements.map((m) => m.t)).toEqual([10, 100]);
+});
+
+test('без общего момента площадного графика нет', () => {
+  const series = chartRawSeries({
+    ...base,
+    trackingKind: TRACKING_KINDS.AREA,
+    moment: NaN,
+    wellsWithDistance: [{ id: 'near', name: '1p', distance: 10 }],
+    wellMeasurements: { near: [{ t: 10, s: 4 }] },
+  });
+  expect(series).toEqual([]);
+});
+
+test('комбинированное прослеживание помечает точки скважиной', () => {
+  const series = chartRawSeries({
+    ...base,
+    trackingKind: TRACKING_KINDS.COMBINED,
+    wellsWithDistance: [{ id: 'near', name: '1p', distance: 10 }],
+    wellMeasurements: { near: [{ t: 100, s: 4 }] },
+  });
+  expect(series[0].measurements[0].group).toBe('near');
+  // t/r²: сто минут на сто квадратных метров
+  expect(series[0].measurements[0].t).toBeCloseTo(1, 10);
+});
+
+describe('recoveryAbscissa', () => {
+  test('отношение считается от начала откачки к остановке', () => {
+    const points = recoveryAbscissa({
+      measurements: [{ t: 10, s: 2 }],
+      pumpingDuration: 90,
+    });
+    expect(points[0].t).toBeCloseTo(10, 10);
+  });
+
+  test('без длительности откачки точек нет', () => {
+    expect(
+      recoveryAbscissa({ measurements: [{ t: 10, s: 2 }], pumpingDuration: 0 })
+    ).toEqual([]);
+  });
+
+  test('замер до остановки насоса отбрасывается', () => {
+    // Отношение меньше единицы означало бы отрицательное время от остановки
+    const points = recoveryAbscissa({
+      measurements: [
+        { t: 0, s: 1 },
+        { t: 10, s: 2 },
+      ],
+      pumpingDuration: 90,
+    });
+    expect(points).toHaveLength(1);
+  });
+});
