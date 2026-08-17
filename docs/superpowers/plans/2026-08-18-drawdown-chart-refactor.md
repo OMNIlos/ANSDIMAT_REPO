@@ -1525,20 +1525,44 @@ const syncView = useCallback((next) => {
 useEffect(() => () => clearTimeout(timerRef.current), []);
 ```
 
-**3. Жесты собираются один раз.** Все изменяемые входы кладутся в один ref, который читается внутри worklet:
+**3. Жесты собираются один раз.**
+
+Тонкость, на которой легко ошибиться: **обычный ref внутри worklet не годится.** Reanimated захватывает замыкание worklet-а в момент создания и копирует значения в UI-рантайм; мутации `ref.current` после этого до worklet-а не доходят. Собранный один раз жест намертво запомнил бы начальные `plot` и `base` — это хуже нынешней поломки, а не лучше.
+
+Геометрия едет через shared value: объект в нём читается с обоих потоков, и присваивание с JS-потока доходит до UI.
 
 ```js
 // Жест собирается один раз и больше не пересобирается. Раньше `pan` зависел
 // от двух десятков значений, и подмена обработчика прямо во время
-// распознавания рвала жест — палец «отпускало» на первом же кадре
-const liveRef = useRef({});
-liveRef.current = {
-  base, plot, freedom, minZoom, maxZoom,
-  anchors, onAnchorsChange, onSelectPoint, fitPoints,
-};
+// распознавания рвала жест — палец «отпускало» на первом же кадре.
+//
+// Именно shared value, а не ref: worklet копирует захваченное замыкание в
+// свой рантайм при создании, и мутации обычного ref до него не доходят
+const live = useSharedValue({ base, plot, freedom, minZoom, maxZoom });
+useEffect(() => {
+  live.value = { base, plot, freedom, minZoom, maxZoom };
+}, [live, base, plot, freedom, minZoom, maxZoom]);
 ```
 
-`useMemo` жестов получает список зависимостей `[viewport, liveRef, blockScroll, commitView, syncView]` — всё это стабильные ссылки. Внутри worklet значения берутся как `liveRef.current.plot` и т. п. (объект `liveRef` доступен worklet-у, потому что это обычный JS-объект, захваченный по ссылке).
+Колбэки в shared value не кладутся — функции туда не сериализуются. Для них заводятся стабильные диспетчеры: `runOnJS` захватывает их один раз, а сами они читают ref уже на JS-потоке, где ref работает как обычно.
+
+```js
+// Колбэки меняются вместе с пропсами, а runOnJS запоминает функцию при
+// сборке жеста. Диспетчер стабилен, и вызов доходит до текущего колбэка
+const callbacksRef = useRef({});
+callbacksRef.current = { onAnchorsChange, onSelectPoint, fitPoints, anchors };
+
+const dispatchAnchors = useCallback((next) => {
+  callbacksRef.current.onAnchorsChange?.(next);
+}, []);
+const dispatchSelect = useCallback((index) => {
+  callbacksRef.current.onSelectPoint?.(index);
+}, []);
+```
+
+`useMemo` жестов получает зависимости `[viewport, live, blockScroll, commitView, syncView, dispatchAnchors, dispatchSelect, handleTap]` — всё стабильно. Внутри worklet геометрия берётся как `live.value.plot`.
+
+Обработчик тапа целиком идёт на JS-потоке через `runOnJS`, поэтому в нём ref читается напрямую и shared value не нужен.
 
 **4. Композиция и пороги.**
 
@@ -1553,45 +1577,52 @@ const gesture = useMemo(
 
 `tap` теряет `.maxDuration(400)` — в перчатке касание легко длится дольше — и получает `.maxDistance(24)` вместо 14.
 
-**5. Тап в свободном режиме переносит ближайшую точку.** В `selectNearest`:
+**5. Тап в свободном режиме переносит ближайшую точку.**
+
+Обработчик целиком идёт на JS-потоке (жест зовёт его через `runOnJS`), поэтому здесь читается обычный ref, а не shared value. Ссылка `handleTap` стабильна — иначе `runOnJS` запомнил бы её первую версию.
 
 ```js
+const tapRef = useRef({});
+tapRef.current = { freedom, plot, anchors, fitPoints, view, onAnchorsChange, onSelectPoint };
+
 const handleTap = useCallback((touchX, touchY) => {
-  const live = liveRef.current;
+  const now = tapRef.current;
 
   // В свободном режиме тап ставит ближайшую точку под палец. Это же
   // единственный способ вернуть прямую, если точки разъехались по краям:
   // перетаскивать там уже нечего
-  if (live.freedom) {
-    if (live.anchors?.length !== 2) return;
-    const dots = live.anchors.map((a) => ({
-      cx: valueToPixelX(a.x, viewRef.current, live.plot),
-      cy: valueToPixelY(a.y, viewRef.current, live.plot),
+  if (now.freedom) {
+    if (now.anchors?.length !== 2) return;
+    const dots = now.anchors.map((a) => ({
+      cx: valueToPixelX(a.x, now.view, now.plot),
+      cy: valueToPixelY(a.y, now.view, now.plot),
     }));
     const index = nearestAnchorIndex({
-      px: touchX, py: touchY,
+      px: touchX,
+      py: touchY,
       ax0: dots[0].cx, ay0: dots[0].cy,
       ax1: dots[1].cx, ay1: dots[1].cy,
     });
-    const spot = clampAnchorToPlot({ px: touchX, py: touchY, plot: live.plot });
-    const next = live.anchors.slice();
+    const spot = clampAnchorToPlot({ px: touchX, py: touchY, plot: now.plot });
+    const next = now.anchors.slice();
     next[index] = pixelToValue({
-      px: spot.px, py: spot.py, view: viewRef.current, plot: live.plot,
+      px: spot.px, py: spot.py, view: now.view, plot: now.plot,
     });
-    live.onAnchorsChange?.(next);
+    now.onAnchorsChange?.(next);
     return;
   }
 
-  if (!live.fitPoints?.length) return;
+  if (!now.fitPoints?.length) return;
   const nearest = findNearestPoint({
-    points: live.fitPoints,
-    touchX, touchY,
-    view: viewRef.current,
-    plot: live.plot,
+    points: now.fitPoints,
+    touchX,
+    touchY,
+    view: now.view,
+    plot: now.plot,
     radius: TAP_RADIUS,
   });
-  if (nearest) live.onSelectPoint?.(nearest.index);
-}, [viewport]);
+  if (nearest) now.onSelectPoint?.(nearest.index);
+}, []);
 ```
 
 **6. Свободная точка зажимается полотном.** В `moveAnchor` и в ветке перетаскивания точки координаты пропускаются через `clampAnchorToPlot` до перевода в значения.
@@ -1609,11 +1640,11 @@ const picked = pickDragTarget({
   startX: event.x - event.translationX,
   startY: event.y - event.translationY,
   ax0: a0x.value, ay0: a0y.value, ax1: a1x.value, ay1: a1y.value,
-  freedom: live.freedom,
+  freedom: live.value.freedom,
   plot: {
-    x: live.plot.x + AXIS_GRAB,
-    y: live.plot.y,
-    h: live.plot.h - AXIS_GRAB,
+    x: live.value.plot.x + AXIS_GRAB,
+    y: live.value.plot.y,
+    h: live.value.plot.h - AXIS_GRAB,
   },
   radius: ANCHOR_RADIUS,
 });
