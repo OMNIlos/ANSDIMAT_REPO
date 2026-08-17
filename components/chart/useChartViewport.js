@@ -195,6 +195,19 @@ export default function useChartViewport({
   useEffect(() => {
     const stored = viewportStore?.get(viewKey);
     const next = stored ? clampViewport(stored, { base }) : base;
+    // Сравнение по значению, а не по ссылке: `base` пересобирается вместе с
+    // сериями, и безусловный setState здесь сам вызывал бы следующий рендер.
+    // Одного нестабильного пропса выше по цепочке хватало, чтобы экран ушёл
+    // в бесконечную перерисовку
+    const now = viewport.value;
+    if (
+      now.x0 === next.x0 &&
+      now.x1 === next.x1 &&
+      now.y0 === next.y0 &&
+      now.y1 === next.y1
+    ) {
+      return;
+    }
     viewport.value = next;
     setView(next);
   }, [viewKey, base, viewport, viewportStore]);
