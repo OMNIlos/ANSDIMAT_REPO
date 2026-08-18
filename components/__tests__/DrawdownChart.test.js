@@ -126,47 +126,51 @@ test('отмеченный замер выделяется на полотне',
 });
 
 test('в развёрнутом виде управление лежит поверх полотна', () => {
-  // Цель разворота — работать с координатной плоскостью: строка кнопок над
-  // полотном отнимала у неё высоту, ради которой график и разворачивают
   const json = render({ measurements: pumping, fullscreen: true, height: 700, onToggleFullscreen: () => {} });
-  expect(json).toContain('Свернуть график');
-  expect(json).toContain('Сброс');
-  expect(json).toContain('Свободная прямая');
   expect(json).toContain('"position":"absolute"');
 });
 
-test('развёрнутое полотно не уходит под плавающее меню приложения', () => {
-  // Нижнее меню висит поверх всех экранов и в отступ безопасной зоны не
-  // входит: без явной высоты область построения уезжала под него вместе
-  // с подписями оси абсцисс и переключателями способа прямой
+test('в развёрнутом виде плоскость занимает почти весь экран', () => {
+  // Резервируется только строка управления сверху и место под подписи оси
+  // снизу: меню приложения скрыто, переключатели прямой не показываются
   const height = 700;
-  const chromeBottom = 100;
   const json = render({
     measurements: pumping,
     fullscreen: true,
     height,
-    chromeBottom,
     onToggleFullscreen: () => {},
   });
-  // Нижняя ось — самая нижняя линия сцены
-  const ys = [...json.matchAll(/"y2":([\d.]+)/g)].map((m) => Number(m[1]));
-  expect(ys.length).toBeGreaterThan(0);
-  expect(Math.max(...ys)).toBeLessThanOrEqual(height - chromeBottom);
+  // Вертикальные линии сетки идут от верха области построения до низа,
+  // поэтому по ним и видны её настоящие границы
+  const tops = [...json.matchAll(/"y1":([\d.]+)/g)].map((m) => Number(m[1]));
+  const bottoms = [...json.matchAll(/"y2":([\d.]+)/g)].map((m) => Number(m[1]));
+  expect(Math.max(...bottoms)).toBeGreaterThan(height * 0.9);
+  expect(Math.min(...tops)).toBeLessThan(height * 0.15);
 });
 
-test('без плавающего меню развёрнутое полотно занимает больше высоты', () => {
-  const height = 700;
-  const lowest = (chromeBottom) => {
-    const json = render({
-      measurements: pumping,
-      fullscreen: true,
-      height,
-      chromeBottom,
-      onToggleFullscreen: () => {},
-    });
-    return Math.max(...[...json.matchAll(/"y2":([\d.]+)/g)].map((m) => Number(m[1])));
-  };
-  expect(lowest(0)).toBeGreaterThan(lowest(100));
+test('в развёрнутом виде выбор способа прямой не показывается', () => {
+  // Там работают с уже выбранной прямой, а не переключают режимы
+  const json = render({
+    measurements: pumping,
+    fullscreen: true,
+    height: 700,
+    onToggleFullscreen: () => {},
+  });
+  expect(json).not.toContain('Свободная прямая');
+  expect(json).not.toContain('По всем точкам');
+});
+
+test('в развёрнутом виде управление идёт одной строкой сверху', () => {
+  const json = render({
+    measurements: pumping,
+    fullscreen: true,
+    height: 700,
+    onToggleFullscreen: () => {},
+  });
+  // Все кнопки лежат в одной строке: столбик закрывал правую треть полотна
+  expect(json).toContain('"flexDirection":"row"');
+  expect(json).toContain('Свернуть график');
+  expect(json).toContain('Сброс');
 });
 
 test('кривая сравнения рисуется пунктиром', () => {

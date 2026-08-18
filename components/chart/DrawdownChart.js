@@ -63,14 +63,11 @@ const PADDING = { left: 46, right: 14, top: 14, bottom: 38 };
  */
 const PADDING_FULL = { left: 56, right: 20 };
 
-/** Высота строки переключателей способа прямой в развёрнутом виде, px */
-const FIT_ROW_HEIGHT = 44;
+/** Высота строки управления вверху развёрнутого полотна, px */
+const CONTROL_ROW_HEIGHT = 56;
 
-/** Высота подписи осей вверху развёрнутого полотна, px */
-const CAPTION_ROW_HEIGHT = 48;
-
-/** Сколько ещё занимает легенда под подписью осей, px */
-const LEGEND_ROW_HEIGHT = 44;
+/** Сколько нужно снизу под подписи оси абсцисс, px */
+const AXIS_LABEL_ROOM = 30;
 
 /** Пределы масштаба относительно исходного вида */
 const MIN_ZOOM = 0.5;
@@ -172,14 +169,6 @@ export default function DrawdownChart({
   // пользователя, график получает уже пересчитанные точки
   timeUnit = 'мин',
   drawdownUnit = 'м',
-  /**
-   * Сколько пикселей внизу экрана занято плавающим интерфейсом приложения
-   *
-   * Нижнее меню висит поверх всех экранов и в отступ безопасной зоны не
-   * входит: развёрнутое полотно уходило под него вместе с подписями оси
-   * абсцисс и переключателями способа прямой.
-   */
-  chromeBottom = 0,
   // Развёрнут ли график на весь экран
   fullscreen = false,
   onToggleFullscreen,
@@ -248,12 +237,12 @@ export default function DrawdownChart({
       };
     }
 
-    const top =
-      insets.top + CAPTION_ROW_HEIGHT + (legend.length > 0 ? LEGEND_ROW_HEIGHT : 0);
-    // Меню приложения плавает поверх экрана и в отступ безопасной зоны не
-    // входит: экран сообщает его высоту сам
-    const bottom =
-      Math.max(insets.bottom, chromeBottom) + FIT_ROW_HEIGHT + spacing.md * 2;
+    // Резервируется только строка управления сверху и место под подписи оси
+    // снизу. Меню приложения на развёрнутом графике скрыто, переключатели
+    // способа прямой не показываются, легенда лежит поверх полотна — всё
+    // остальное отдано координатной плоскости
+    const top = insets.top + CONTROL_ROW_HEIGHT;
+    const bottom = insets.bottom + AXIS_LABEL_ROOM;
 
     return {
       x: PADDING_FULL.left,
@@ -261,15 +250,7 @@ export default function DrawdownChart({
       w: Math.max(40, width - PADDING_FULL.left - PADDING_FULL.right),
       h: Math.max(40, chartHeight - top - bottom),
     };
-  }, [
-    width,
-    chartHeight,
-    fullscreen,
-    insets.top,
-    insets.bottom,
-    chromeBottom,
-    legend.length,
-  ]);
+  }, [width, chartHeight, fullscreen, insets.top, insets.bottom]);
 
   // Исходная видимая область с запасом по краям. Считается по всем кривым
   // сразу: кривая соседней скважины, не влезшая в масштаб основной,
@@ -436,7 +417,6 @@ export default function DrawdownChart({
       onToggleFullscreen={onToggleFullscreen}
       floating={fullscreen}
       topInset={insets.top}
-      bottomInset={Math.max(insets.bottom, chromeBottom)}
       colors={c}
     />
   );
@@ -487,7 +467,7 @@ export default function DrawdownChart({
 
   const legendRow = scene.hasData && legend.length > 0 && (
     <View style={[styles.legend, fullscreen && styles.legendFloating,
-      fullscreen && { backgroundColor: c.surface, top: insets.top + CAPTION_ROW_HEIGHT }]}>
+      fullscreen && { backgroundColor: c.surface, top: insets.top + CONTROL_ROW_HEIGHT }]}>
       {legend.map((one) => (
         <View key={one.id} style={styles.legendItem}>
           <View

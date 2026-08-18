@@ -30,6 +30,7 @@ import I18n from '../Localization';
 import { useAuth } from '../AuthContext';
 import ConfirmDialog from './ui/ConfirmDialog';
 import { navigationRef } from '../navigation/navigationRef';
+import { useMenuHidden } from './chromeVisibility';
 import { palette, fontFamily, elevation } from '../theme';
 
 /**
@@ -54,6 +55,9 @@ export const MENU_BAR_HEIGHT = 61;
 
 export default function BottomMenuBar({ active = 'home' }) {
   const insets = useSafeAreaInsets();
+  // Экран с развёрнутым содержимым просит убрать меню совсем: там оно
+  // закрывает низ и отнимает высоту у того, ради чего разворот и нажат
+  const menuHidden = useMenuHidden();
   const { session, signOut } = useAuth();
   const [keyboardVisible, setKeyboardVisible] = React.useState(false);
   const [signOutAsked, setSignOutAsked] = React.useState(false);
@@ -91,7 +95,7 @@ export default function BottomMenuBar({ active = 'home' }) {
     });
   }
 
-  if (keyboardVisible) return null;
+  if (keyboardVisible || menuHidden) return null;
 
   return (
     <>

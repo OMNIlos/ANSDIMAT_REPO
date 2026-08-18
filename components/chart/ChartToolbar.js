@@ -34,7 +34,6 @@ import { spacing, type, fontFamily } from '../../theme';
  * @param {Function} [props.onToggleFullscreen] - развернуть или свернуть
  * @param {boolean} [props.floating] - плавающая раскладка поверх полотна
  * @param {number} [props.topInset] - отступ сверху под вырез экрана
- * @param {number} [props.bottomInset] - отступ снизу под системную полосу
  * @param {Object} props.colors - цвета темы
  */
 export default function ChartToolbar({
@@ -49,7 +48,6 @@ export default function ChartToolbar({
   onToggleFullscreen,
   floating = false,
   topInset = 0,
-  bottomInset = 0,
   colors: c,
 }) {
   const freedom = fitMode === FIT_MODES.FREEDOM;
@@ -60,17 +58,14 @@ export default function ChartToolbar({
       onPress={onPress}
       style={[
         floating ? styles.floatButton : styles.zoomButton,
-        {
-          borderColor: c.border,
-          backgroundColor: floating ? c.surface : c.surface,
-        },
+        { borderColor: c.border, backgroundColor: c.surface },
       ]}
       accessibilityRole="button"
       accessibilityLabel={label}
       hitSlop={floating ? 10 : 6}
       {...extraProps}
     >
-      <MaterialIcons name={icon} size={floating ? 22 : 16} color={c.text} />
+      <MaterialIcons name={icon} size={floating ? 21 : 16} color={c.text} />
     </TouchableOpacity>
   );
 
@@ -78,8 +73,7 @@ export default function ChartToolbar({
     <View
       style={[
         styles.fitRow,
-        floating ? styles.fitRowFloating : null,
-        { backgroundColor: floating ? c.surface : c.surfaceSunken },
+        { backgroundColor: c.surfaceSunken },
       ]}
     >
       {[
@@ -93,7 +87,7 @@ export default function ChartToolbar({
             onPress={() => onFitModeChange?.(option.key)}
             style={[
               styles.fitChip,
-              active && { backgroundColor: floating ? c.surfaceSunken : c.surface },
+              active && { backgroundColor: c.surface },
             ]}
             accessibilityRole="button"
             accessibilityState={{ selected: active }}
@@ -121,23 +115,13 @@ export default function ChartToolbar({
           не там, где нужно. Кнопка ставит точки обратно на прямую по всем
           замерам */}
       {freedom && (
-        <TouchableOpacity
-          onPress={onResetLine}
-          style={floating ? [styles.floatPill, { backgroundColor: c.surface }] : null}
-          accessibilityRole="button"
-          hitSlop={8}
-        >
+        <TouchableOpacity onPress={onResetLine} accessibilityRole="button" hitSlop={8}>
           <Text style={[styles.resetLink, { color: c.primaryAccent }]}>
             {I18n.t('resetLine', { defaultValue: 'Прямую заново' })}
           </Text>
         </TouchableOpacity>
       )}
-      <TouchableOpacity
-        onPress={onReset}
-        style={floating ? [styles.floatPill, { backgroundColor: c.surface }] : null}
-        accessibilityRole="button"
-        hitSlop={8}
-      >
+      <TouchableOpacity onPress={onReset} accessibilityRole="button" hitSlop={8}>
         <Text style={[styles.resetLink, { color: c.primaryAccent }]}>
           {I18n.t('reset', { defaultValue: 'Сброс' })}
         </Text>
@@ -156,39 +140,35 @@ export default function ChartToolbar({
       { accessibilityState: { expanded: fullscreen } }
     );
 
-  // Плавающая раскладка: полотно под всем экраном, управление висит поверх
-  // него по углам. Середина остаётся пустой — там работают пальцем
+  // Плавающая раскладка: полотно под всем экраном, управление — одной строкой
+  // сверху. Столбик у правого края закрывал правую треть плоскости, а выбор
+  // способа прямой в развёрнутом виде не показывается вовсе: там работают с
+  // уже выбранной прямой, а не переключают режимы
   if (floating) {
     return (
-      <>
-        <View
-          style={[styles.floatTop, { top: topInset + spacing.sm }]}
-          pointerEvents="box-none"
-        >
-          <View style={[styles.floatCaption, { backgroundColor: c.surface }]}>
-            <Text style={[type.eyebrow, { color: c.textSecondary }]}>{caption}</Text>
-          </View>
-          <View style={styles.floatGroup} pointerEvents="box-none">
-            {expandButton}
-          </View>
+      <View
+        style={[styles.floatTop, { top: topInset + spacing.sm }]}
+        pointerEvents="box-none"
+      >
+        <View style={[styles.floatCaption, { backgroundColor: c.surface }]}>
+          <Text style={[type.eyebrow, { color: c.textSecondary }]}>{caption}</Text>
         </View>
 
-        <View
-          style={[styles.floatSide, { top: topInset + spacing.sm + 52 }]}
-          pointerEvents="box-none"
-        >
-          {iconButton('add', I18n.t('zoomIn', { defaultValue: 'Приблизить' }), onZoomIn)}
+        <View style={styles.floatGroup} pointerEvents="box-none">
           {iconButton('remove', I18n.t('zoomOut', { defaultValue: 'Отдалить' }), onZoomOut)}
-          {resetLinks}
+          {iconButton('add', I18n.t('zoomIn', { defaultValue: 'Приблизить' }), onZoomIn)}
+          {/* Подписи заменены значками: строкой они не помещаются на телефоне,
+              а голоса экранного диктора это не касается — метки на месте */}
+          {freedom &&
+            iconButton(
+              'timeline',
+              I18n.t('resetLine', { defaultValue: 'Прямую заново' }),
+              onResetLine
+            )}
+          {iconButton('refresh', I18n.t('reset', { defaultValue: 'Сброс' }), onReset)}
+          {expandButton}
         </View>
-
-        <View
-          style={[styles.floatBottom, { bottom: bottomInset + spacing.md }]}
-          pointerEvents="box-none"
-        >
-          {chips}
-        </View>
-      </>
+      </View>
     );
   }
 
@@ -272,36 +252,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  floatSide: {
-    position: 'absolute',
-    right: spacing.md,
-    alignItems: 'flex-end',
-    gap: 10,
-    zIndex: 2,
+  floatTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
+
   floatButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
     opacity: 0.94,
   },
-  floatPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 18,
-    opacity: 0.94,
-  },
-  floatBottom: {
-    position: 'absolute',
-    left: spacing.md,
-    right: spacing.md,
-    zIndex: 2,
-  },
-  fitRowFloating: {
-    marginBottom: 0,
-    opacity: 0.96,
-  },
+
 });

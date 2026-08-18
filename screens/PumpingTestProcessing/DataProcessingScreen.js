@@ -53,6 +53,7 @@ import { processRecovery, recoveryCompleteness } from "../../calc/recovery";
 import { diagnose } from "../../calc/diagnostics";
 import ValueCard from "../../components/ui/ValueCard";
 import { MENU_BAR_HEIGHT } from "../../components/BottomMenuBar";
+import { setMenuHidden } from "../../components/chromeVisibility";
 import {
   getProject,
   updateProject,
@@ -1176,6 +1177,15 @@ export default function DataProcessingScreen({ route, navigation }) {
   const [chartView, setChartView] = useState(VIEWS.FIT);
   // Развёрнут ли график на весь экран
   const [chartFullscreen, setChartFullscreen] = useState(false);
+
+  // Плавающее меню приложения на развёрнутом графике убирается совсем: оно
+  // висит поверх любого экрана и отнимает низ у той самой координатной
+  // плоскости, ради которой разворот и нажимают. Возврат обязателен и при
+  // уходе с экрана — иначе меню пропадёт по всему приложению
+  useEffect(() => {
+    setMenuHidden(chartFullscreen);
+    return () => setMenuHidden(false);
+  }, [chartFullscreen]);
   // Добавление наблюдательной скважины: форма раскрывается по нажатию «+»
   const [addingWell, setAddingWell] = useState(false);
   const [newWellName, setNewWellName] = useState("");
@@ -1915,9 +1925,6 @@ export default function DataProcessingScreen({ route, navigation }) {
           mode={chartMode}
           width={width}
           height={height}
-          // Нижнее меню плавает поверх всех экранов: без этого развёрнутое
-          // полотно уходит под него вместе с подписями оси и переключателями
-          chromeBottom={buttonsAboveMenu}
           fitMode={fitMode}
           onFitModeChange={handleFitModeChange}
           selected={selectedPoints}
