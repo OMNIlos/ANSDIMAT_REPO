@@ -8,6 +8,13 @@
 import { chartRawSeries, recoveryAbscissa, FIT_SERIES } from '../useChartSeries';
 import { TRACKING_KINDS } from '../../../calc/tracking';
 import { SERIES_ROLES } from '../../../calc/chartSeries';
+import I18n from '../../../Localization';
+
+// Локаль в тестах определяется системой и приезжает английской. Подписи кривых
+// проверяются по смыслу, а не по окружению, поэтому закрепляем её
+beforeAll(() => {
+  I18n.locale = 'ru';
+});
 
 const base = {
   trackingKind: TRACKING_KINDS.TIME,
@@ -52,6 +59,22 @@ test('кривая восстановления идёт остаточным п
     2,
     expect.closeTo(0.2, 10),
   ]);
+});
+
+test('кривые названы по фазам, а не одинаково', () => {
+  // Обе кривые звались именем скважины, и в легенде стояли две одинаковые
+  // строки: понять, где откачка, а где восстановление, было невозможно
+  const series = chartRawSeries({ ...base, isRecovery: true });
+  const names = series.map((s) => s.name);
+  expect(new Set(names).size).toBe(2);
+  expect(names[0]).toMatch(/Откачка/);
+  expect(names[1]).toMatch(/Восстановление/);
+});
+
+test('имя скважины дописывается к фазе, а не заменяет её', () => {
+  const series = chartRawSeries({ ...base, isRecovery: true, activeWellName: '1p' });
+  expect(series[0].name).toBe('Откачка — 1p');
+  expect(series[1].name).toBe('Восстановление — 1p');
 });
 
 test('прямая по умолчанию идёт по откачке', () => {

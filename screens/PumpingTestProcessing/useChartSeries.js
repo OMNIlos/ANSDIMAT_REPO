@@ -15,12 +15,27 @@
 
 import { residualDrawdown, SERIES_ROLES } from '../../calc/chartSeries';
 import { TRACKING_KINDS } from '../../calc/tracking';
+import I18n from '../../Localization';
 
 /** По какой кривой ведётся прямая и считается водопроводимость */
 export const FIT_SERIES = { PUMPING: 'pumping', RECOVERY: 'recovery' };
 
 /** Пустой ряд: общая ссылка, чтобы пересчёты не срабатывали вхолостую */
 const NO_ROWS = [];
+
+/**
+ * Подписывает кривую
+ *
+ * Обе кривые фазы восстановления назывались именем скважины, и в легенде
+ * стояли две одинаковые строки — понять, где откачка, а где восстановление,
+ * было невозможно. Имя скважины дописывается к названию фазы, а не заменяет
+ * его: у куста журналов по паре на каждую скважину.
+ *
+ * @param {string} phase - название фазы
+ * @param {string} [wellName] - имя открытой скважины
+ * @returns {string} подпись кривой
+ */
+const seriesName = (phase, wellName) => (wellName ? `${phase} — ${wellName}` : phase);
 
 /**
  * Переводит журнал восстановления в координаты прямой Тейса
@@ -129,7 +144,9 @@ export function chartRawSeries({
 
   const pumping = {
     id: 'pumping',
-    name: activeWellName,
+    name: isRecovery
+      ? seriesName(I18n.t('phasePumping', { defaultValue: 'Откачка' }), activeWellName)
+      : activeWellName,
     role: SERIES_ROLES.FIT,
     measurements,
   };
@@ -154,7 +171,10 @@ export function chartRawSeries({
       ? [
           {
             id: 'recovery',
-            name: activeWellName,
+            name: seriesName(
+              I18n.t('phaseRecovery', { defaultValue: 'Восстановление' }),
+              activeWellName
+            ),
             role: SERIES_ROLES.FIT,
             measurements: points,
           },
@@ -170,7 +190,10 @@ export function chartRawSeries({
     pumping,
     {
       id: 'recovery',
-      name: activeWellName,
+      name: seriesName(
+        I18n.t('phaseRecovery', { defaultValue: 'Восстановление' }),
+        activeWellName
+      ),
       role: SERIES_ROLES.REFERENCE,
       measurements: residual,
     },
