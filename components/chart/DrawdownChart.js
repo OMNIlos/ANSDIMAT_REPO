@@ -53,7 +53,24 @@ const DEFAULT_HEIGHT = 230;
  * разворачивают.
  */
 const PADDING = { left: 46, right: 14, top: 14, bottom: 38 };
-const PADDING_FULL = { left: 56, right: 76, top: 108, bottom: 96 };
+
+/**
+ * Поля развёрнутого полотна, px
+ *
+ * Справа поле узкое: кнопки масштаба висят поверх плоскости, а не отодвигают
+ * её. Так делает Desmos, и так координатной плоскости достаётся вся ширина —
+ * ради этого разворот и нажимают. Слева поле под подписи оси ординат.
+ */
+const PADDING_FULL = { left: 56, right: 20 };
+
+/** Высота строки переключателей способа прямой в развёрнутом виде, px */
+const FIT_ROW_HEIGHT = 44;
+
+/** Высота подписи осей вверху развёрнутого полотна, px */
+const CAPTION_ROW_HEIGHT = 48;
+
+/** Сколько ещё занимает легенда под подписью осей, px */
+const LEGEND_ROW_HEIGHT = 44;
 
 /** Пределы масштаба относительно исходного вида */
 const MIN_ZOOM = 0.5;
@@ -155,6 +172,14 @@ export default function DrawdownChart({
   // пользователя, график получает уже пересчитанные точки
   timeUnit = 'мин',
   drawdownUnit = 'м',
+  /**
+   * Сколько пикселей внизу экрана занято плавающим интерфейсом приложения
+   *
+   * Нижнее меню висит поверх всех экранов и в отступ безопасной зоны не
+   * входит: развёрнутое полотно уходило под него вместе с подписями оси
+   * абсцисс и переключателями способа прямой.
+   */
+  chromeBottom = 0,
   // Развёрнут ли график на весь экран
   fullscreen = false,
   onToggleFullscreen,
@@ -166,22 +191,6 @@ export default function DrawdownChart({
   const insets = useSafeAreaInsets();
 
   const chartHeight = height ?? DEFAULT_HEIGHT;
-
-  const plot = useMemo(() => {
-    const pad = fullscreen
-      ? {
-          ...PADDING_FULL,
-          top: PADDING_FULL.top + insets.top,
-          bottom: PADDING_FULL.bottom + insets.bottom,
-        }
-      : PADDING;
-    return {
-      x: pad.left,
-      y: pad.top,
-      w: Math.max(40, width - pad.left - pad.right),
-      h: Math.max(40, chartHeight - pad.top - pad.bottom),
-    };
-  }, [width, chartHeight, fullscreen, insets.top, insets.bottom]);
 
   // Серии в координатах данных: от масштаба не зависят, считаются один раз.
   // Совместимый вход приводится к общему: экран может передать либо `series`,
@@ -216,6 +225,51 @@ export default function DrawdownChart({
         .flatMap((one) => one.points),
     [chartSeries]
   );
+
+  // Сколько кривых попадёт в легенду: от этого зависит верхнее поле полотна
+  // в развёрнутом виде. Легенда лежит поверх него и не должна накрывать данные
+  const legend = chartSeries.length > 1 ? chartSeries : EMPTY;
+
+  /**
+   * Область построения внутри полотна
+   *
+   * В развёрнутом виде поля считаются по тому, что реально лежит поверх:
+   * сверху подпись осей и легенда, снизу переключатели прямой и плавающее
+   * меню приложения. Фиксированные поля «на глаз» оставляли то пустую полосу
+   * сверху, то данные под меню.
+   */
+  const plot = useMemo(() => {
+    if (!fullscreen) {
+      return {
+        x: PADDING.left,
+        y: PADDING.top,
+        w: Math.max(40, width - PADDING.left - PADDING.right),
+        h: Math.max(40, chartHeight - PADDING.top - PADDING.bottom),
+      };
+    }
+
+    const top =
+      insets.top + CAPTION_ROW_HEIGHT + (legend.length > 0 ? LEGEND_ROW_HEIGHT : 0);
+    // Меню приложения плавает поверх экрана и в отступ безопасной зоны не
+    // входит: экран сообщает его высоту сам
+    const bottom =
+      Math.max(insets.bottom, chromeBottom) + FIT_ROW_HEIGHT + spacing.md * 2;
+
+    return {
+      x: PADDING_FULL.left,
+      y: top,
+      w: Math.max(40, width - PADDING_FULL.left - PADDING_FULL.right),
+      h: Math.max(40, chartHeight - top - bottom),
+    };
+  }, [
+    width,
+    chartHeight,
+    fullscreen,
+    insets.top,
+    insets.bottom,
+    chromeBottom,
+    legend.length,
+  ]);
 
   // Исходная видимая область с запасом по краям. Считается по всем кривым
   // сразу: кривая соседней скважины, не влезшая в масштаб основной,
@@ -366,10 +420,6 @@ export default function DrawdownChart({
     };
   }, [plot]);
 
-  // В легенде нужны все кривые, кроме случая, когда она одна: подписывать
-  // единственную кривую нечем и незачем
-  const legend = chartSeries.length > 1 ? chartSeries : [];
-
   const toolbar = (
     <ChartToolbar
       caption={
@@ -386,7 +436,7 @@ export default function DrawdownChart({
       onToggleFullscreen={onToggleFullscreen}
       floating={fullscreen}
       topInset={insets.top}
-      bottomInset={insets.bottom}
+      bottomInset={Math.max(insets.bottom, chromeBottom)}
       colors={c}
     />
   );
@@ -437,7 +487,7 @@ export default function DrawdownChart({
 
   const legendRow = scene.hasData && legend.length > 0 && (
     <View style={[styles.legend, fullscreen && styles.legendFloating,
-      fullscreen && { backgroundColor: c.surface, top: insets.top + 56 }]}>
+      fullscreen && { backgroundColor: c.surface, top: insets.top + CAPTION_ROW_HEIGHT }]}>
       {legend.map((one) => (
         <View key={one.id} style={styles.legendItem}>
           <View

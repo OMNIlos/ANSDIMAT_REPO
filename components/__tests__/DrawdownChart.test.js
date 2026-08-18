@@ -135,6 +135,40 @@ test('в развёрнутом виде управление лежит пов�
   expect(json).toContain('"position":"absolute"');
 });
 
+test('развёрнутое полотно не уходит под плавающее меню приложения', () => {
+  // Нижнее меню висит поверх всех экранов и в отступ безопасной зоны не
+  // входит: без явной высоты область построения уезжала под него вместе
+  // с подписями оси абсцисс и переключателями способа прямой
+  const height = 700;
+  const chromeBottom = 100;
+  const json = render({
+    measurements: pumping,
+    fullscreen: true,
+    height,
+    chromeBottom,
+    onToggleFullscreen: () => {},
+  });
+  // Нижняя ось — самая нижняя линия сцены
+  const ys = [...json.matchAll(/"y2":([\d.]+)/g)].map((m) => Number(m[1]));
+  expect(ys.length).toBeGreaterThan(0);
+  expect(Math.max(...ys)).toBeLessThanOrEqual(height - chromeBottom);
+});
+
+test('без плавающего меню развёрнутое полотно занимает больше высоты', () => {
+  const height = 700;
+  const lowest = (chromeBottom) => {
+    const json = render({
+      measurements: pumping,
+      fullscreen: true,
+      height,
+      chromeBottom,
+      onToggleFullscreen: () => {},
+    });
+    return Math.max(...[...json.matchAll(/"y2":([\d.]+)/g)].map((m) => Number(m[1])));
+  };
+  expect(lowest(0)).toBeGreaterThan(lowest(100));
+});
+
 test('кривая сравнения рисуется пунктиром', () => {
   // Цвета мало, когда рядом две тонкие кривые: пунктир отличает их и на
   // чёрно-белой распечатке

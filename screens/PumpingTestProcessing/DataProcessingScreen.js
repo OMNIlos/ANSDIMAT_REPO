@@ -1915,6 +1915,9 @@ export default function DataProcessingScreen({ route, navigation }) {
           mode={chartMode}
           width={width}
           height={height}
+          // Нижнее меню плавает поверх всех экранов: без этого развёрнутое
+          // полотно уходит под него вместе с подписями оси и переключателями
+          chromeBottom={buttonsAboveMenu}
           fitMode={fitMode}
           onFitModeChange={handleFitModeChange}
           selected={selectedPoints}
