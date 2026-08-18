@@ -477,11 +477,6 @@ export default function DataProcessingScreen({ route, navigation }) {
   // телефоны), поэтому берётся не меньше 26 — иначе кнопка садилась прямо
   // на полосу меню
   const buttonsAboveMenu = Math.max(insets.bottom, 26) + MENU_BAR_HEIGHT + 12;
-  const CHART_CHROME = 232;
-  const fullscreenChartHeight = Math.max(
-    260,
-    height - insets.bottom - MENU_BAR_HEIGHT - CHART_CHROME,
-  );
 
   const load = useCallback(async () => {
     if (!projectId) {
@@ -1918,8 +1913,8 @@ export default function DataProcessingScreen({ route, navigation }) {
         <DrawdownChart
           series={chartSeries}
           mode={chartMode}
-          width={width - spacing.md * 2}
-          height={fullscreenChartHeight}
+          width={width}
+          height={height}
           fitMode={fitMode}
           onFitModeChange={handleFitModeChange}
           selected={selectedPoints}
@@ -2970,10 +2965,10 @@ const styles = StyleSheet.create({
   },
   // Развёрнутый график: занимает экран, поля по краям — чтобы кнопки
   // масштаба и «Сброс» не упирались в границы
+  // Развёрнутый график занимает экран целиком, без полей: управление лежит
+  // поверх полотна, а не отнимает у него высоту
   fullscreen: {
     flex: 1,
-    paddingTop: spacing.md,
-    paddingHorizontal: spacing.md,
   },
   content: {
     padding: spacing.lg,

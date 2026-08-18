@@ -125,6 +125,28 @@ test('отмеченный замер выделяется на полотне',
   expect(marked).toContain('"r":5.5');
 });
 
+test('в развёрнутом виде управление лежит поверх полотна', () => {
+  // Цель разворота — работать с координатной плоскостью: строка кнопок над
+  // полотном отнимала у неё высоту, ради которой график и разворачивают
+  const json = render({ measurements: pumping, fullscreen: true, height: 700, onToggleFullscreen: () => {} });
+  expect(json).toContain('Свернуть график');
+  expect(json).toContain('Сброс');
+  expect(json).toContain('Свободная прямая');
+  expect(json).toContain('"position":"absolute"');
+});
+
+test('кривая сравнения рисуется пунктиром', () => {
+  // Цвета мало, когда рядом две тонкие кривые: пунктир отличает их и на
+  // чёрно-белой распечатке
+  const json = render({
+    series: [
+      { id: 'pumping', name: 'Откачка', role: 'fit', measurements: pumping },
+      { id: 'recovery', name: 'Восстановление', role: 'reference', measurements: [{ t: 1, s: 3 }, { t: 10, s: 1 }] },
+    ],
+  });
+  expect(json).toContain('"6"');
+});
+
 test('серии восстановления рисуются вместе с откачкой', () => {
   const json = render({
     series: [

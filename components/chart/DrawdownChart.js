@@ -25,6 +25,7 @@
 
 import React, { useCallback, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { useTheme } from 'react-native-paper';
 import I18n from '../../Localization';
@@ -42,7 +43,17 @@ import { spacing, radius, type, fontFamily } from '../../theme';
 export { FIT_MODES };
 
 const DEFAULT_HEIGHT = 230;
+
+/**
+ * Поля вокруг области построения, px
+ *
+ * В развёрнутом виде они шире: сверху стоит подпись осей и легенда, справа —
+ * колонка кнопок, снизу — переключатели способа прямой. Держать данные под
+ * ними значило бы отдать управлению ту самую площадь, ради которой график и
+ * разворачивают.
+ */
 const PADDING = { left: 46, right: 14, top: 14, bottom: 38 };
+const PADDING_FULL = { left: 56, right: 76, top: 108, bottom: 96 };
 
 /** Пределы масштаба относительно исходного вида */
 const MIN_ZOOM = 0.5;
@@ -152,18 +163,25 @@ export default function DrawdownChart({
 }) {
   const theme = useTheme();
   const c = theme.colors;
+  const insets = useSafeAreaInsets();
 
   const chartHeight = height ?? DEFAULT_HEIGHT;
 
-  const plot = useMemo(
-    () => ({
-      x: PADDING.left,
-      y: PADDING.top,
-      w: Math.max(40, width - PADDING.left - PADDING.right),
-      h: chartHeight - PADDING.top - PADDING.bottom,
-    }),
-    [width, chartHeight]
-  );
+  const plot = useMemo(() => {
+    const pad = fullscreen
+      ? {
+          ...PADDING_FULL,
+          top: PADDING_FULL.top + insets.top,
+          bottom: PADDING_FULL.bottom + insets.bottom,
+        }
+      : PADDING;
+    return {
+      x: pad.left,
+      y: pad.top,
+      w: Math.max(40, width - pad.left - pad.right),
+      h: Math.max(40, chartHeight - pad.top - pad.bottom),
+    };
+  }, [width, chartHeight, fullscreen, insets.top, insets.bottom]);
 
   // Серии в координатах данных: от масштаба не зависят, считаются один раз.
   // Совместимый вход приводится к общему: экран может передать либо `series`,
@@ -352,77 +370,109 @@ export default function DrawdownChart({
   // единственную кривую нечем и незачем
   const legend = chartSeries.length > 1 ? chartSeries : [];
 
-  return (
-    <View>
-      <ChartToolbar
-        caption={
-          caption ??
-          (mode === X_MODES.LOG ? 's — lg t' : mode === X_MODES.SQRT ? 's — √t' : 's — t')
-        }
-        fitMode={fitMode}
-        onFitModeChange={onFitModeChange}
-        onZoomIn={() => zoomBy(1.6)}
-        onZoomOut={() => zoomBy(1 / 1.6)}
-        onReset={reset}
-        onResetLine={placeAnchors}
-        fullscreen={fullscreen}
-        onToggleFullscreen={onToggleFullscreen}
-        colors={c}
-      />
+  const toolbar = (
+    <ChartToolbar
+      caption={
+        caption ??
+        (mode === X_MODES.LOG ? 's — lg t' : mode === X_MODES.SQRT ? 's — √t' : 's — t')
+      }
+      fitMode={fitMode}
+      onFitModeChange={onFitModeChange}
+      onZoomIn={() => zoomBy(1.6)}
+      onZoomOut={() => zoomBy(1 / 1.6)}
+      onReset={reset}
+      onResetLine={placeAnchors}
+      fullscreen={fullscreen}
+      onToggleFullscreen={onToggleFullscreen}
+      floating={fullscreen}
+      topInset={insets.top}
+      bottomInset={insets.bottom}
+      colors={c}
+    />
+  );
 
-      <GestureDetector gesture={gesture}>
-        <View
-          style={[styles.canvas, { backgroundColor: c.plotBg, borderColor: c.border }]}
-          // collapsable нужен только нативной сборке: он не даёт RN схлопнуть
-          // контейнер, к которому привязан обработчик жестов
-          {...(Platform.OS === 'web' ? {} : { collapsable: false })}
-        >
-          <ChartCanvas
-            scene={scene}
-            plot={plot}
-            width={width}
-            height={chartHeight}
-            colors={c}
-            selected={selected}
-            ghost={scene.hasData ? null : ghost}
-          />
+  const canvas = (
+    <GestureDetector gesture={gesture}>
+      <View
+        style={[
+          fullscreen ? styles.canvasFull : styles.canvas,
+          { backgroundColor: c.plotBg, borderColor: c.border },
+        ]}
+        // collapsable нужен только нативной сборке: он не даёт RN схлопнуть
+        // контейнер, к которому привязан обработчик жестов
+        {...(Platform.OS === 'web' ? {} : { collapsable: false })}
+      >
+        <ChartCanvas
+          scene={scene}
+          plot={plot}
+          width={width}
+          height={chartHeight}
+          colors={c}
+          selected={selected}
+          ghost={scene.hasData ? null : ghost}
+        />
 
-          {!scene.hasData && (
-            <View style={styles.overlay} pointerEvents="none">
-              <View style={[styles.emptyCard, { backgroundColor: c.surface, borderColor: c.border }]}>
-                <Text style={[styles.emptyTitle, { color: c.text }]}>
-                  {emptyTitle ??
-                    I18n.t('chartEmptyTitle', {
-                      defaultValue: 'График строится по двум замерам',
-                    })}
-                </Text>
-                <Text style={[type.caption, styles.emptyText, { color: c.textSecondary }]}>
-                  {emptyHint ??
-                    I18n.t('chartEmptyHint', {
-                      defaultValue:
-                        'Внесите время и понижение в журнале выше — прямая и T появятся сразу.',
-                    })}
-                </Text>
-              </View>
-            </View>
-          )}
-        </View>
-      </GestureDetector>
-
-      {/* Легенда: какая кривая чья. Без неё три линии на плоскости
-          неразличимы — а на восстановлении их две по определению */}
-      {scene.hasData && legend.length > 0 && (
-        <View style={styles.legend}>
-          {legend.map((one) => (
-            <View key={one.id} style={styles.legendItem}>
-              <View style={[styles.legendMark, { backgroundColor: one.color }]} />
-              <Text style={[styles.legendText, { color: c.textSecondary }]} numberOfLines={1}>
-                {one.name}
+        {!scene.hasData && (
+          <View style={styles.overlay} pointerEvents="none">
+            <View style={[styles.emptyCard, { backgroundColor: c.surface, borderColor: c.border }]}>
+              <Text style={[styles.emptyTitle, { color: c.text }]}>
+                {emptyTitle ??
+                  I18n.t('chartEmptyTitle', {
+                    defaultValue: 'График строится по двум замерам',
+                  })}
+              </Text>
+              <Text style={[type.caption, styles.emptyText, { color: c.textSecondary }]}>
+                {emptyHint ??
+                  I18n.t('chartEmptyHint', {
+                    defaultValue:
+                      'Внесите время и понижение в журнале выше — прямая и T появятся сразу.',
+                  })}
               </Text>
             </View>
-          ))}
+          </View>
+        )}
+      </View>
+    </GestureDetector>
+  );
+
+  const legendRow = scene.hasData && legend.length > 0 && (
+    <View style={[styles.legend, fullscreen && styles.legendFloating,
+      fullscreen && { backgroundColor: c.surface, top: insets.top + 56 }]}>
+      {legend.map((one) => (
+        <View key={one.id} style={styles.legendItem}>
+          <View
+            style={[
+              styles.legendMark,
+              { backgroundColor: one.color },
+              one.role === SERIES_ROLES.REFERENCE && styles.legendMarkReference,
+            ]}
+          />
+          <Text style={[styles.legendText, { color: c.textSecondary }]} numberOfLines={1}>
+            {one.name}
+          </Text>
         </View>
-      )}
+      ))}
+    </View>
+  );
+
+  // Развёрнутый вид: полотно занимает экран целиком, управление висит поверх.
+  // Цель разворота — работать с координатной плоскостью, а не смотреть на
+  // строку кнопок, которая отняла у неё высоту
+  if (fullscreen) {
+    return (
+      <View style={styles.fullscreenRoot}>
+        {canvas}
+        {legendRow}
+        {toolbar}
+      </View>
+    );
+  }
+
+  return (
+    <View>
+      {toolbar}
+      {canvas}
+      {legendRow}
 
       {/* Что отложено по осям. Стрелки, а не подписи вдоль самих осей: места
           на узком полотне телефона нет, поворот текста в react-native-svg на
@@ -483,6 +533,32 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
+  },
+  // Развёрнутое полотно без скруглений и рамки: оно и есть экран
+  canvasFull: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  fullscreenRoot: {
+    flex: 1,
+  },
+  legendFloating: {
+    position: 'absolute',
+    left: spacing.md,
+    marginTop: 0,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    opacity: 0.92,
+    zIndex: 2,
+  },
+  // Кривая сравнения помечена пунктиром: цвета мало, когда рядом две кривые
+  // и обе тонкие
+  legendMarkReference: {
+    height: 0,
+    width: 12,
+    borderRadius: 0,
+    borderTopWidth: 2,
+    borderStyle: 'dashed',
   },
   // Легенда: переносится по строкам — скважин может быть много
   legend: {

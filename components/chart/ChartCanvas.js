@@ -160,8 +160,9 @@ export default function ChartCanvas({
                   strokeWidth={1.5}
                   strokeLinejoin="round"
                   strokeLinecap="round"
+                  strokeDasharray="6 4"
                   fill="none"
-                  opacity={0.85}
+                  opacity={0.9}
                 />
               ) : null}
               {series.dots.map((dot, i) => (
@@ -260,7 +261,10 @@ export default function ChartCanvas({
                 style={[
                   styles.tickLabel,
                   styles.tickLabelX,
-                  { left: tick.x - 26, color: c.faint },
+                  // Привязка к нижнему краю области построения, а не к низу
+                  // полотна: в развёрнутом виде низ полотна — это низ экрана,
+                  // и подписи уходили под плавающие переключатели
+                  { left: tick.x - 26, top: plot.y + plot.h + 6, color: c.faint },
                 ]}
                 numberOfLines={1}
               >
@@ -291,7 +295,6 @@ const styles = StyleSheet.create({
     lineHeight: 14,
   },
   tickLabelX: {
-    bottom: 10,
     width: 52,
     textAlign: 'center',
   },
