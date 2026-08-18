@@ -1796,6 +1796,14 @@ export default function DataProcessingScreen({ route, navigation }) {
    */
   const handlePhaseChange = (next) => {
     setPhase(next);
+    // Выбор фазы задаёт и то, по какой кривой считаются T, a, C и S: выбрал
+    // восстановление — числа идут по восстановлению. Переключатель кривой
+    // ниже остаётся, но как отступление от этого правила, а не как
+    // единственный способ его задать
+    setFitSeries(
+      next === PHASES.RECOVERY ? FIT_SERIES.RECOVERY : FIT_SERIES.PUMPING,
+    );
+
     if (next !== PHASES.RECOVERY || !dualJournals || !measurements.length)
       return;
 

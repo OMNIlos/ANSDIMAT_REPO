@@ -23,7 +23,7 @@
  * записи по времени, не теряя размаха по понижению.
  */
 
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureDetector } from 'react-native-gesture-handler';
@@ -179,7 +179,28 @@ export default function DrawdownChart({
   const c = theme.colors;
   const insets = useSafeAreaInsets();
 
-  const chartHeight = height ?? DEFAULT_HEIGHT;
+  /**
+   * Настоящий размер полотна в развёрнутом виде
+   *
+   * Меряем сам себя, а не берём переданные ширину и высоту окна: контейнер
+   * экрана ниже окна на системные полосы, и полотно вылезало за него —
+   * подписи оси абсцисс и полоса её растяжения оказывались за пределами
+   * компонента, на белом фоне приложения, и до полосы было не дотянуться.
+   */
+  const [box, setBox] = useState(null);
+  const handleLayout = useCallback((event) => {
+    const next = event.nativeEvent.layout;
+    setBox((prev) =>
+      prev && prev.width === next.width && prev.height === next.height
+        ? prev
+        : { width: next.width, height: next.height }
+    );
+  }, []);
+
+  const chartWidth = fullscreen && box?.width > 0 ? box.width : width;
+  const chartHeight = fullscreen
+    ? (box?.height > 0 ? box.height : (height ?? DEFAULT_HEIGHT))
+    : (height ?? DEFAULT_HEIGHT);
 
   // Серии в координатах данных: от масштаба не зависят, считаются один раз.
   // Совместимый вход приводится к общему: экран может передать либо `series`,
@@ -232,7 +253,7 @@ export default function DrawdownChart({
       return {
         x: PADDING.left,
         y: PADDING.top,
-        w: Math.max(40, width - PADDING.left - PADDING.right),
+        w: Math.max(40, chartWidth - PADDING.left - PADDING.right),
         h: Math.max(40, chartHeight - PADDING.top - PADDING.bottom),
       };
     }
@@ -247,10 +268,10 @@ export default function DrawdownChart({
     return {
       x: PADDING_FULL.left,
       y: top,
-      w: Math.max(40, width - PADDING_FULL.left - PADDING_FULL.right),
+      w: Math.max(40, chartWidth - PADDING_FULL.left - PADDING_FULL.right),
       h: Math.max(40, chartHeight - top - bottom),
     };
-  }, [width, chartHeight, fullscreen, insets.top, insets.bottom]);
+  }, [chartWidth, chartHeight, fullscreen, insets.top, insets.bottom]);
 
   // Исходная видимая область с запасом по краям. Считается по всем кривым
   // сразу: кривая соседней скважины, не влезшая в масштаб основной,
@@ -435,7 +456,7 @@ export default function DrawdownChart({
         <ChartCanvas
           scene={scene}
           plot={plot}
-          width={width}
+          width={chartWidth}
           height={chartHeight}
           colors={c}
           selected={selected}
@@ -490,7 +511,10 @@ export default function DrawdownChart({
   // строку кнопок, которая отняла у неё высоту
   if (fullscreen) {
     return (
-      <View style={styles.fullscreenRoot}>
+      <View
+        style={[styles.fullscreenRoot, { backgroundColor: c.plotBg }]}
+        onLayout={handleLayout}
+      >
         {canvas}
         {legendRow}
         {toolbar}
