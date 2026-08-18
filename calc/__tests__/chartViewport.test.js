@@ -119,6 +119,32 @@ describe('panViewport', () => {
     expect(moved.x1).toBeCloseTo(6, 8);
   });
 
+  test('несуществующее смещение не портит окно', () => {
+    // Набор полей у события жеста разнится от платформы к платформе: там, где
+    // приращения нет, оно приходит undefined. Раньше это давало NaN, и окно
+    // подменялось видом по данным — перетаскивание выглядело как сброс
+    const kept = panViewport({
+      view: { x0: 1, x1: 3, y0: 5, y1: 20 },
+      dx: undefined,
+      dy: undefined,
+      plot: PLOT,
+      base: BASE,
+    });
+    expect(kept).toEqual({ x0: 1, x1: 3, y0: 5, y1: 20 });
+  });
+
+  test('NaN в смещении не портит окно', () => {
+    const kept = panViewport({
+      view: { x0: 1, x1: 3, y0: 5, y1: 20 },
+      dx: NaN,
+      dy: 0,
+      plot: PLOT,
+      base: BASE,
+    });
+    expect(kept.x0).toBeCloseTo(1, 10);
+    expect(kept.x1).toBeCloseTo(3, 10);
+  });
+
   test('никакая череда сдвигов не теряет данные', () => {
     let view = BASE;
     for (let i = 0; i < 200; i += 1) {

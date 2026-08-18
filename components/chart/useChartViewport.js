@@ -42,8 +42,14 @@ import {
 } from '../../calc/chartGeometry';
 import { zoomViewport, panViewport, clampViewport } from '../../calc/chartViewport';
 
-/** Не чаще чем раз в 16 мс переносим видимую область в React */
-const SYNC_INTERVAL_MS = 16;
+/**
+ * Порог активации перетаскивания, px
+ *
+ * Восемь пикселей ощущаются как залипание: палец уже поехал, а полотно ещё
+ * стоит. В Desmos полотно трогается сразу. Два пикселя — это дрожание руки,
+ * ниже опускать нельзя, иначе тап по замеру перестанет отличаться от сдвига.
+ */
+const PAN_THRESHOLD = 2;
 
 /** Радиус захвата замера пальцем, px */
 const TAP_RADIUS = 26;
@@ -70,6 +76,18 @@ const AXIS_GRAB = 12;
 
 /** Насколько сдвиг пальца по полосе оси меняет её масштаб */
 const AXIS_STRETCH_BASE = 2;
+
+/**
+ * Доля скорости, остающаяся за кадр при выбеге
+ *
+ * Полотно, встающее колом в момент отрыва пальца, и есть то самое ощущение
+ * деревянности: в Desmos и на любой карте оно проезжает по инерции. Значение
+ * подобрано под шестьдесят кадров в секунду — примерно полсекунды выбега.
+ */
+const GLIDE_FRICTION = 0.94;
+
+/** Скорость, ниже которой выбег незаметен и его пора гасить, px/с */
+const GLIDE_MIN_SPEED = 24;
 
 /**
  * Область просмотра и жесты над ней
@@ -146,47 +164,110 @@ export default function useChartViewport({
   const grabDX = useSharedValue(0);
   const grabDY = useSharedValue(0);
 
-  const lastSyncRef = useRef(0);
-  const pendingRef = useRef(null);
-  const timerRef = useRef(null);
+  /**
+   * Смещение пальца на прошлом кадре
+   *
+   * Приращение считается вычитанием, а не берётся из `event.changeX`: этого
+   * поля в жесте нет на всех платформах, и там, где его нет, оно приходит
+   * `undefined`. Дальше вычитание давало NaN, окно портилось, а защита от
+   * испорченного окна возвращала вид по данным — перетаскивание выглядело
+   * как сброс масштаба, а не как сдвиг.
+   */
+  const prevTX = useSharedValue(0);
+  const prevTY = useSharedValue(0);
+
 
   /**
-   * Переносит область в React не чаще заданного интервала
+   * Переносит область из потока жеста в React
    *
-   * Отброшенный кадр не теряется, а досылается таймером: раньше последнее
-   * состояние доходило до React только через `onEnd` жеста, и любой путь мимо
-   * него оставлял два источника правды рассогласованными.
+   * Без ограничения частоты: раньше кадр придерживался на 16 мс, и полотно
+   * заметно отставало от пальца — жест ощущался деревянным. Сцена считается
+   * по десяткам точек, этой работы на кадр немного, а лишний кадр задержки
+   * виден сразу.
    */
   const syncView = useCallback((next) => {
-    pendingRef.current = next;
-    const now = Date.now();
-    if (now - lastSyncRef.current >= SYNC_INTERVAL_MS) {
-      lastSyncRef.current = now;
-      setView(next);
-      return;
-    }
-    if (timerRef.current) return;
-    timerRef.current = setTimeout(() => {
-      timerRef.current = null;
-      lastSyncRef.current = Date.now();
-      setView(pendingRef.current);
-    }, SYNC_INTERVAL_MS);
+    setView(next);
   }, []);
 
-  useEffect(() => () => clearTimeout(timerRef.current), []);
+  // Идёт ли сейчас выбег: кадр анимации, который надо уметь оборвать новым
+  // касанием, иначе полотно продолжит ехать из-под пальца
+  const glideRef = useRef(0);
+  const stopGlide = useCallback(() => {
+    if (glideRef.current) {
+      cancelAnimationFrame(glideRef.current);
+      glideRef.current = 0;
+    }
+  }, []);
+
+  useEffect(() => stopGlide, [stopGlide]);
 
   /** Гарантированный перенос после жеста, с записью в хранилище масштабов */
   const commitView = useCallback(
     (next) => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-      lastSyncRef.current = 0;
       viewportStore?.set(jsRef.current.viewKey, next);
       setView(next);
     },
     [viewportStore]
+  );
+
+  /**
+   * Выбег после отрыва пальца
+   *
+   * Скорость приходит от жеста в пикселях в секунду, дальше она гасится
+   * трением и на каждом кадре превращается в обычный сдвиг области. Тот же
+   * `panViewport`, что и при перетаскивании, поэтому и ограничение положения
+   * работает на выбеге тоже: данные не улетят по инерции.
+   *
+   * @param {number} vx - скорость по X, px/с
+   * @param {number} vy - скорость по Y, px/с
+   */
+  const glide = useCallback(
+    (vx, vy) => {
+      stopGlide();
+      // Скорости может не быть: набор полей события у жеста разный на разных
+      // платформах. Без неё просто закрепляем текущее положение
+      if (!isFinite(vx) || !isFinite(vy) || Math.hypot(vx, vy) <= GLIDE_MIN_SPEED) {
+        commitView(viewport.value);
+        return;
+      }
+
+      let velX = vx;
+      let velY = vy;
+      let last = Date.now();
+
+      const step = () => {
+        const now = Date.now();
+        // Кадр мог задержаться: без ограничения долгая пауза давала бы
+        // один огромный скачок вместо плавного движения
+        const dt = Math.min(0.05, (now - last) / 1000);
+        last = now;
+
+        const decay = Math.pow(GLIDE_FRICTION, dt * 60);
+        velX *= decay;
+        velY *= decay;
+
+        const state = jsRef.current;
+        const next = panViewport({
+          view: viewport.value,
+          dx: velX * dt,
+          dy: velY * dt,
+          plot: state.plot,
+          base: state.base,
+        });
+        viewport.value = next;
+        setView(next);
+
+        if (Math.hypot(velX, velY) > GLIDE_MIN_SPEED) {
+          glideRef.current = requestAnimationFrame(step);
+        } else {
+          glideRef.current = 0;
+          commitView(next);
+        }
+      };
+
+      glideRef.current = requestAnimationFrame(step);
+    },
+    [commitView, stopGlide, viewport]
   );
 
   // Сменилась система координат: берём масштаб из хранилища, если геолог уже
@@ -361,15 +442,25 @@ export default function useChartViewport({
           .maxPointers(1)
           // Порог активации: без него перетаскивание перехватывает любое касание
           // и одиночный тап по точке никогда не срабатывает
-          .activeOffsetX([-8, 8])
-          .activeOffsetY([-8, 8])
+          .activeOffsetX([-PAN_THRESHOLD, PAN_THRESHOLD])
+          .activeOffsetY([-PAN_THRESHOLD, PAN_THRESHOLD])
           .onBegin(() => {
             'worklet';
             dragTarget.value = DRAG_TARGETS.UNDECIDED;
+            prevTX.value = 0;
+            prevTY.value = 0;
+            // Новое касание останавливает выбег: иначе полотно продолжает
+            // ехать из-под пальца, и поймать нужную точку невозможно
+            runOnJS(stopGlide)();
           })
           .onUpdate((event) => {
             'worklet';
             const { plot: p, base: b, freedom: free, minZoom: lo, maxZoom: hi } = live.value;
+
+            const changeX = event.translationX - prevTX.value;
+            const changeY = event.translationY - prevTY.value;
+            prevTX.value = event.translationX;
+            prevTY.value = event.translationY;
 
             // Что именно тащим, решается на первом же кадре движения, а не при
             // касании: жест начинается раньше активации, и между этими моментами
@@ -422,7 +513,7 @@ export default function useChartViewport({
               dragTarget.value === DRAG_TARGETS.AXIS_Y
             ) {
               const alongX = dragTarget.value === DRAG_TARGETS.AXIS_X;
-              const share = alongX ? event.changeX / p.w : event.changeY / p.h;
+              const share = alongX ? changeX / p.w : changeY / p.h;
               const factor = Math.pow(AXIS_STRETCH_BASE, share);
               viewport.value = zoomViewport({
                 view: viewport.value,
@@ -439,15 +530,21 @@ export default function useChartViewport({
 
             viewport.value = panViewport({
               view: viewport.value,
-              dx: event.changeX,
-              dy: event.changeY,
+              dx: changeX,
+              dy: changeY,
               plot: p,
               base: b,
             });
           })
-          .onEnd(() => {
+          .onEnd((event) => {
             'worklet';
-            runOnJS(commitView)(viewport.value);
+            // Выбег только у полотна: растянутая ось и утащенная точка стоят
+            // ровно там, где их оставил палец
+            if (dragTarget.value === DRAG_TARGETS.VIEW) {
+              runOnJS(glide)(event.velocityX, event.velocityY);
+            } else {
+              runOnJS(commitView)(viewport.value);
+            }
           })
           // Приходит и когда жест завершился, и когда провалился: иначе после
           // неудачного касания решение о захвате осталось бы от прошлого раза
@@ -457,8 +554,8 @@ export default function useChartViewport({
           })
       ),
     [
-      blockScroll, commitView, live, viewport, dragTarget,
-      grabDX, grabDY, a0x, a0y, a1x, a1y, moveAnchor,
+      blockScroll, commitView, glide, stopGlide, live, viewport, dragTarget,
+      grabDX, grabDY, prevTX, prevTY, a0x, a0y, a1x, a1y, moveAnchor,
     ]
   );
 

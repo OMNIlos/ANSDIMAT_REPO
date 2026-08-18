@@ -178,5 +178,15 @@ export function zoomViewport({
  */
 export function panViewport({ view, dx, dy, plot, base, overscan = OVERSCAN }) {
   'worklet';
-  return clampViewport(panView({ view, dx, dy, plot }), { base, overscan });
+  // Нечисловое смещение считаем нулевым, а не пропускаем в расчёт. Набор
+  // полей у события жеста разнится от платформы к платформе, и отсутствующее
+  // поле приходит `undefined`: вычитание давало NaN, окно портилось, а защита
+  // от испорченного окна возвращала вид по данным — перетаскивание выглядело
+  // как сброс масштаба
+  const safeDX = isFinite(dx) ? dx : 0;
+  const safeDY = isFinite(dy) ? dy : 0;
+  return clampViewport(panView({ view, dx: safeDX, dy: safeDY, plot }), {
+    base,
+    overscan,
+  });
 }
