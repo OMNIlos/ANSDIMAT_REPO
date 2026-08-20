@@ -27,6 +27,10 @@ const GAL_PER_M3 = 264.1720523581;
 const SEC_PER_DAY = 86400;
 /** Минут в сутках */
 const MIN_PER_DAY = 1440;
+/** Квадратных метров в гектаре */
+const SQM_PER_HA = 10000;
+/** Квадратных метров в квадратном километре */
+const SQM_PER_KM2 = 1e6;
 
 /**
  * Минут в сутках — наружу
@@ -46,6 +50,7 @@ export const QUANTITIES = {
   CONDUCTIVITY: 'conductivity',
   DIFFUSIVITY: 'diffusivity',
   DRAWDOWN: 'drawdown',
+  AREA: 'area',
 };
 
 /**
@@ -125,6 +130,20 @@ export const UNITS = {
     options: [
       { key: 'm', labelKey: 'unitMeters', factor: 1 },
       { key: 'ft', labelKey: 'unitFeet', factor: FT_PER_M },
+    ],
+  },
+  // Площадь спрашивают только в расчёте притока в котлован: там задают
+  // размер выработки. Гектары и квадратные километры нужны карьерам —
+  // в квадратных метрах их площадь читается плохо.
+  [QUANTITIES.AREA]: {
+    labelKey: 'quantityArea',
+    base: 'm2',
+    default: 'm2',
+    options: [
+      { key: 'm2', labelKey: 'unitM2', factor: 1 },
+      { key: 'ha', labelKey: 'unitHectare', factor: 1 / SQM_PER_HA },
+      { key: 'km2', labelKey: 'unitKm2', factor: 1 / SQM_PER_KM2 },
+      { key: 'ft2', labelKey: 'unitFt2', factor: SQFT_PER_SQM },
     ],
   },
 };
