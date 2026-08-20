@@ -160,38 +160,7 @@ export function predictDrawdownTheis({ Q, T, S, r, t }, wellFunction) {
   return { s, u, W };
 }
 
-/**
- * Приток в котлован (стационарный, напорный пласт)
- *
- * Q = 2π·k·m·s₀ / ln(R/r₀)
- *
- * @param {Object} params
- * @param {number} params.k - коэффициент фильтрации, м/сут
- * @param {number} params.m - мощность пласта, м
- * @param {number} params.s0 - понижение в котловане, м
- * @param {number} params.R - радиус влияния, м
- * @param {number} params.r0 - приведённый радиус котлована, м
- * @returns {{Q: number, formula: string}} приток, м³/сут
- */
-export function pitInflow({ k, m, s0, R, r0 }) {
-  const formula = 'Q = 2π·k·m·s₀ / ln(R/r₀)';
-  if (!(k > 0) || !(m > 0) || !(s0 > 0) || !(r0 > 0) || !(R > r0)) {
-    return { Q: NaN, formula };
-  }
-  const Q = (2 * Math.PI * k * m * s0) / Math.log(R / r0);
-  return { Q, formula };
-}
-
-/**
- * Приведённый радиус котлована прямоугольной формы
- *
- * r₀ = η·(a + b)/4, для практических расчётов принимается r₀ = √(F/π),
- * где F — площадь котлована.
- *
- * @param {number} area - площадь котлована, м²
- * @returns {number} приведённый радиус, м
- */
-export function equivalentPitRadius(area) {
-  if (!(area > 0)) return NaN;
-  return Math.sqrt(area / Math.PI);
-}
+// Приток в котлован и приведение его радиуса живут в `calc/pitInflow.js`:
+// там полный расчёт с четырьмя схемами, шестью формулами радиуса влияния и
+// проверками. Держать рядом упрощённый дубль значило бы иметь в проекте две
+// разные формулы одного и того же — расходящиеся при первой же правке.

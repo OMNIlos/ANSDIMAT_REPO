@@ -5,8 +5,6 @@
 import {
   estimateConductivity,
   predictDrawdownTheis,
-  pitInflow,
-  equivalentPitRadius,
   kozenyPenetrationFactor,
   AQUIFER_TYPES,
 } from '../aquifer';
@@ -154,38 +152,5 @@ describe('predictDrawdownTheis', () => {
   test('возвращает NaN при недопустимых данных', () => {
     expect(predictDrawdownTheis({ Q: 0, T: 500, S: 1e-4, r: 50, t: 1 }, wellFunction).s).toBeNaN();
     expect(predictDrawdownTheis({ Q: 100, T: 500, S: 1e-4, r: 50, t: 0 }, wellFunction).s).toBeNaN();
-  });
-});
-
-describe('pitInflow', () => {
-  test('считает приток по формуле Дюпюи', () => {
-    const k = 10;
-    const m = 15;
-    const s0 = 5;
-    const R = 400;
-    const r0 = 20;
-
-    const { Q } = pitInflow({ k, m, s0, R, r0 });
-    const expected = (2 * Math.PI * k * m * s0) / Math.log(R / r0);
-
-    expect(Q).toBeCloseTo(expected, 8);
-  });
-
-  test('возвращает NaN, если радиус влияния не больше радиуса котлована', () => {
-    expect(pitInflow({ k: 10, m: 15, s0: 5, R: 20, r0: 20 }).Q).toBeNaN();
-    expect(pitInflow({ k: 10, m: 15, s0: 5, R: 10, r0: 20 }).Q).toBeNaN();
-  });
-});
-
-describe('equivalentPitRadius', () => {
-  test('переводит площадь в приведённый радиус', () => {
-    // Круг площадью πr² должен дать обратно r
-    const r = 12;
-    expect(equivalentPitRadius(Math.PI * r * r)).toBeCloseTo(r, 10);
-  });
-
-  test('возвращает NaN для неположительной площади', () => {
-    expect(equivalentPitRadius(0)).toBeNaN();
-    expect(equivalentPitRadius(-5)).toBeNaN();
   });
 });
