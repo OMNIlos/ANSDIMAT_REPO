@@ -15,7 +15,7 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import I18n from '../../Localization';
-import { QUANTITIES, MINUTES_PER_DAY } from '../../calc/units';
+import { QUANTITIES } from '../../calc/units';
 import { useUnits } from '../../UnitsContext';
 import { computeWellDrawdown, drawdownSeries } from '../../calc/wellDrawdown';
 import { WELL_LITHOLOGY, storativityFromSs } from '../../calc/lithology';
@@ -32,6 +32,7 @@ import {
   StatRow,
   parseNumber,
   formatValue,
+  formatCompact,
   formatExponential,
   styles as shared,
 } from './shared';
@@ -66,9 +67,6 @@ export default function ForecastTab({ contentWidth }) {
   const inDraw = (text) => toBase(parseNumber(text), QUANTITIES.DRAWDOWN);
   const inCond = (text) => toBase(parseNumber(text), QUANTITIES.CONDUCTIVITY);
   const inDiff = (text) => toBase(parseNumber(text), QUANTITIES.DIFFUSIVITY);
-  // Формулы водозабора считают время в сутках, базовая единица приложения —
-  // минута: журналы ОФР ведутся в ней
-  const inDays = (text) => toBase(parseNumber(text), QUANTITIES.TIME) / MINUTES_PER_DAY;
   const out = (value, quantity) => formatValue(fromBase(value, quantity));
 
   const uFlow = unitLabel(QUANTITIES.FLOW);
@@ -76,11 +74,14 @@ export default function ForecastTab({ contentWidth }) {
   const uDraw = unitLabel(QUANTITIES.DRAWDOWN);
   const uCond = unitLabel(QUANTITIES.CONDUCTIVITY);
   const uDiff = unitLabel(QUANTITIES.DIFFUSIVITY);
-  const uTime = unitLabel(QUANTITIES.TIME);
 
   const [scheme, setScheme] = useState('theis');
   const [flow, setFlow] = useState('100');
-  const [time, setTime] = useState(String(9125 * MINUTES_PER_DAY));
+  // Длительность откачки задаётся в сутках, а не в выбранной пользователем
+  // размерности времени. Базовая единица времени в приложении — минута, она
+  // выбрана под журналы ОФР, и водозабор на четверть века превращался бы в
+  // «13 140 000 мин». Вкладка притока считает время так же, в сутках
+  const [time, setTime] = useState('9125');
   const [wellRadius, setWellRadius] = useState('0.045');
   const [distance, setDistance] = useState('5');
   const [k, setK] = useState('2');
@@ -99,7 +100,7 @@ export default function ForecastTab({ contentWidth }) {
     () => ({
       scheme,
       Q: inFlow(flow),
-      t: inDays(time),
+      t: parseNumber(time),
       r0: inLen(wellRadius),
       r: inLen(distance),
       k: inCond(k),
@@ -120,10 +121,16 @@ export default function ForecastTab({ contentWidth }) {
   const series = useMemo(() => (result.ok ? drawdownSeries(raw) : []), [result, raw]);
 
   const caption = result.ok
-    ? `k = ${out(result.k, QUANTITIES.CONDUCTIVITY)} ${uCond} · Q = ${out(result.Q, QUANTITIES.FLOW)} ${uFlow}`
+    ? `k = ${formatCompact(fromBase(result.k, QUANTITIES.CONDUCTIVITY))} ${uCond} · Q = ${formatCompact(fromBase(result.Q, QUANTITIES.FLOW))} ${uFlow}`
     : null;
 
   const hasError = (code) => !result.ok && result.errors.includes(code);
+
+  // Четверть века в сутках — это 9125, и на глаз срок не читается.
+  // Подсказка в годах стоит и в веб-версии
+  const days = parseNumber(time);
+  const yearsHint =
+    days >= 365 ? I18n.t('wellYearsHint', { years: (days / 365).toFixed(1) }) : null;
 
   /**
    * Подставляет справочные параметры выбранной породы
@@ -155,7 +162,14 @@ export default function ForecastTab({ contentWidth }) {
       <Card>
         <Field label={I18n.t('wellFlow')} value={flow} onChange={setFlow} unit={uFlow} error={hasError('Q')}
           hint={result.ok ? `${formatValue(result.Q / 24)} ${I18n.t('unitM3Hour')} · ${formatValue(result.Q / 86.4)} ${I18n.t('unitLSec')}` : null} />
-        <Field label={I18n.t('wellTime')} value={time} onChange={setTime} unit={uTime} error={hasError('t')} />
+        <Field
+          label={I18n.t('wellTime')}
+          value={time}
+          onChange={setTime}
+          unit={I18n.t('unitDays')}
+          error={hasError('t')}
+          hint={yearsHint}
+        />
         <Field label={I18n.t('wellRadius')} value={wellRadius} onChange={setWellRadius} unit={uLen} error={hasError('r0')} />
         <Field label={I18n.t('wellDistance')} value={distance} onChange={setDistance} unit={uLen} error={hasError('r')} />
       </Card>

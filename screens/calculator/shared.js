@@ -52,6 +52,24 @@ export function formatValue(value) {
 }
 
 /**
+ * Компактная запись числа для подписей на чертеже
+ *
+ * Обычный формат добавляет три знака после запятой всегда, и подпись схемы
+ * получалась «k = 2.000 м/сут · Q = 100.000 м³/сут» — вдвое длиннее нужного и
+ * налезала на подпись скважины. Здесь хвостовые нули убираются.
+ *
+ * @param {number} value - значение
+ * @returns {string} короткая запись
+ */
+export function formatCompact(value) {
+  if (!isFinite(value)) return '—';
+  const abs = Math.abs(value);
+  if (abs !== 0 && (abs < 0.001 || abs >= 1e6)) return value.toExponential(2);
+  const rounded = abs >= 100 ? value.toFixed(0) : abs >= 1 ? value.toFixed(2) : value.toPrecision(3);
+  return String(Number(rounded));
+}
+
+/**
  * Форматирует значение в экспоненциальной записи с показателем
  *
  * Нужна таблицам, где рядом стоят числа разных порядков: там колонка из

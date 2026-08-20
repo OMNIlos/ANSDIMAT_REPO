@@ -32,6 +32,7 @@ import {
   StatRow,
   parseNumber,
   formatValue,
+  formatCompact,
   styles as shared,
 } from './shared';
 
@@ -157,7 +158,7 @@ export default function PitTab({ contentWidth }) {
   const comparison = useMemo(() => (result.ok && !river ? compareR(raw) : []), [result, raw, river]);
 
   const caption = result.ok
-    ? `k = ${out(result.k, QUANTITIES.CONDUCTIVITY)} ${uCond} · Q = ${out(result.Q, QUANTITIES.FLOW)} ${uFlow}`
+    ? `k = ${formatCompact(fromBase(result.k, QUANTITIES.CONDUCTIVITY))} ${uCond} · Q = ${formatCompact(fromBase(result.Q, QUANTITIES.FLOW))} ${uFlow}`
     : null;
 
   /**
