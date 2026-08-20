@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Ansdimat",
-    "slug": "Ansdimat",
+    "slug": "ansdimat",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/icon-app.png",
@@ -23,7 +23,12 @@
       "package": "com.omnion.Ansdimat",
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "ACCESS_COARSE_LOCATION",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.ACCESS_MEDIA_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "web": {
@@ -71,10 +76,10 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "ccd8e4bf-0524-44c2-b5f4-f3cd1aa817bf"
+        "projectId": "4e1153c8-243d-40a1-9893-99873fc8bd63"
       }
     },
-    "owner": "omnion",
+    "owner": "entropus",
     "scheme": "ansdimat"
   }
 }

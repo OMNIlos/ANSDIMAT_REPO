@@ -21,6 +21,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { LanguageProvider } from './LanguageContext.js';
 import { ThemeProvider } from './ThemeContext.js';
+import { UnitsProvider } from './UnitsContext.js';
 import { AuthProvider } from './AuthContext.js';
 import { SyncProvider } from './sync/SyncContext.js';
 import { EntitlementsProvider } from './billing/EntitlementsContext.js';
@@ -100,6 +101,7 @@ export default function App() {
       <SafeAreaProvider>
         <LanguageProvider>
         <ThemeProvider>
+        <UnitsProvider>
           <AuthProvider>
           <SyncProvider>
           <EntitlementsProvider>
@@ -116,6 +118,7 @@ export default function App() {
           </EntitlementsProvider>
           </SyncProvider>
           </AuthProvider>
+          </UnitsProvider>
           </ThemeProvider>
         </LanguageProvider>
       </SafeAreaProvider>

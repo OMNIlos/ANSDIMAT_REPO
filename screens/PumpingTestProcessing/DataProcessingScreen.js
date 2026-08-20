@@ -22,6 +22,7 @@ import {
   TouchableOpacity,
   useWindowDimensions,
   ActivityIndicator,
+  Modal,
 } from "react-native";
 import { useTheme } from "react-native-paper";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -29,14 +30,21 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 // Прокрутка из gesture-handler: только её умеет блокировать жест графика,
 // пока палец тянет полотно. Обычный ScrollView из react-native этого не умеет
-import { ScrollView } from "react-native-gesture-handler";
+import {
+  ScrollView,
+  GestureHandlerRootView,
+} from "react-native-gesture-handler";
 import I18n from "../../Localization";
 import DrawdownChart, { FIT_MODES } from "../../components/DrawdownChart";
 import DiagnosticPlot from "../../components/DiagnosticPlot";
 import RegimeVerdict from "../../components/RegimeVerdict";
 import { toggleSelection, freeLine } from "../../calc/chartGeometry";
 import { SERIES_ROLES, residualDrawdown } from "../../calc/chartSeries";
-import { chartRawSeries, FIT_SERIES } from "./useChartSeries";
+import {
+  chartRawSeries,
+  finalDrawdownAtStop,
+  FIT_SERIES,
+} from "./useChartSeries";
 import {
   X_MODES,
   processDrawdown,
@@ -66,6 +74,7 @@ import {
   createWell,
   deleteWell,
   setWellDistance,
+  setWellFinalDrawdown,
   setWellPosition,
 } from "../../db/wells";
 import ConfirmDialog from "../../components/ui/ConfirmDialog";
@@ -462,9 +471,17 @@ export default function DataProcessingScreen({ route, navigation }) {
   // остановки насоса. ТЗ требует оба вида — обрабатываются они по-разному
   const [phase, setPhase] = useState(PHASES.PUMPING);
   const [durationText, setDurationText] = useState("");
-  // Понижение на момент остановки насоса: точка, от которой отсчитывается
-  // восстановление. Табл. «Окончание» настольного АНСДИМАТ
-  const [finalDrawdownText, setFinalDrawdownText] = useState("");
+  /**
+   * Понижение на момент остановки насоса — по журналам
+   *
+   * Ключ тот же, что у журналов замеров: у куста понижение на остановке своё
+   * у каждой скважины — опытная садится на метры, дальняя наблюдательная на
+   * сантиметры. Одно число на весь проект давало остаточное понижение чужой
+   * скважины, разница выходила отрицательной, обрезалась нулём, и кривая
+   * восстановления ложилась ровной горизонталью по нулю. Табл. «Окончание»
+   * настольного АНСДИМАТ ведётся так же — по скважинам.
+   */
+  const [finalDrawdownTexts, setFinalDrawdownTexts] = useState({});
 
   const contentWidth = Math.min(width, 720) - spacing.lg * 2;
   // Развёрнутый график: из высоты экрана вычитаем шапку навигации,
@@ -502,7 +519,6 @@ export default function DataProcessingScreen({ route, navigation }) {
     };
     setQText(show(loaded.Q, QUANTITIES.FLOW));
     setDurationText(show(loaded.pumpingDuration, QUANTITIES.TIME));
-    setFinalDrawdownText(show(loaded.finalDrawdown, QUANTITIES.DRAWDOWN));
     // Журнал восстановления сразу открываем в соответствующей фазе
     if (loaded.ofrType === OFR_TYPES.RECOVERY) setPhase(PHASES.RECOVERY);
     const toRow = (m) => ({
@@ -512,6 +528,18 @@ export default function DataProcessingScreen({ route, navigation }) {
     });
     const loadedWells = loaded.wells ?? [];
     setWells(loadedWells);
+    // Понижение на остановке: у журналов с одной скважиной оно проектное, у
+    // куста лежит в строке скважины. Пусто — значит берётся из последнего
+    // замера журнала откачки, см. finalDrawdownAtStop
+    setFinalDrawdownTexts({
+      [SINGLE_WELL]: show(loaded.finalDrawdown, QUANTITIES.DRAWDOWN),
+      ...Object.fromEntries(
+        loadedWells.map((well) => [
+          well.id,
+          show(well.finalDrawdown, QUANTITIES.DRAWDOWN),
+        ]),
+      ),
+    });
     // Открытой остаётся прежняя скважина, если она никуда не делась: экран
     // перечитывается при каждом возврате, и сбрасывать выбор было бы обидно
     setActiveWellId((prev) =>
@@ -599,10 +627,40 @@ export default function DataProcessingScreen({ route, navigation }) {
   const Q = toBase(parseNumber(qText), QUANTITIES.FLOW);
   const isRecovery = phase === PHASES.RECOVERY;
   const pumpingDuration = toBase(parseNumber(durationText), QUANTITIES.TIME);
-  const finalDrawdown = toBase(
-    parseNumber(finalDrawdownText),
-    QUANTITIES.DRAWDOWN,
+
+  // Одиночная и кустовая откачки ведут два раздельных журнала — понижение и
+  // восстановление, как таблицы «Понижение» и «Восстановление» настольного
+  // АНСДИМАТ. У куста пара журналов своя у каждой скважины. Остальные виды
+  // ОФР заполняют один журнал, и на восстановлении его строки — это и есть
+  // замеры после остановки насоса
+  const dualJournals =
+    project?.ofrType === OFR_TYPES.SINGLE ||
+    project?.ofrType === OFR_TYPES.CLUSTER;
+
+  const clusterWells = project?.ofrType === OFR_TYPES.CLUSTER;
+
+  // Поле понижения на остановке правит открытый журнал, а не проект целиком
+  const finalDrawdownText = finalDrawdownTexts[journalKey] ?? "";
+  const setFinalDrawdownText = useCallback(
+    (value) =>
+      setFinalDrawdownTexts((prev) => ({ ...prev, [journalKey]: value })),
+    [journalKey],
   );
+
+  /**
+   * Понижение на момент остановки насоса у открытой скважины
+   *
+   * Заданное руками важнее журнала: он не всегда доведён до остановки. Пустое
+   * поле — берём последнюю строку журнала откачки этой же скважины, потому
+   * что насос работал до неё. Раньше число было одно на весь проект, и у
+   * куста остаточное понижение считалось от понижения чужой скважины.
+   */
+  const finalDrawdown = dualJournals
+    ? finalDrawdownAtStop({
+        measurements,
+        stored: toBase(parseNumber(finalDrawdownText), QUANTITIES.DRAWDOWN),
+      })
+    : toBase(parseNumber(finalDrawdownText), QUANTITIES.DRAWDOWN);
 
   /**
    * Восстановился ли уровень
@@ -619,20 +677,10 @@ export default function DataProcessingScreen({ route, navigation }) {
     return recoveryCompleteness(finalDrawdown - lastRecovery, finalDrawdown);
   }, [recoveryMeasurements, finalDrawdown]);
 
-  // Одиночная и кустовая откачки ведут два раздельных журнала — понижение и
-  // восстановление, как таблицы «Понижение» и «Восстановление» настольного
-  // АНСДИМАТ. У куста пара журналов своя у каждой скважины. Остальные виды
-  // ОФР заполняют один журнал, и на восстановлении его строки — это и есть
-  // замеры после остановки насоса
-  const dualJournals =
-    project?.ofrType === OFR_TYPES.SINGLE ||
-    project?.ofrType === OFR_TYPES.CLUSTER;
   // Прямая Тейса строится только там, где журнал один. У одиночной откачки
   // восстановление на график не выводится, и вести по нему прямую не по чему:
   // и график, и водопроводимость остаются за журналом откачки
   const theisRecovery = isRecovery && !dualJournals;
-
-  const clusterWells = project?.ofrType === OFR_TYPES.CLUSTER;
 
   // Способ построения прямой и выбранные точки: общие для графика и таблицы,
   // поэтому живут здесь, а не внутри графика
@@ -664,12 +712,23 @@ export default function DataProcessingScreen({ route, navigation }) {
    */
   const [freeAnchors, setFreeAnchors] = useState(null);
 
-  // Виды с расстоянием в абсциссе доступны только кусту: у остальных видов
-  // ОФР расстояний нет вовсе. Вид приводится здесь, а не сбрасывается
-  // эффектом: журнал открывают из списка, и с чужим видом графика экран успел
-  // бы мигнуть пустым полотном
+  /**
+   * Доступны ли виды с расстоянием в абсциссе
+   *
+   * Кусту — да: у остальных видов ОФР расстояний нет вовсе. И только на
+   * откачке: площадное s — lg r и комбинированное s — lg(t/r²) читают
+   * понижение при работающем насосе, а на восстановлении такой зависимости
+   * нет — остаточное понижение по Джейкобу равно 0.183·Q/T·lg(t/t′) и от r
+   * не зависит. Раньше эти виды оставались открытыми и в фазе
+   * восстановления: на полотне лежали те же точки откачки, подписи осей
+   * менялись, и прямую по ним можно было ещё и подвинуть.
+   */
+  const distanceModes = clusterWells && !isRecovery;
+
+  // Вид приводится здесь, а не сбрасывается эффектом: журнал открывают из
+  // списка, и с чужим видом графика экран успел бы мигнуть пустым полотном
   const effectiveMode =
-    clusterWells || !TRACKING_BY_MODE[graphMode] ? graphMode : GRAPH_MODES.LOG;
+    distanceModes || !TRACKING_BY_MODE[graphMode] ? graphMode : GRAPH_MODES.LOG;
   const trackingKind = TRACKING_BY_MODE[effectiveMode] ?? TRACKING_KINDS.TIME;
   // Ось времени осталась выбором только у временнóго прослеживания: у
   // остальных абсцисса задана самим видом и всегда логарифмическая
@@ -1053,6 +1112,20 @@ export default function DataProcessingScreen({ route, navigation }) {
    */
   const chartEmpty = useMemo(() => {
     if (basePoints.length > 0) return null;
+    // Прямая Тейса строится по замерам после остановки насоса, и другого
+    // источника у неё нет. Общая подсказка «внесите замеры в журнале выше»
+    // показывает на журнал откачки, который как раз заполнен
+    if (theisPlot && dualJournals && !recoveryMeasurements.length) {
+      return {
+        title: I18n.t("recoveryEmptyTitle", {
+          defaultValue: "Журнал восстановления пуст",
+        }),
+        hint: I18n.t("recoveryEmptyHint", {
+          defaultValue:
+            "Внесите замеры после остановки насоса — прямая Тейса строится по ним.",
+        }),
+      };
+    }
     if (trackingKind === TRACKING_KINDS.AREA) {
       if (wellsWithDistance.length < 2) {
         return {
@@ -1078,7 +1151,14 @@ export default function DataProcessingScreen({ route, navigation }) {
       };
     }
     return null;
-  }, [basePoints.length, trackingKind, wellsWithDistance.length]);
+  }, [
+    basePoints.length,
+    theisPlot,
+    dualJournals,
+    recoveryMeasurements.length,
+    trackingKind,
+    wellsWithDistance.length,
+  ]);
 
   // Кустовая откачка: одна скважина — одна кривая. Прямая ведётся по
   // открытой, остальные идут рядом для сравнения. Строки журналов уже стоят
@@ -1113,6 +1193,21 @@ export default function DataProcessingScreen({ route, navigation }) {
     () => [...dataSeries, ...extraSeries],
     [dataSeries, extraSeries],
   );
+
+  /**
+   * Есть ли на полотне выбор кривой
+   *
+   * Только у куста и только на откачке в координатах s — lg t: там кривая и
+   * есть скважина, и выбрать её значит открыть её журнал вместе с её
+   * расстоянием r. На видах с расстоянием весь куст лежит одним рядом, а на
+   * восстановлении вторая кривая — это фаза опыта, и её выбирает
+   * переключатель «прямая по откачке / по восстановлению».
+   */
+  const seriesPickable =
+    clusterWells &&
+    trackingKind === TRACKING_KINDS.TIME &&
+    !isRecovery &&
+    extraSeries.length > 0;
 
   // Опытная скважина — столбец таблицы расстояний: считают до неё
   const pumpingWell =
@@ -1177,6 +1272,24 @@ export default function DataProcessingScreen({ route, navigation }) {
   const [chartView, setChartView] = useState(VIEWS.FIT);
   // Развёрнут ли график на весь экран
   const [chartFullscreen, setChartFullscreen] = useState(false);
+  /**
+   * Высота места, которое график занимает в списке
+   *
+   * На время разворота график из списка убирается, а его место занимает
+   * пустышка той же высоты. Без неё список бы укоротился, прокрутка съехала
+   * бы к новому концу, и возврат в обычный вид показывал бы уже не то место.
+   */
+  const [chartSlotHeight, setChartSlotHeight] = useState(0);
+  const handleChartSlotLayout = useCallback(
+    (event) => {
+      // Мерим только развёрнутый в списке график: в свёрнутом состоянии там
+      // стоит пустышка, и её высота — это уже измеренная величина
+      if (chartFullscreen) return;
+      const next = event.nativeEvent.layout.height;
+      setChartSlotHeight((prev) => (Math.abs(prev - next) < 1 ? prev : next));
+    },
+    [chartFullscreen],
+  );
 
   // Плавающее меню приложения на развёрнутом графике убирается совсем: оно
   // висит поверх любого экрана и отнимает низ у той самой координатной
@@ -1207,6 +1320,47 @@ export default function DataProcessingScreen({ route, navigation }) {
   const handleToggleSelect = useCallback((index) => {
     setSelectedPoints((prev) => toggleSelection(prev, index));
   }, []);
+
+  /**
+   * Открывает журнал другой скважины куста
+   *
+   * Отметки точек и свободная прямая при этом сбрасываются: точка помнит своё
+   * место в журнале, а журнал теперь другой — прежние номера показали бы
+   * галочки не на тех строках, а свободная прямая осталась бы стоять там, где
+   * её вели по чужой кривой.
+   *
+   * @param {string} wellId - идентификатор скважины
+   */
+  const handleWellChange = useCallback(
+    (wellId) => {
+      setActiveWellId((prev) => {
+        if (prev === wellId) return prev;
+        setSelectedPoints([]);
+        setFreeAnchors(null);
+        return wellId;
+      });
+    },
+    [],
+  );
+
+  /**
+   * Выбирает кривую, по которой ведётся прямая
+   *
+   * Кривые куста на плоскости s — lg t это скважины: у каждой своя, и прямая
+   * идёт по открытой. Выбор кривой на полотне и есть открытие её журнала —
+   * вместе с ним меняется расстояние r, а с ним пьезопроводность и водоотдача.
+   *
+   * @param {string} seriesId - идентификатор кривой; у соседних он совпадает
+   *   с идентификатором скважины
+   */
+  const handleSelectSeries = useCallback(
+    (seriesId) => {
+      if (wells.some((well) => well.id === seriesId)) {
+        handleWellChange(seriesId);
+      }
+    },
+    [wells, handleWellChange],
+  );
 
   const handleFitModeChange = useCallback((next) => {
     setFitMode(next);
@@ -1388,7 +1542,17 @@ export default function DataProcessingScreen({ route, navigation }) {
         pumpingDuration: isFinite(pumpingDuration)
           ? roundBase(pumpingDuration)
           : 0,
-        finalDrawdown: isFinite(finalDrawdown) ? roundBase(finalDrawdown) : 0,
+        // У куста понижение на остановке своё у каждой скважины и лежит в её
+        // строке, см. handleFinalDrawdownBlur. Проектное поле осталось за
+        // журналами с одной скважиной — перезапись его числом открытой
+        // скважины подменяла бы значение при каждом переключении
+        ...(clusterWells
+          ? {}
+          : {
+              finalDrawdown: isFinite(finalDrawdown)
+                ? roundBase(finalDrawdown)
+                : 0,
+            }),
         results: {
           // Сохраняем ту прямую, которую геолог видит на графике,
           // включая проведённую вручную по двум точкам
@@ -1443,12 +1607,34 @@ export default function DataProcessingScreen({ route, navigation }) {
       trackingKind,
       pumpingDuration,
       finalDrawdown,
+      clusterWells,
       toBase,
       activeWellId,
       recoveryRows,
       dualJournals,
     ],
   );
+
+  /**
+   * Записывает понижение на остановке в строку открытой скважины
+   *
+   * Ноль значит «не задано»: число тогда берётся из последней строки журнала
+   * откачки. Запись идёт только при настоящем изменении — иначе каждое
+   * открытие журнала помечало бы скважину изменённой и гнало её в синхронизацию.
+   */
+  const commitWellFinalDrawdown = useCallback(() => {
+    if (!clusterWells || !activeWellId) return;
+    const value = toBase(parseNumber(finalDrawdownText), QUANTITIES.DRAWDOWN);
+    const stored = isFinite(value) && value > 0 ? roundBase(value) : 0;
+    const well = wells.find((one) => one.id === activeWellId);
+    if (!well || well.finalDrawdown === stored) return;
+    setWells((prev) =>
+      prev.map((one) =>
+        one.id === activeWellId ? { ...one, finalDrawdown: stored } : one,
+      ),
+    );
+    setWellFinalDrawdown(activeWellId, stored).catch(() => {});
+  }, [clusterWells, activeWellId, finalDrawdownText, wells, toBase]);
 
   // Ссылка на актуальный persist: он пересоздаётся на каждом пересчёте
   // наклона, и без ссылки автосохранение перезапускалось бы после каждого
@@ -1473,7 +1659,21 @@ export default function DataProcessingScreen({ route, navigation }) {
     durationText,
     finalDrawdownText,
     recoveryRows,
+    clusterWells,
   ]);
+
+  /**
+   * Автосохранение понижения на остановке у скважины куста
+   *
+   * Тем же способом, что и остальные поля: с клавиатуры уходят кнопкой
+   * «назад», а не касанием соседнего поля, и onBlur там не случается —
+   * набранное в последнем поле пропадало бы вместе с экраном.
+   */
+  useEffect(() => {
+    if (loading) return undefined;
+    const timer = setTimeout(commitWellFinalDrawdown, 600);
+    return () => clearTimeout(timer);
+  }, [loading, commitWellFinalDrawdown]);
 
   /**
    * Подпись под результатом: какой метод сработал и насколько точно
@@ -1760,6 +1960,21 @@ export default function DataProcessingScreen({ route, navigation }) {
   };
 
   /**
+   * Сохраняет понижение на момент остановки насоса
+   *
+   * У куста оно лежит в строке скважины, у журналов с одной скважиной — в
+   * самом проекте. Пустое поле значит «взять из журнала откачки»: в базу
+   * уходит ноль, а число подставляет finalDrawdownAtStop.
+   */
+  const handleFinalDrawdownBlur = () => {
+    if (!clusterWells || !activeWellId) {
+      persist(rows, Q);
+      return;
+    }
+    commitWellFinalDrawdown();
+  };
+
+  /**
    * Удаляет наблюдательную скважину вместе с её замерами
    */
   const confirmWellDelete = async () => {
@@ -1785,12 +2000,16 @@ export default function DataProcessingScreen({ route, navigation }) {
   /**
    * Переключает фазу опыта и подставляет длительность откачки
    *
-   * Обе точки отсчёта восстановления берутся из последней строки журнала
-   * откачки: насос работал до неё, и понижение на момент остановки — это её
-   * понижение. В настольном АНСДИМАТ то же самое делает клавиша Ins в табл.
-   * «Окончание», подставляя данные из табл. «Понижение» на последний заданный
-   * момент времени. Требовать от геолога вводить эти числа второй раз руками
-   * незачем — они уже введены строкой выше.
+   * Длительность берётся из последней строки журнала откачки: насос работал
+   * до неё. В настольном АНСДИМАТ то же самое делает клавиша Ins в табл.
+   * «Окончание». Требовать от геолога вводить это число второй раз руками
+   * незачем — оно уже введено строкой выше.
+   *
+   * Понижение на остановке здесь больше не подставляется: оно выводится из
+   * журнала той скважины, что открыта сейчас, см. finalDrawdownAtStop.
+   * Подстановка срабатывала один раз, числом открытой в тот момент скважины,
+   * и оставалась на месте при переходе к соседней — у куста это давало
+   * остаточное понижение чужой скважины и горизонталь по нулю на графике.
    *
    * @param {string} next - выбранная фаза
    */
@@ -1820,9 +2039,6 @@ export default function DataProcessingScreen({ route, navigation }) {
     if (isFinite(last.t) && last.t > 0) {
       setDurationText(show(last.t, QUANTITIES.TIME));
     }
-    if (isFinite(last.s) && last.s > 0) {
-      setFinalDrawdownText(show(last.s, QUANTITIES.DRAWDOWN));
-    }
   };
 
   if (loading) {
@@ -1847,11 +2063,8 @@ export default function DataProcessingScreen({ route, navigation }) {
     );
   }
 
-  // Развёрнутый график занимает весь экран и лежит вне прокрутки: только так
-  // вертикальное перетаскивание достаётся ему, а не списку. Тот же приём,
-  // что у карты в полевом дневнике
   // Развёрнутая карта занимает экран целиком и лежит вне прокрутки: иначе
-  // перетаскивание маркера доставалось бы списку. Тот же приём, что у графика
+  // перетаскивание маркера доставалось бы списку
   if (mapFullscreen) {
     return (
       <View
@@ -1920,235 +2133,18 @@ export default function DataProcessingScreen({ route, navigation }) {
     );
   }
 
-  if (chartFullscreen) {
-    return (
-      <View
-        style={[
-          styles.fullscreen,
-          { backgroundColor: theme.colors.background },
-        ]}
-      >
-        <DrawdownChart
-          series={chartSeries}
-          mode={chartMode}
-          width={width}
-          height={height}
-          fitMode={fitMode}
-          onFitModeChange={handleFitModeChange}
-          selected={selectedPoints}
-          onToggleSelect={handleToggleSelect}
-          anchors={chartAnchors}
-          onAnchorsChange={handleAnchorsChange}
-          caption={chartCaption}
-          viewKey={chartViewKey}
-          xAxisTitle={chartAxisTitle}
-          emptyTitle={chartEmpty?.title}
-          emptyHint={chartEmpty?.hint}
-          timeUnit={unitLabel(QUANTITIES.TIME)}
-          drawdownUnit={unitLabel(QUANTITIES.DRAWDOWN)}
-          viewportStore={viewportStore}
-          activeSeriesName={activeWell?.name}
-          fullscreen
-          onToggleFullscreen={() => setChartFullscreen(false)}
-        />
-      </View>
-    );
-  }
-
   return (
-    <ScrollView
-      ref={scrollRef}
-      style={{ backgroundColor: theme.colors.background }}
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
-    >
-      {/* Шапка проекта */}
-      <View
-        style={[
-          styles.projectCard,
-          elevation.card,
-          {
-            backgroundColor: theme.colors.surface,
-            borderColor: theme.colors.border,
-          },
-        ]}
+    <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
+      <ScrollView
+        ref={scrollRef}
+        style={{ backgroundColor: theme.colors.background }}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
       >
+        {/* Шапка проекта */}
         <View
           style={[
-            styles.projectIcon,
-            { backgroundColor: theme.colors.primary },
-          ]}
-        >
-          <MaterialCommunityIcons name="water-pump" size={20} color="#FFFFFF" />
-        </View>
-        <View style={styles.projectText}>
-          <Text
-            style={[type.cardTitle, { color: theme.colors.text }]}
-            numberOfLines={1}
-          >
-            {project.name}
-          </Text>
-          <Text
-            style={[styles.projectMeta, { color: theme.colors.textSecondary }]}
-          >
-            {I18n.t(`ofr_${project.ofrType}`, {
-              defaultValue: project.ofrType,
-            })}{" "}
-            · {measurements.length + recoveryMeasurements.length}{" "}
-            {I18n.t("measurementsShort", { defaultValue: "замеров" })}
-          </Text>
-        </View>
-      </View>
-
-      {/* Скважины куста. Открытая скважина задаёт, чей журнал правится и по
-          чьим точкам ведётся прямая; кривые остальных идут на том же графике */}
-      {clusterWells && (
-        <>
-          <Text
-            style={[
-              type.eyebrow,
-              styles.sectionLabel,
-              { color: theme.colors.textSecondary, marginTop: 0 },
-            ]}
-          >
-            {I18n.t("wellsSection", { defaultValue: "Скважины" })}
-          </Text>
-
-          <View style={styles.wellChips}>
-            {wells.map((well) => {
-              const active = well.id === activeWellId;
-              // Правое поле ужимается только там, где есть урна: иначе чип
-              // без неё выглядел бы съехавшим влево
-              const deletable =
-                well.role === WELL_ROLES.OBSERVATION && observationCount > 1;
-              return (
-                <TouchableOpacity
-                  key={well.id}
-                  onPress={() => setActiveWellId(well.id)}
-                  style={[
-                    styles.wellChip,
-                    deletable && styles.wellChipDeletable,
-                    {
-                      backgroundColor: active
-                        ? theme.colors.primary
-                        : theme.colors.surfaceSunken,
-                      borderColor: active
-                        ? theme.colors.primary
-                        : theme.colors.border,
-                    },
-                  ]}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: active }}
-                >
-                  <Text
-                    style={[
-                      styles.wellChipName,
-                      { color: active ? "#FFFFFF" : theme.colors.text },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {well.name}
-                  </Text>
-
-                  {/* Удаление живёт в самом чипе: искать кнопку под списком
-                      значило бы гадать, к какой скважине она относится.
-                      Опытную не удаляем — без неё куста нет, последнюю
-                      наблюдательную тоже: следить будет не за чем */}
-                  {deletable && (
-                    <TouchableOpacity
-                      onPress={() => setPendingWellDelete(well)}
-                      style={styles.wellChipDelete}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${I18n.t("delete", {
-                        defaultValue: "Удалить",
-                      })} ${well.name}`}
-                    >
-                      <MaterialIcons
-                        name="delete-outline"
-                        size={17}
-                        color={
-                          active ? "rgba(255,255,255,0.85)" : theme.colors.error
-                        }
-                      />
-                    </TouchableOpacity>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-
-            <TouchableOpacity
-              onPress={() => setAddingWell((prev) => !prev)}
-              style={[styles.wellAddChip, { borderColor: theme.colors.border }]}
-              accessibilityRole="button"
-              accessibilityLabel={I18n.t("addObservationWell", {
-                defaultValue: "Добавить наблюдательную",
-              })}
-            >
-              <MaterialIcons
-                name={addingWell ? "close" : "add"}
-                size={18}
-                color={theme.colors.primaryAccent}
-              />
-            </TouchableOpacity>
-          </View>
-
-          {addingWell && (
-            <View style={styles.wellForm}>
-              <TextInput
-                value={newWellName}
-                onChangeText={(value) => {
-                  setNewWellName(value);
-                  if (wellError) setWellError("");
-                }}
-                onSubmitEditing={handleAddWell}
-                returnKeyType="done"
-                placeholder={I18n.t("observationWellName", {
-                  defaultValue: "Наблюдательная скважина",
-                })}
-                placeholderTextColor={theme.colors.textSecondary}
-                style={[
-                  styles.wellInput,
-                  {
-                    borderColor: wellError
-                      ? theme.colors.error
-                      : theme.colors.border,
-                    color: theme.colors.text,
-                  },
-                ]}
-              />
-              <TouchableOpacity
-                onPress={handleAddWell}
-                style={[
-                  styles.wellAddButton,
-                  { backgroundColor: theme.colors.primary },
-                ]}
-                accessibilityRole="button"
-              >
-                <Text style={styles.wellAddButtonText}>
-                  {I18n.t("add", { defaultValue: "Добавить" })}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {!!wellError && (
-            <Text
-              style={[type.caption, styles.hint, { color: theme.colors.error }]}
-            >
-              {wellError}
-            </Text>
-          )}
-        </>
-      )}
-
-      {/* Расстояния до опытной скважины. Подписей у таблицы нет намеренно:
-          её читают по шапке — слева фирменный знак, справа имя опытной
-          скважины, до которой считают. Строка «опытная — опытная» держит её
-          собственный радиус, и он помечен «(r)» вместо отдельной колонки */}
-      {clusterWells && pumpingWell && (
-        <View
-          style={[
-            styles.table,
+            styles.projectCard,
             elevation.card,
             {
               backgroundColor: theme.colors.surface,
@@ -2158,280 +2154,425 @@ export default function DataProcessingScreen({ route, navigation }) {
         >
           <View
             style={[
-              styles.distanceHead,
-              { borderBottomColor: theme.colors.border },
-            ]}
-          >
-            {/* Пустая ячейка на пересечении заголовков: заштрихована, потому
-                что вводить в неё нечего. Цвет — фоновый, чтобы угол читался
-                как вырез, а не как ещё одна кнопка */}
-            <DiagonalHatch
-              color={theme.colors.textSecondary}
-              style={[
-                styles.distanceCell,
-                styles.distanceDivider,
-                {
-                  backgroundColor: theme.colors.background,
-                  borderRightColor: theme.colors.border,
-                },
-              ]}
-            />
-            <View style={styles.distanceCell}>
-              <Text
-                style={[styles.distanceHeadName, { color: theme.colors.text }]}
-                numberOfLines={1}
-              >
-                {pumpingWell.name}
-              </Text>
-            </View>
-          </View>
-
-          {wells.map((well) => {
-            const isPumping = well.role === WELL_ROLES.PUMPING;
-            return (
-              <View
-                key={well.id}
-                style={[
-                  styles.distanceRow,
-                  { borderBottomColor: theme.colors.border },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.distanceCell,
-                    styles.distanceDivider,
-                    { borderRightColor: theme.colors.border },
-                  ]}
-                >
-                  <Text
-                    style={[styles.distanceWell, { color: theme.colors.text }]}
-                    numberOfLines={1}
-                  >
-                    {well.name}
-                  </Text>
-                </View>
-                <View style={[styles.distanceCell, styles.distanceValueCell]}>
-                  <TextInput
-                    value={distanceTexts[well.id] ?? ""}
-                    onChangeText={(value) =>
-                      setDistanceTexts((prev) => ({
-                        ...prev,
-                        [well.id]: value,
-                      }))
-                    }
-                    onBlur={() => handleDistanceBlur(well.id)}
-                    keyboardType="decimal-pad"
-                    placeholder="—"
-                    placeholderTextColor={theme.colors.textSecondary}
-                    style={[styles.distanceValue, { color: theme.colors.text }]}
-                  />
-                  <Text
-                    style={[
-                      styles.distanceUnit,
-                      { color: theme.colors.textSecondary },
-                    ]}
-                  >
-                    {isPumping
-                      ? `${unitLabel(QUANTITIES.DISTANCE)} (r)`
-                      : unitLabel(QUANTITIES.DISTANCE)}
-                  </Text>
-                </View>
-              </View>
-            );
-          })}
-
-          {/* Последняя строка самой таблицы, а не плашка под ней: обрезается
-              её же скруглением и отделена той же линией, что и строки */}
-          <TouchableOpacity
-            style={[
-              styles.distanceAdd,
-              {
-                backgroundColor: theme.colors.primary,
-                borderTopColor: theme.colors.border,
-              },
-            ]}
-            onPress={() => setAddingWell(true)}
-            accessibilityRole="button"
-          >
-            <MaterialIcons name="add" size={17} color="#FFFFFF" />
-            <Text style={styles.distanceAddText}>
-              {I18n.t("addTableRow", { defaultValue: "Добавить строку" })}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Карта куста под таблицей: то же расстояние, но руками. Скважину
-          тащат по карте, расстояние считается по координатам и садится
-          в таблицу — там его потом можно поправить и вручную */}
-      {clusterWells && mapPoints.length > 0 && (
-        <View style={styles.mapBlock}>
-          <FieldMap
-            points={mapPoints}
-            connect={mapConnect}
-            center={mapCenter}
-            onMovePoint={handleWellMove}
-            height={mapHeight}
-          />
-
-          {!!mapNotice && (
-            <View
-              style={[
-                styles.mapNotice,
-                { top: spacing.md, backgroundColor: theme.colors.surface },
-              ]}
-            >
-              <Text style={[type.caption, { color: theme.colors.text }]}>
-                {mapNotice}
-              </Text>
-            </View>
-          )}
-
-          <TouchableOpacity
-            style={[
-              styles.mapLocate,
-              elevation.brandButton,
-              {
-                backgroundColor: theme.colors.primary,
-                opacity: locating ? 0.6 : 1,
-              },
-            ]}
-            onPress={placeAtMyLocation}
-            disabled={locating}
-            accessibilityRole="button"
-            accessibilityLabel={I18n.t("wellsAtMyLocation", {
-              defaultValue: "Перенести куст к моему местоположению",
-            })}
-          >
-            <MaterialIcons name="my-location" size={22} color="#FFFFFF" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.mapExpand,
-              elevation.brandButton,
+              styles.projectIcon,
               { backgroundColor: theme.colors.primary },
             ]}
-            onPress={() => setMapFullscreen(true)}
-            accessibilityRole="button"
-            accessibilityState={{ expanded: false }}
-            accessibilityLabel={I18n.t("mapExpand", {
-              defaultValue: "Развернуть карту на весь экран",
-            })}
           >
-            <MaterialIcons name="fullscreen" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Фаза опыта */}
-      <View style={[styles.modeRow, styles.phaseRow]}>
-        {PHASE_OPTIONS.map((option) => {
-          const active = option.key === phase;
-          return (
-            <TouchableOpacity
-              key={option.key}
-              onPress={() => handlePhaseChange(option.key)}
-              style={[
-                styles.phaseChip,
-                {
-                  backgroundColor: active
-                    ? theme.colors.primary
-                    : theme.colors.surfaceSunken,
-                  borderColor: active
-                    ? theme.colors.primary
-                    : theme.colors.border,
-                },
-              ]}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
+            <MaterialCommunityIcons name="water-pump" size={20} color="#FFFFFF" />
+          </View>
+          <View style={styles.projectText}>
+            <Text
+              style={[type.cardTitle, { color: theme.colors.text }]}
+              numberOfLines={1}
             >
-              <Text
-                style={[
-                  styles.modeChipText,
-                  { color: active ? "#FFFFFF" : theme.colors.textSecondary },
-                ]}
+              {project.name}
+            </Text>
+            <Text
+              style={[styles.projectMeta, { color: theme.colors.textSecondary }]}
+            >
+              {I18n.t(`ofr_${project.ofrType}`, {
+                defaultValue: project.ofrType,
+              })}{" "}
+              · {measurements.length + recoveryMeasurements.length}{" "}
+              {I18n.t("measurementsShort", { defaultValue: "замеров" })}
+            </Text>
+          </View>
+        </View>
+
+        {/* Скважины куста. Открытая скважина задаёт, чей журнал правится и по
+            чьим точкам ведётся прямая; кривые остальных идут на том же графике */}
+        {clusterWells && (
+          <>
+            <Text
+              style={[
+                type.eyebrow,
+                styles.sectionLabel,
+                { color: theme.colors.textSecondary, marginTop: 0 },
+              ]}
+            >
+              {I18n.t("wellsSection", { defaultValue: "Скважины" })}
+            </Text>
+
+            <View style={styles.wellChips}>
+              {wells.map((well) => {
+                const active = well.id === activeWellId;
+                // Правое поле ужимается только там, где есть урна: иначе чип
+                // без неё выглядел бы съехавшим влево
+                const deletable =
+                  well.role === WELL_ROLES.OBSERVATION && observationCount > 1;
+                return (
+                  <TouchableOpacity
+                    key={well.id}
+                    onPress={() => handleWellChange(well.id)}
+                    style={[
+                      styles.wellChip,
+                      deletable && styles.wellChipDeletable,
+                      {
+                        backgroundColor: active
+                          ? theme.colors.primary
+                          : theme.colors.surfaceSunken,
+                        borderColor: active
+                          ? theme.colors.primary
+                          : theme.colors.border,
+                      },
+                    ]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Text
+                      style={[
+                        styles.wellChipName,
+                        { color: active ? "#FFFFFF" : theme.colors.text },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {well.name}
+                    </Text>
+
+                    {/* Удаление живёт в самом чипе: искать кнопку под списком
+                        значило бы гадать, к какой скважине она относится.
+                        Опытную не удаляем — без неё куста нет, последнюю
+                        наблюдательную тоже: следить будет не за чем */}
+                    {deletable && (
+                      <TouchableOpacity
+                        onPress={() => setPendingWellDelete(well)}
+                        style={styles.wellChipDelete}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${I18n.t("delete", {
+                          defaultValue: "Удалить",
+                        })} ${well.name}`}
+                      >
+                        <MaterialIcons
+                          name="delete-outline"
+                          size={17}
+                          color={
+                            active ? "rgba(255,255,255,0.85)" : theme.colors.error
+                          }
+                        />
+                      </TouchableOpacity>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+
+              <TouchableOpacity
+                onPress={() => setAddingWell((prev) => !prev)}
+                style={[styles.wellAddChip, { borderColor: theme.colors.border }]}
+                accessibilityRole="button"
+                accessibilityLabel={I18n.t("addObservationWell", {
+                  defaultValue: "Добавить наблюдательную",
+                })}
               >
-                {I18n.t(option.labelKey, { defaultValue: option.fallback })}
+                <MaterialIcons
+                  name={addingWell ? "close" : "add"}
+                  size={18}
+                  color={theme.colors.primaryAccent}
+                />
+              </TouchableOpacity>
+            </View>
+
+            {addingWell && (
+              <View style={styles.wellForm}>
+                <TextInput
+                  value={newWellName}
+                  onChangeText={(value) => {
+                    setNewWellName(value);
+                    if (wellError) setWellError("");
+                  }}
+                  onSubmitEditing={handleAddWell}
+                  returnKeyType="done"
+                  placeholder={I18n.t("observationWellName", {
+                    defaultValue: "Наблюдательная скважина",
+                  })}
+                  placeholderTextColor={theme.colors.textSecondary}
+                  style={[
+                    styles.wellInput,
+                    {
+                      borderColor: wellError
+                        ? theme.colors.error
+                        : theme.colors.border,
+                      color: theme.colors.text,
+                    },
+                  ]}
+                />
+                <TouchableOpacity
+                  onPress={handleAddWell}
+                  style={[
+                    styles.wellAddButton,
+                    { backgroundColor: theme.colors.primary },
+                  ]}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.wellAddButtonText}>
+                    {I18n.t("add", { defaultValue: "Добавить" })}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {!!wellError && (
+              <Text
+                style={[type.caption, styles.hint, { color: theme.colors.error }]}
+              >
+                {wellError}
               </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+            )}
+          </>
+        )}
 
-      {/* Дебит */}
-      <View
-        style={[
-          styles.field,
-          {
-            backgroundColor: theme.colors.surface,
-            borderColor: theme.colors.border,
-          },
-        ]}
-      >
-        {/* Единица вынесена из подписи и стоит после числа: внутри подписи
-            она ломала строку надвое на узких экранах, а рядом со значением
-            ещё и читается по-человечески — «1000 м³/сут» */}
-        <Text
-          style={[type.body, styles.fieldLabel, { color: theme.colors.text }]}
-        >
-          {I18n.t("flowRateQ", { defaultValue: "Дебит Q" })}
-        </Text>
-        <TextInput
-          value={qText}
-          onChangeText={setQText}
-          onBlur={() => persist(rows, parseNumber(qText))}
-          keyboardType="decimal-pad"
-          placeholder="0"
-          placeholderTextColor={theme.colors.textSecondary}
-          style={[styles.fieldInput, { color: theme.colors.secondary }]}
-        />
-        <Text style={[styles.fieldUnit, { color: theme.colors.textSecondary }]}>
-          {unitLabel(QUANTITIES.FLOW)}
-        </Text>
-      </View>
-
-      {/* Продолжительность откачки — точка отсчёта восстановления */}
-      {isRecovery && (
-        <>
+        {/* Расстояния до опытной скважины. Подписей у таблицы нет намеренно:
+            её читают по шапке — слева фирменный знак, справа имя опытной
+            скважины, до которой считают. Строка «опытная — опытная» держит её
+            собственный радиус, и он помечен «(r)» вместо отдельной колонки */}
+        {clusterWells && pumpingWell && (
           <View
             style={[
-              styles.field,
+              styles.table,
+              elevation.card,
               {
                 backgroundColor: theme.colors.surface,
                 borderColor: theme.colors.border,
               },
             ]}
           >
-            <Text
+            <View
               style={[
-                type.body,
-                styles.fieldLabel,
-                { color: theme.colors.text },
+                styles.distanceHead,
+                { borderBottomColor: theme.colors.border },
               ]}
             >
-              {I18n.t("pumpingDuration", { defaultValue: "Откачка длилась" })}
-            </Text>
-            <TextInput
-              value={durationText}
-              onChangeText={setDurationText}
-              onBlur={() => persist(rows, Q)}
-              keyboardType="decimal-pad"
-              placeholder="0"
-              placeholderTextColor={theme.colors.textSecondary}
-              style={[styles.fieldInput, { color: theme.colors.secondary }]}
-            />
-            <Text
-              style={[styles.fieldUnit, { color: theme.colors.textSecondary }]}
-            >
-              {unitLabel(QUANTITIES.TIME)}
-            </Text>
-          </View>
+              {/* Пустая ячейка на пересечении заголовков: заштрихована, потому
+                  что вводить в неё нечего. Цвет — фоновый, чтобы угол читался
+                  как вырез, а не как ещё одна кнопка */}
+              <DiagonalHatch
+                color={theme.colors.textSecondary}
+                style={[
+                  styles.distanceCell,
+                  styles.distanceDivider,
+                  {
+                    backgroundColor: theme.colors.background,
+                    borderRightColor: theme.colors.border,
+                  },
+                ]}
+              />
+              <View style={styles.distanceCell}>
+                <Text
+                  style={[styles.distanceHeadName, { color: theme.colors.text }]}
+                  numberOfLines={1}
+                >
+                  {pumpingWell.name}
+                </Text>
+              </View>
+            </View>
 
-          {/* Понижение на момент остановки — второй ноль отсчёта: от него
-              ведётся журнал восстановления. Табл. «Окончание» в настольной
-              версии, там же она названа обязательной для этой обработки */}
-          {dualJournals && (
+            {wells.map((well) => {
+              const isPumping = well.role === WELL_ROLES.PUMPING;
+              return (
+                <View
+                  key={well.id}
+                  style={[
+                    styles.distanceRow,
+                    { borderBottomColor: theme.colors.border },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.distanceCell,
+                      styles.distanceDivider,
+                      { borderRightColor: theme.colors.border },
+                    ]}
+                  >
+                    <Text
+                      style={[styles.distanceWell, { color: theme.colors.text }]}
+                      numberOfLines={1}
+                    >
+                      {well.name}
+                    </Text>
+                  </View>
+                  <View style={[styles.distanceCell, styles.distanceValueCell]}>
+                    <TextInput
+                      value={distanceTexts[well.id] ?? ""}
+                      onChangeText={(value) =>
+                        setDistanceTexts((prev) => ({
+                          ...prev,
+                          [well.id]: value,
+                        }))
+                      }
+                      onBlur={() => handleDistanceBlur(well.id)}
+                      keyboardType="decimal-pad"
+                      placeholder="—"
+                      placeholderTextColor={theme.colors.textSecondary}
+                      style={[styles.distanceValue, { color: theme.colors.text }]}
+                    />
+                    <Text
+                      style={[
+                        styles.distanceUnit,
+                        { color: theme.colors.textSecondary },
+                      ]}
+                    >
+                      {isPumping
+                        ? `${unitLabel(QUANTITIES.DISTANCE)} (r)`
+                        : unitLabel(QUANTITIES.DISTANCE)}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+
+            {/* Последняя строка самой таблицы, а не плашка под ней: обрезается
+                её же скруглением и отделена той же линией, что и строки */}
+            <TouchableOpacity
+              style={[
+                styles.distanceAdd,
+                {
+                  backgroundColor: theme.colors.primary,
+                  borderTopColor: theme.colors.border,
+                },
+              ]}
+              onPress={() => setAddingWell(true)}
+              accessibilityRole="button"
+            >
+              <MaterialIcons name="add" size={17} color="#FFFFFF" />
+              <Text style={styles.distanceAddText}>
+                {I18n.t("addTableRow", { defaultValue: "Добавить строку" })}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Карта куста под таблицей: то же расстояние, но руками. Скважину
+            тащат по карте, расстояние считается по координатам и садится
+            в таблицу — там его потом можно поправить и вручную */}
+        {clusterWells && mapPoints.length > 0 && (
+          <View style={styles.mapBlock}>
+            <FieldMap
+              points={mapPoints}
+              connect={mapConnect}
+              center={mapCenter}
+              onMovePoint={handleWellMove}
+              height={mapHeight}
+            />
+
+            {!!mapNotice && (
+              <View
+                style={[
+                  styles.mapNotice,
+                  { top: spacing.md, backgroundColor: theme.colors.surface },
+                ]}
+              >
+                <Text style={[type.caption, { color: theme.colors.text }]}>
+                  {mapNotice}
+                </Text>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={[
+                styles.mapLocate,
+                elevation.brandButton,
+                {
+                  backgroundColor: theme.colors.primary,
+                  opacity: locating ? 0.6 : 1,
+                },
+              ]}
+              onPress={placeAtMyLocation}
+              disabled={locating}
+              accessibilityRole="button"
+              accessibilityLabel={I18n.t("wellsAtMyLocation", {
+                defaultValue: "Перенести куст к моему местоположению",
+              })}
+            >
+              <MaterialIcons name="my-location" size={22} color="#FFFFFF" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.mapExpand,
+                elevation.brandButton,
+                { backgroundColor: theme.colors.primary },
+              ]}
+              onPress={() => setMapFullscreen(true)}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: false }}
+              accessibilityLabel={I18n.t("mapExpand", {
+                defaultValue: "Развернуть карту на весь экран",
+              })}
+            >
+              <MaterialIcons name="fullscreen" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Фаза опыта */}
+        <View style={[styles.modeRow, styles.phaseRow]}>
+          {PHASE_OPTIONS.map((option) => {
+            const active = option.key === phase;
+            return (
+              <TouchableOpacity
+                key={option.key}
+                onPress={() => handlePhaseChange(option.key)}
+                style={[
+                  styles.phaseChip,
+                  {
+                    backgroundColor: active
+                      ? theme.colors.primary
+                      : theme.colors.surfaceSunken,
+                    borderColor: active
+                      ? theme.colors.primary
+                      : theme.colors.border,
+                  },
+                ]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+              >
+                <Text
+                  style={[
+                    styles.modeChipText,
+                    { color: active ? "#FFFFFF" : theme.colors.textSecondary },
+                  ]}
+                >
+                  {I18n.t(option.labelKey, { defaultValue: option.fallback })}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Дебит */}
+        <View
+          style={[
+            styles.field,
+            {
+              backgroundColor: theme.colors.surface,
+              borderColor: theme.colors.border,
+            },
+          ]}
+        >
+          {/* Единица вынесена из подписи и стоит после числа: внутри подписи
+              она ломала строку надвое на узких экранах, а рядом со значением
+              ещё и читается по-человечески — «1000 м³/сут» */}
+          <Text
+            style={[type.body, styles.fieldLabel, { color: theme.colors.text }]}
+          >
+            {I18n.t("flowRateQ", { defaultValue: "Дебит Q" })}
+          </Text>
+          <TextInput
+            value={qText}
+            onChangeText={setQText}
+            onBlur={() => persist(rows, parseNumber(qText))}
+            keyboardType="decimal-pad"
+            placeholder="0"
+            placeholderTextColor={theme.colors.textSecondary}
+            style={[styles.fieldInput, { color: theme.colors.secondary }]}
+          />
+          <Text style={[styles.fieldUnit, { color: theme.colors.textSecondary }]}>
+            {unitLabel(QUANTITIES.FLOW)}
+          </Text>
+        </View>
+
+        {/* Продолжительность откачки — точка отсчёта восстановления */}
+        {isRecovery && (
+          <>
             <View
               style={[
                 styles.field,
@@ -2448,13 +2589,11 @@ export default function DataProcessingScreen({ route, navigation }) {
                   { color: theme.colors.text },
                 ]}
               >
-                {I18n.t("finalDrawdown", {
-                  defaultValue: "Понижение на остановке",
-                })}
+                {I18n.t("pumpingDuration", { defaultValue: "Откачка длилась" })}
               </Text>
               <TextInput
-                value={finalDrawdownText}
-                onChangeText={setFinalDrawdownText}
+                value={durationText}
+                onChangeText={setDurationText}
                 onBlur={() => persist(rows, Q)}
                 keyboardType="decimal-pad"
                 placeholder="0"
@@ -2462,198 +2601,318 @@ export default function DataProcessingScreen({ route, navigation }) {
                 style={[styles.fieldInput, { color: theme.colors.secondary }]}
               />
               <Text
-                style={[
-                  styles.fieldUnit,
-                  { color: theme.colors.textSecondary },
-                ]}
+                style={[styles.fieldUnit, { color: theme.colors.textSecondary }]}
               >
-                {unitLabel(QUANTITIES.DRAWDOWN)}
+                {unitLabel(QUANTITIES.TIME)}
               </Text>
             </View>
-          )}
 
-          {/* Откуда взялись числа в полях: подставлены, а не введены руками —
-              иначе выглядит так, будто приложение помнит чужой ввод */}
-        </>
-      )}
+            {/* Понижение на момент остановки — второй ноль отсчёта: от него
+                ведётся журнал восстановления. Табл. «Окончание» в настольной
+                версии, там же она названа обязательной для этой обработки.
 
-      {/* Журнал откачки. У одиночной откачки он открыт в обеих фазах: на
-          восстановлении понижение всё равно нужно — по нему строится прямая
-          и считается водопроводимость */}
-      <Text
-        style={[
-          type.eyebrow,
-          styles.sectionLabel,
-          { color: theme.colors.textSecondary },
-        ]}
-      >
-        {withWellName(
-          dualJournals
-            ? I18n.t("journalPumping", {
-                defaultValue: "Журнал замеров: откачка",
-              })
-            : I18n.t("measurementsJournal", { defaultValue: "Журнал замеров" }),
-        )}
-      </Text>
-
-      {/* Единственный журнал на восстановлении читается как замеры после
-          остановки насоса, и время в нём отсчитывается от НАЧАЛА откачки:
-          иначе t − длительность откачки выходит отрицательным и точка
-          выпадает из расчёта. Пишем это прямо в шапке — догадаться
-          из подписи «t, мин» невозможно */}
-      <MeasurementJournal
-        theme={theme}
-        rows={rows}
-        {...journalHandlers(MEASUREMENT_PHASES.PUMPING)}
-        timeLabel={
-          theisRecovery
-            ? I18n.t("timeFromPumpStart", {
-                unit: unitLabel(QUANTITIES.TIME),
-                defaultValue: "t от начала откачки, мин",
-              })
-            : I18n.t("columnTime", { unit: unitLabel(QUANTITIES.TIME) })
-        }
-        valueLabel={I18n.t("columnDrawdown", {
-          unit: unitLabel(QUANTITIES.DRAWDOWN),
-        })}
-        selectable={fitMode === FIT_MODES.AUTO}
-        selected={selectedPoints}
-        onToggleSelect={handleToggleSelect}
-      />
-
-      {/* Журнал восстановления — второй таблицей под откачкой. Общей таблицы
-          у них быть не может: время здесь идёт от остановки насоса, а ноль
-          восстановления отвечает понижению на этот момент */}
-      {dualJournals && isRecovery && (
-        <>
-          <Text
-            style={[
-              type.eyebrow,
-              styles.sectionLabel,
-              { color: theme.colors.textSecondary },
-            ]}
-          >
-            {withWellName(
-              I18n.t("journalRecovery", {
-                defaultValue: "Журнал замеров: восстановление",
-              }),
-            )}
-          </Text>
-
-          <MeasurementJournal
-            theme={theme}
-            rows={recoveryRows}
-            {...journalHandlers(MEASUREMENT_PHASES.RECOVERY)}
-            timeLabel={I18n.t("timeFromPumpStop", {
-              unit: unitLabel(QUANTITIES.TIME),
-              defaultValue: "t′ от остановки насоса, мин",
-            })}
-            valueLabel={I18n.t("columnRecovery", {
-              unit: unitLabel(QUANTITIES.DRAWDOWN),
-              defaultValue: "восстановление, м",
-            })}
-          />
-
-          {/* Закончен ли опыт. Уровень считают восстановленным, когда
-              остаточное понижение упало ниже 5 % от понижения на остановке —
-              по одному последнему замеру этого не видно */}
-        </>
-      )}
-
-      {/* График */}
-      <Text
-        style={[
-          type.eyebrow,
-          styles.sectionLabel,
-          { color: theme.colors.textSecondary },
-        ]}
-      >
-        {chartView === VIEWS.DIAGNOSTIC
-          ? I18n.t("diagnosticChart", { defaultValue: "Диагностика режима" })
-          : theisPlot
-            ? I18n.t("recoveryChart", { defaultValue: "График восстановления" })
-            : I18n.t("drawdownChart", { defaultValue: "График понижения" })}
-      </Text>
-
-      {/* Выбор вида. На прямой Тейса диагностика не строится: там по оси
-          времени отложено отношение t/t′, и производная по нему значила бы
-          не то, что читают по её форме */}
-      {!theisPlot && (
-        <View
-          style={[
-            styles.viewSwitch,
-            { backgroundColor: theme.colors.surfaceSunken },
-          ]}
-        >
-          {[
-            { key: VIEWS.FIT, labelKey: "viewFit", fallback: "Подбор прямой" },
-            {
-              key: VIEWS.DIAGNOSTIC,
-              labelKey: "viewDiagnostic",
-              fallback: "Диагностика",
-            },
-          ].map((option) => {
-            const active = option.key === chartView;
-            return (
-              <TouchableOpacity
-                key={option.key}
-                onPress={() => setChartView(option.key)}
+                У куста поле правит открытую скважину: понижение на остановке
+                своё у каждой. Пустым его можно и оставить — тогда берётся
+                последний замер журнала откачки, и он же стоит подсказкой */}
+            {dualJournals && (
+              <View
                 style={[
-                  styles.viewChip,
-                  active && { backgroundColor: theme.colors.surface },
+                  styles.field,
+                  {
+                    backgroundColor: theme.colors.surface,
+                    borderColor: theme.colors.border,
+                  },
                 ]}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
               >
                 <Text
                   style={[
-                    styles.viewChipText,
-                    {
-                      color: active
-                        ? theme.colors.primaryAccent
-                        : theme.colors.textSecondary,
-                      fontWeight: active ? "700" : "600",
-                    },
+                    type.body,
+                    styles.fieldLabel,
+                    { color: theme.colors.text },
                   ]}
                 >
-                  {I18n.t(option.labelKey, { defaultValue: option.fallback })}
+                  {I18n.t("finalDrawdown", {
+                    defaultValue: "Понижение на остановке",
+                  })}
                 </Text>
-              </TouchableOpacity>
-            );
+                <TextInput
+                  value={finalDrawdownText}
+                  onChangeText={setFinalDrawdownText}
+                  onBlur={handleFinalDrawdownBlur}
+                  keyboardType="decimal-pad"
+                  placeholder={
+                    finalDrawdown > 0
+                      ? String(
+                          Number(
+                            fromBase(
+                              finalDrawdown,
+                              QUANTITIES.DRAWDOWN,
+                            ).toPrecision(SHOWN_PRECISION),
+                          ),
+                        )
+                      : "0"
+                  }
+                  placeholderTextColor={theme.colors.textSecondary}
+                  style={[styles.fieldInput, { color: theme.colors.secondary }]}
+                />
+                <Text
+                  style={[
+                    styles.fieldUnit,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  {unitLabel(QUANTITIES.DRAWDOWN)}
+                </Text>
+              </View>
+            )}
+
+            {/* Откуда взялись числа в полях: подставлены, а не введены руками —
+                иначе выглядит так, будто приложение помнит чужой ввод */}
+          </>
+        )}
+
+        {/* Журнал откачки. У одиночной откачки он открыт в обеих фазах: на
+            восстановлении понижение всё равно нужно — по нему строится прямая
+            и считается водопроводимость */}
+        <Text
+          style={[
+            type.eyebrow,
+            styles.sectionLabel,
+            { color: theme.colors.textSecondary },
+          ]}
+        >
+          {withWellName(
+            dualJournals
+              ? I18n.t("journalPumping", {
+                  defaultValue: "Журнал замеров: откачка",
+                })
+              : I18n.t("measurementsJournal", { defaultValue: "Журнал замеров" }),
+          )}
+        </Text>
+
+        {/* Единственный журнал на восстановлении читается как замеры после
+            остановки насоса, и время в нём отсчитывается от НАЧАЛА откачки:
+            иначе t − длительность откачки выходит отрицательным и точка
+            выпадает из расчёта. Пишем это прямо в шапке — догадаться
+            из подписи «t, мин» невозможно */}
+        <MeasurementJournal
+          theme={theme}
+          rows={rows}
+          {...journalHandlers(MEASUREMENT_PHASES.PUMPING)}
+          timeLabel={
+            theisRecovery
+              ? I18n.t("timeFromPumpStart", {
+                  unit: unitLabel(QUANTITIES.TIME),
+                  defaultValue: "t от начала откачки, мин",
+                })
+              : I18n.t("columnTime", { unit: unitLabel(QUANTITIES.TIME) })
+          }
+          valueLabel={I18n.t("columnDrawdown", {
+            unit: unitLabel(QUANTITIES.DRAWDOWN),
           })}
-        </View>
-      )}
+          selectable={fitMode === FIT_MODES.AUTO}
+          selected={selectedPoints}
+          onToggleSelect={handleToggleSelect}
+        />
 
-      {/* По какой кривой ведётся прямая. На восстановлении на полотне две
-          кривые, и наклон снимают с одной из них.
+        {/* Журнал восстановления — второй таблицей под откачкой. Общей таблицы
+            у них быть не может: время здесь идёт от остановки насоса, а ноль
+            восстановления отвечает понижению на этот момент */}
+        {dualJournals && isRecovery && (
+          <>
+            <Text
+              style={[
+                type.eyebrow,
+                styles.sectionLabel,
+                { color: theme.colors.textSecondary },
+              ]}
+            >
+              {withWellName(
+                I18n.t("journalRecovery", {
+                  defaultValue: "Журнал замеров: восстановление",
+                }),
+              )}
+            </Text>
 
-          Выбор восстановления переводит ось абсцисс в отношение t/t′:
-          остаточное понижение спрямляется только там, и только там формула
-          T = 0.183·Q/a верна. Обе кривые в этих координатах не совмещаются —
-          у замеров откачки нет времени от остановки насоса */}
-      {dualJournals && isRecovery && recoveryMeasurements.length > 0 && (
-        <View style={[styles.modeRow, styles.phaseRow]}>
-          {[
-            {
-              key: FIT_SERIES.PUMPING,
-              label: I18n.t("fitByPumping", {
-                defaultValue: "Прямая по откачке",
-              }),
-            },
-            {
-              key: FIT_SERIES.RECOVERY,
-              label: I18n.t("fitByRecovery", {
-                defaultValue: "Прямая по восстановлению",
-              }),
-            },
-          ].map((option) => {
-            const active = option.key === fitSeries;
+            <MeasurementJournal
+              theme={theme}
+              rows={recoveryRows}
+              {...journalHandlers(MEASUREMENT_PHASES.RECOVERY)}
+              timeLabel={I18n.t("timeFromPumpStop", {
+                unit: unitLabel(QUANTITIES.TIME),
+                defaultValue: "t′ от остановки насоса, мин",
+              })}
+              valueLabel={I18n.t("columnRecovery", {
+                unit: unitLabel(QUANTITIES.DRAWDOWN),
+                defaultValue: "восстановление, м",
+              })}
+            />
+
+            {/* Закончен ли опыт. Уровень считают восстановленным, когда
+                остаточное понижение упало ниже 5 % от понижения на остановке —
+                по одному последнему замеру этого не видно */}
+          </>
+        )}
+
+        {/* График */}
+        <Text
+          style={[
+            type.eyebrow,
+            styles.sectionLabel,
+            { color: theme.colors.textSecondary },
+          ]}
+        >
+          {chartView === VIEWS.DIAGNOSTIC
+            ? I18n.t("diagnosticChart", { defaultValue: "Диагностика режима" })
+            : theisPlot
+              ? I18n.t("recoveryChart", { defaultValue: "График восстановления" })
+              : I18n.t("drawdownChart", { defaultValue: "График понижения" })}
+        </Text>
+
+        {/* Выбор вида. На прямой Тейса диагностика не строится: там по оси
+            времени отложено отношение t/t′, и производная по нему значила бы
+            не то, что читают по её форме */}
+        {!theisPlot && (
+          <View
+            style={[
+              styles.viewSwitch,
+              { backgroundColor: theme.colors.surfaceSunken },
+            ]}
+          >
+            {[
+              { key: VIEWS.FIT, labelKey: "viewFit", fallback: "Подбор прямой" },
+              {
+                key: VIEWS.DIAGNOSTIC,
+                labelKey: "viewDiagnostic",
+                fallback: "Диагностика",
+              },
+            ].map((option) => {
+              const active = option.key === chartView;
+              return (
+                <TouchableOpacity
+                  key={option.key}
+                  onPress={() => setChartView(option.key)}
+                  style={[
+                    styles.viewChip,
+                    active && { backgroundColor: theme.colors.surface },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                >
+                  <Text
+                    style={[
+                      styles.viewChipText,
+                      {
+                        color: active
+                          ? theme.colors.primaryAccent
+                          : theme.colors.textSecondary,
+                        fontWeight: active ? "700" : "600",
+                      },
+                    ]}
+                  >
+                    {I18n.t(option.labelKey, { defaultValue: option.fallback })}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+
+        {/* По какой кривой ведётся прямая. На восстановлении на полотне две
+            кривые, и наклон снимают с одной из них.
+
+            Выбор восстановления переводит ось абсцисс в отношение t/t′:
+            остаточное понижение спрямляется только там, и только там формула
+            T = 0.183·Q/a верна. Обе кривые в этих координатах не совмещаются —
+            у замеров откачки нет времени от остановки насоса */}
+        {dualJournals && isRecovery && recoveryMeasurements.length > 0 && (
+          <View style={[styles.modeRow, styles.phaseRow]}>
+            {[
+              {
+                key: FIT_SERIES.PUMPING,
+                label: I18n.t("fitByPumping", {
+                  defaultValue: "Прямая по откачке",
+                }),
+              },
+              {
+                key: FIT_SERIES.RECOVERY,
+                label: I18n.t("fitByRecovery", {
+                  defaultValue: "Прямая по восстановлению",
+                }),
+              },
+            ].map((option) => {
+              const active = option.key === fitSeries;
+              return (
+                <TouchableOpacity
+                  key={option.key}
+                  onPress={() => setFitSeries(option.key)}
+                  style={[
+                    styles.phaseChip,
+                    {
+                      backgroundColor: active
+                        ? theme.colors.primary
+                        : theme.colors.surfaceSunken,
+                      borderColor: active
+                        ? theme.colors.primary
+                        : theme.colors.border,
+                    },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                >
+                  <Text
+                    numberOfLines={1}
+                    style={[
+                      styles.modeChipText,
+                      {
+                        color: active ? "#FFFFFF" : theme.colors.textSecondary,
+                      },
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+
+        {theisPlot && (
+          <Text
+            style={[
+              type.caption,
+              styles.hint,
+              { color: theme.colors.textSecondary },
+            ]}
+          >
+            {I18n.t("recoveryAxisHint", {
+              defaultValue:
+                "По оси X — отношение t/t′: время от начала откачки к времени от её остановки",
+            })}
+          </Text>
+        )}
+
+        {/* На прямой Тейса ось X всегда логарифмическая: другие режимы
+            сделали бы прямую Тейса кривой, поэтому выбор режима не показываем.
+            В диагностике оси заданы самим методом и не переключаются.
+
+            Виды с расстоянием в абсциссе показываются только у кустовой
+            откачки и только на откачке: у остальных видов ОФР расстояний нет
+            вовсе, а на восстановлении остаточное понижение от r не зависит */}
+        <View style={styles.modeRow}>
+          {(theisPlot || chartView === VIEWS.DIAGNOSTIC
+            ? []
+            : GRAPH_MODE_OPTIONS.filter(
+                (option) => distanceModes || !option.clusterOnly,
+              )
+          ).map((option) => {
+            const active = option.key === effectiveMode;
             return (
               <TouchableOpacity
                 key={option.key}
-                onPress={() => setFitSeries(option.key)}
+                onPress={() => setGraphMode(option.key)}
                 style={[
-                  styles.phaseChip,
+                  styles.modeChip,
                   {
                     backgroundColor: active
                       ? theme.colors.primary
@@ -2670,9 +2929,7 @@ export default function DataProcessingScreen({ route, navigation }) {
                   numberOfLines={1}
                   style={[
                     styles.modeChipText,
-                    {
-                      color: active ? "#FFFFFF" : theme.colors.textSecondary,
-                    },
+                    { color: active ? "#FFFFFF" : theme.colors.textSecondary },
                   ]}
                 >
                   {option.label}
@@ -2681,233 +2938,186 @@ export default function DataProcessingScreen({ route, navigation }) {
             );
           })}
         </View>
-      )}
 
-      {theisPlot && (
-        <Text
-          style={[
-            type.caption,
-            styles.hint,
-            { color: theme.colors.textSecondary },
-          ]}
-        >
-          {I18n.t("recoveryAxisHint", {
-            defaultValue:
-              "По оси X — отношение t/t′: время от начала откачки к времени от её остановки",
-          })}
-        </Text>
-      )}
-
-      {/* На прямой Тейса ось X всегда логарифмическая: другие режимы
-          сделали бы прямую Тейса кривой, поэтому выбор режима не показываем.
-          В диагностике оси заданы самим методом и не переключаются.
-
-          Виды с расстоянием в абсциссе показываются только у кустовой
-          откачки: у остальных видов ОФР расстояний нет вовсе */}
-      <View style={styles.modeRow}>
-        {(theisPlot || chartView === VIEWS.DIAGNOSTIC
-          ? []
-          : GRAPH_MODE_OPTIONS.filter(
-              (option) => clusterWells || !option.clusterOnly,
-            )
-        ).map((option) => {
-          const active = option.key === effectiveMode;
-          return (
-            <TouchableOpacity
-              key={option.key}
-              onPress={() => setGraphMode(option.key)}
-              style={[
-                styles.modeChip,
-                {
-                  backgroundColor: active
-                    ? theme.colors.primary
-                    : theme.colors.surfaceSunken,
-                  borderColor: active
-                    ? theme.colors.primary
-                    : theme.colors.border,
-                },
-              ]}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-            >
+        {/* Момент, на который снят срез по кусту. Показываются только те
+            моменты, что есть хотя бы у двух скважин: по одной точке площадной
+            график не построить, а интерполировать понижение между отсчётами
+            значило бы ставить на график то, чего в журнале нет */}
+        {trackingKind === TRACKING_KINDS.AREA &&
+          chartView === VIEWS.FIT &&
+          commonMoments.length > 0 && (
+            <>
               <Text
-                numberOfLines={1}
                 style={[
-                  styles.modeChipText,
-                  { color: active ? "#FFFFFF" : theme.colors.textSecondary },
+                  type.eyebrow,
+                  styles.momentLabel,
+                  { color: theme.colors.textSecondary },
                 ]}
               >
-                {option.label}
+                {I18n.t("momentLabel", { defaultValue: "Момент времени" })}
               </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {/* Момент, на который снят срез по кусту. Показываются только те
-          моменты, что есть хотя бы у двух скважин: по одной точке площадной
-          график не построить, а интерполировать понижение между отсчётами
-          значило бы ставить на график то, чего в журнале нет */}
-      {trackingKind === TRACKING_KINDS.AREA &&
-        chartView === VIEWS.FIT &&
-        commonMoments.length > 0 && (
-          <>
-            <Text
-              style={[
-                type.eyebrow,
-                styles.momentLabel,
-                { color: theme.colors.textSecondary },
-              ]}
-            >
-              {I18n.t("momentLabel", { defaultValue: "Момент времени" })}
-            </Text>
-            <View style={styles.momentRow}>
-              {commonMoments.map((time) => {
-                const active = time === moment;
-                const shown = fromBase(time, QUANTITIES.TIME);
-                return (
-                  <TouchableOpacity
-                    key={time}
-                    onPress={() => setPickedMoment(time)}
-                    style={[
-                      styles.momentChip,
-                      {
-                        backgroundColor: active
-                          ? theme.colors.primary
-                          : theme.colors.surfaceSunken,
-                        borderColor: active
-                          ? theme.colors.primary
-                          : theme.colors.border,
-                      },
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: active }}
-                  >
-                    <Text
+              <View style={styles.momentRow}>
+                {commonMoments.map((time) => {
+                  const active = time === moment;
+                  const shown = fromBase(time, QUANTITIES.TIME);
+                  return (
+                    <TouchableOpacity
+                      key={time}
+                      onPress={() => setPickedMoment(time)}
                       style={[
-                        styles.modeChipText,
+                        styles.momentChip,
                         {
-                          color: active
-                            ? "#FFFFFF"
-                            : theme.colors.textSecondary,
+                          backgroundColor: active
+                            ? theme.colors.primary
+                            : theme.colors.surfaceSunken,
+                          borderColor: active
+                            ? theme.colors.primary
+                            : theme.colors.border,
                         },
                       ]}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
                     >
-                      {`${Number(shown.toPrecision(SHOWN_PRECISION))} ${unitLabel(
-                        QUANTITIES.TIME,
-                      )}`}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </>
+                      <Text
+                        style={[
+                          styles.modeChipText,
+                          {
+                            color: active
+                              ? "#FFFFFF"
+                              : theme.colors.textSecondary,
+                          },
+                        ]}
+                      >
+                        {`${Number(shown.toPrecision(SHOWN_PRECISION))} ${unitLabel(
+                          QUANTITIES.TIME,
+                        )}`}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </>
+          )}
+
+        {/* Место графика в списке. На время разворота содержимое отсюда
+            убирается, а высота остаётся прежней: развёрнутый график лежит
+            накладкой поверх списка, и список под ней не должен шевелиться */}
+        <View
+          onLayout={handleChartSlotLayout}
+          style={chartFullscreen ? { height: chartSlotHeight } : null}
+        >
+          {!chartFullscreen &&
+            (chartView === VIEWS.DIAGNOSTIC && !theisPlot ? (
+              <>
+                <DiagnosticPlot result={diagnosis} width={contentWidth} />
+                <RegimeVerdict result={diagnosis} Q={Q} comparisonT={activeT} />
+              </>
+            ) : (
+              <DrawdownChart
+                series={chartSeries}
+                mode={chartMode}
+                width={contentWidth}
+                scrollRef={scrollRef}
+                fitMode={fitMode}
+                onFitModeChange={handleFitModeChange}
+                selected={selectedPoints}
+                onToggleSelect={handleToggleSelect}
+                anchors={chartAnchors}
+                onAnchorsChange={handleAnchorsChange}
+                fullscreen={false}
+                onToggleFullscreen={() => setChartFullscreen(true)}
+                caption={chartCaption}
+                viewKey={chartViewKey}
+                xAxisTitle={chartAxisTitle}
+                emptyTitle={chartEmpty?.title}
+                emptyHint={chartEmpty?.hint}
+                timeUnit={unitLabel(QUANTITIES.TIME)}
+                drawdownUnit={unitLabel(QUANTITIES.DRAWDOWN)}
+                viewportStore={viewportStore}
+                activeSeriesName={activeWell?.name}
+                onSelectSeries={seriesPickable ? handleSelectSeries : undefined}
+              />
+            ))}
+        </View>
+
+        {/* По чьей кривой идут числа. У куста расстояние своё у каждой
+            скважины, а в пьезопроводность и водоотдачу оно входит явно:
+            по двум кривым на одном полотне получаются два разных ответа */}
+        {clusterWells && trackingKind === TRACKING_KINDS.TIME && !!activeWell && (
+          <Text
+            style={[
+              type.caption,
+              styles.missing,
+              { color: theme.colors.textSecondary },
+            ]}
+          >
+            {I18n.t("fitBySeries", {
+              well: activeWell.name,
+              defaultValue: `Прямая по кривой «${activeWell.name}»`,
+            })}
+            {activeWell.distance > 0
+              ? ` · r = ${Number(
+                  fromBase(activeWell.distance, QUANTITIES.DISTANCE).toPrecision(
+                    SHOWN_PRECISION,
+                  ),
+                )} ${unitLabel(QUANTITIES.DISTANCE)}`
+              : ""}
+          </Text>
         )}
 
-      {chartView === VIEWS.DIAGNOSTIC && !theisPlot ? (
-        <>
-          <DiagnosticPlot result={diagnosis} width={contentWidth} />
-          <RegimeVerdict result={diagnosis} Q={Q} comparisonT={activeT} />
-        </>
-      ) : (
-        <DrawdownChart
-          series={chartSeries}
-          mode={chartMode}
-          width={contentWidth}
-          scrollRef={scrollRef}
-          fitMode={fitMode}
-          onFitModeChange={handleFitModeChange}
-          selected={selectedPoints}
-          onToggleSelect={handleToggleSelect}
-          anchors={chartAnchors}
-          onAnchorsChange={handleAnchorsChange}
-          fullscreen={false}
-          onToggleFullscreen={() => setChartFullscreen(true)}
-          caption={chartCaption}
-          viewKey={chartViewKey}
-          xAxisTitle={chartAxisTitle}
-          emptyTitle={chartEmpty?.title}
-          emptyHint={chartEmpty?.hint}
-          timeUnit={unitLabel(QUANTITIES.TIME)}
-          drawdownUnit={unitLabel(QUANTITIES.DRAWDOWN)}
-          viewportStore={viewportStore}
-          activeSeriesName={activeWell?.name}
-        />
-      )}
+        {/* Результат */}
+        <View style={styles.resultRow}>
+          <ValueCard
+            accent
+            label={I18n.t("transmissivityLabel", {
+              unit: unitLabel(QUANTITIES.TRANSMISSIVITY),
+            })}
+            value={
+              isFinite(activeT)
+                ? fromBase(activeT, QUANTITIES.TRANSMISSIVITY).toFixed(2)
+                : "—"
+            }
+          />
+          <ValueCard
+            label={I18n.t("diffusivityLabel", {
+              unit: unitLabel(QUANTITIES.DIFFUSIVITY),
+            })}
+            value={formatDiffusivity(fromBase(activeA, QUANTITIES.DIFFUSIVITY))}
+          />
+        </View>
 
-      {/* Результат */}
-      <View style={styles.resultRow}>
-        <ValueCard
-          accent
-          label={I18n.t("transmissivityLabel", {
-            unit: unitLabel(QUANTITIES.TRANSMISSIVITY),
-          })}
-          value={
-            isFinite(activeT)
-              ? fromBase(activeT, QUANTITIES.TRANSMISSIVITY).toFixed(2)
-              : "—"
-          }
-        />
-        <ValueCard
-          label={I18n.t("diffusivityLabel", {
-            unit: unitLabel(QUANTITIES.DIFFUSIVITY),
-          })}
-          value={formatDiffusivity(fromBase(activeA, QUANTITIES.DIFFUSIVITY))}
-        />
-      </View>
+        <View style={styles.resultRow}>
+          <ValueCard
+            label={I18n.t("storativity", { defaultValue: "Водоотдача S" })}
+            value={formatStorativity(activeS)}
+          />
+          <ValueCard
+            label={`${I18n.t("slope", { defaultValue: "Наклон прямой C" })}, ${unitLabel(
+              QUANTITIES.DRAWDOWN,
+            )}`}
+            value={
+              isFinite(activeSlope)
+                ? fromBase(activeSlope, QUANTITIES.DRAWDOWN).toFixed(4)
+                : "—"
+            }
+          />
+        </View>
 
-      <View style={styles.resultRow}>
-        <ValueCard
-          label={I18n.t("storativity", { defaultValue: "Водоотдача S" })}
-          value={formatStorativity(activeS)}
-        />
-        <ValueCard
-          label={`${I18n.t("slope", { defaultValue: "Наклон прямой C" })}, ${unitLabel(
-            QUANTITIES.DRAWDOWN,
-          )}`}
-          value={
-            isFinite(activeSlope)
-              ? fromBase(activeSlope, QUANTITIES.DRAWDOWN).toFixed(4)
-              : "—"
-          }
-        />
-      </View>
+        {/* Почему в карточке прочерк. Раньше пустое поле не объясняло ничего:
+            чаще всего не заполнен дебит, а понять это было неоткуда */}
+        {!!missingA && (
+          <Text
+            style={[
+              type.caption,
+              styles.missing,
+              { color: theme.colors.textSecondary },
+            ]}
+          >
+            {missingA}
+          </Text>
+        )}
 
-      {/* Почему в карточке прочерк. Раньше пустое поле не объясняло ничего:
-          чаще всего не заполнен дебит, а понять это было неоткуда */}
-      {!!missingA && (
-        <Text
-          style={[
-            type.caption,
-            styles.missing,
-            { color: theme.colors.textSecondary },
-          ]}
-        >
-          {missingA}
-        </Text>
-      )}
-
-      {!!missingT && (
-        <Text
-          style={[
-            type.caption,
-            styles.missing,
-            { color: theme.colors.primaryAccent },
-          ]}
-        >
-          {missingT}
-        </Text>
-      )}
-
-      <Text style={[styles.methodNote, { color: theme.colors.textSecondary }]}>
-        {renderMethodNote()}
-      </Text>
-
-      {/* Замеры есть, а точек для графика нет: значит время меньше
-          длительности откачки. Общая заглушка «внесите замеры» тут врёт */}
-      {theisRecovery &&
-        measurements.length >= 2 &&
-        basePoints.length === 0 && (
+        {!!missingT && (
           <Text
             style={[
               type.caption,
@@ -2915,63 +3125,135 @@ export default function DataProcessingScreen({ route, navigation }) {
               { color: theme.colors.primaryAccent },
             ]}
           >
-            {!(pumpingDuration > 0)
-              ? I18n.t("recoveryNoDuration", {
-                  defaultValue:
-                    "Укажите, сколько длилась откачка — без этого восстановление не построить.",
-                })
-              : I18n.t("recoveryTimeTooSmall", {
-                  defaultValue:
-                    "Время замеров меньше длительности откачки. В журнале восстановления время отсчитывается от начала откачки, а не от остановки насоса.",
-                })}
+            {missingT}
           </Text>
         )}
 
-      {theisRecovery && recovery.warnings.includes("needMoreMeasurements") && (
-        <Text
-          style={[type.caption, styles.hint, { color: theme.colors.error }]}
-        >
-          {I18n.t("recoveryNeedDuration", {
-            defaultValue:
-              "Укажите продолжительность откачки и внесите замеры после остановки насоса — иначе восстановление не обработать.",
-          })}
+        <Text style={[styles.methodNote, { color: theme.colors.textSecondary }]}>
+          {renderMethodNote()}
         </Text>
-      )}
-      {theisRecovery &&
-        recovery.warnings.includes("recoveryInterceptNotZero") && (
+
+        {/* Замеры есть, а точек для графика нет: значит время меньше
+            длительности откачки. Общая заглушка «внесите замеры» тут врёт */}
+        {theisRecovery &&
+          measurements.length >= 2 &&
+          basePoints.length === 0 && (
+            <Text
+              style={[
+                type.caption,
+                styles.missing,
+                { color: theme.colors.primaryAccent },
+              ]}
+            >
+              {!(pumpingDuration > 0)
+                ? I18n.t("recoveryNoDuration", {
+                    defaultValue:
+                      "Укажите, сколько длилась откачка — без этого восстановление не построить.",
+                  })
+                : I18n.t("recoveryTimeTooSmall", {
+                    defaultValue:
+                      "Время замеров меньше длительности откачки. В журнале восстановления время отсчитывается от начала откачки, а не от остановки насоса.",
+                  })}
+            </Text>
+          )}
+
+        {theisRecovery && recovery.warnings.includes("needMoreMeasurements") && (
           <Text
-            style={[
-              type.caption,
-              styles.hint,
-              { color: theme.colors.textSecondary },
-            ]}
+            style={[type.caption, styles.hint, { color: theme.colors.error }]}
           >
-            {I18n.t("recoveryInterceptNote", {
+            {I18n.t("recoveryNeedDuration", {
               defaultValue:
-                "Прямая не проходит через начало координат: возможно влияние границ пласта или непостоянный дебит на откачке.",
+                "Укажите продолжительность откачки и внесите замеры после остановки насоса — иначе восстановление не обработать.",
             })}
           </Text>
         )}
-
-      <View style={{ height: 120 }} />
-
-      <ConfirmDialog
-        visible={!!pendingWellDelete}
-        title={I18n.t("deleteWellTitle", { defaultValue: "Удалить скважину?" })}
-        message={
-          pendingWellDelete
-            ? `«${pendingWellDelete.name}» — ${I18n.t("deleteWellMessage", {
+        {theisRecovery &&
+          recovery.warnings.includes("recoveryInterceptNotZero") && (
+            <Text
+              style={[
+                type.caption,
+                styles.hint,
+                { color: theme.colors.textSecondary },
+              ]}
+            >
+              {I18n.t("recoveryInterceptNote", {
                 defaultValue:
-                  "Замеры этой скважины будут удалены вместе с ней.",
-              })}`
-            : ""
-        }
-        confirmLabel={I18n.t("delete", { defaultValue: "Удалить" })}
-        destructive
-        onConfirm={confirmWellDelete}
-        onCancel={() => setPendingWellDelete(null)}
-      />
-    </ScrollView>
+                  "Прямая не проходит через начало координат: возможно влияние границ пласта или непостоянный дебит на откачке.",
+              })}
+            </Text>
+          )}
+
+        <View style={{ height: 120 }} />
+
+        <ConfirmDialog
+          visible={!!pendingWellDelete}
+          title={I18n.t("deleteWellTitle", { defaultValue: "Удалить скважину?" })}
+          message={
+            pendingWellDelete
+              ? `«${pendingWellDelete.name}» — ${I18n.t("deleteWellMessage", {
+                  defaultValue:
+                    "Замеры этой скважины будут удалены вместе с ней.",
+                })}`
+              : ""
+          }
+          confirmLabel={I18n.t("delete", { defaultValue: "Удалить" })}
+          destructive
+          onConfirm={confirmWellDelete}
+          onCancel={() => setPendingWellDelete(null)}
+        />
+      </ScrollView>
+
+      {/* Развёрнутый график живёт в Modal, а не вместо экрана. Список при
+          этом остаётся смонтированным и хранит свою прокрутку: возврат в
+          обычный вид показывает то самое место, откуда график разворачивали.
+          Обычной накладкой это не сделать — экран лежит в карточке
+          навигатора, а та на вебе выше окна и вдобавок сдвинута transform
+          ради переходов: и absolute, и fixed внутри неё уезжают вместе с
+          прокруткой. Modal же рендерится порталом в корень и всегда ровно
+          по окну.
+
+          Свой GestureHandlerRootView обязателен: содержимое Modal лежит вне
+          корневого, и без него жесты полотна не дошли бы до графика */}
+      <Modal
+        visible={chartFullscreen}
+        animationType="none"
+        onRequestClose={() => setChartFullscreen(false)}
+        supportedOrientations={["portrait", "landscape"]}
+        statusBarTranslucent
+      >
+        <GestureHandlerRootView
+          style={[
+            styles.fullscreen,
+            { backgroundColor: theme.colors.background },
+          ]}
+        >
+          <DrawdownChart
+            series={chartSeries}
+            mode={chartMode}
+            width={width}
+            height={height}
+            fitMode={fitMode}
+            onFitModeChange={handleFitModeChange}
+            selected={selectedPoints}
+            onToggleSelect={handleToggleSelect}
+            anchors={chartAnchors}
+            onAnchorsChange={handleAnchorsChange}
+            caption={chartCaption}
+            viewKey={chartViewKey}
+            xAxisTitle={chartAxisTitle}
+            emptyTitle={chartEmpty?.title}
+            emptyHint={chartEmpty?.hint}
+            timeUnit={unitLabel(QUANTITIES.TIME)}
+            drawdownUnit={unitLabel(QUANTITIES.DRAWDOWN)}
+            viewportStore={viewportStore}
+            activeSeriesName={activeWell?.name}
+            onSelectSeries={seriesPickable ? handleSelectSeries : undefined}
+            fullscreen
+            onToggleFullscreen={() => setChartFullscreen(false)}
+          />
+        </GestureHandlerRootView>
+      </Modal>
+    </View>
   );
 }
 
@@ -2981,10 +3263,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  // Развёрнутый график: занимает экран, поля по краям — чтобы кнопки
-  // масштаба и «Сброс» не упирались в границы
-  // Развёрнутый график занимает экран целиком, без полей: управление лежит
-  // поверх полотна, а не отнимает у него высоту
+  // Экран целиком: список и накладка развёрнутого графика лежат в нём
+  screen: {
+    flex: 1,
+  },
+  // Развёрнутый график занимает окно Modal целиком, без полей: управление
+  // лежит поверх полотна, а не отнимает у него высоту
   fullscreen: {
     flex: 1,
   },

@@ -60,6 +60,40 @@ export function recoveryAbscissa({ measurements, pumpingDuration }) {
 }
 
 /**
+ * Понижение на момент остановки насоса у одной скважины
+ *
+ * Ноль журнала восстановления отвечает именно этому понижению: остаточное
+ * понижение считается как разница между ним и подъёмом уровня. Число это
+ * своё у каждой скважины куста — опытная садится на метры, дальняя
+ * наблюдательная на сантиметры, — и общее на весь проект значение давало
+ * остаток чужой скважины. Разница выходила отрицательной, обрезалась нулём,
+ * и кривая ложилась горизонталью по нулю, ничего не сообщая о причине.
+ *
+ * Журнал откачки этой же скважины и есть источник: насос работал до
+ * последней его строки, и её понижение — понижение на остановке. То же
+ * самое делает клавиша Ins в табл. «Окончание» настольного АНСДИМАТ.
+ * Заданное руками значение важнее: журнал не всегда доведён до остановки.
+ *
+ * @param {Object} params
+ * @param {Array<{t: number, s: number}>} params.measurements - журнал откачки
+ *   этой скважины
+ * @param {number} [params.stored] - заданное руками понижение на остановке
+ * @returns {number} понижение на остановке, м; 0, если взять его неоткуда
+ */
+export function finalDrawdownAtStop({ measurements, stored }) {
+  if (stored > 0) return stored;
+
+  // С конца: последняя заполненная строка журнала и есть момент остановки.
+  // Пустые строки в хвосте — заготовки под следующий замер, а не замеры
+  const rows = measurements ?? NO_ROWS;
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    const s = Number(rows[i]?.s);
+    if (isFinite(s) && s > 0) return s;
+  }
+  return 0;
+}
+
+/**
  * Собирает описания кривых для графика
  *
  * @param {Object} params
@@ -92,54 +126,64 @@ export function chartRawSeries({
   activeWellName,
   sameMoment = (a, b) => a === b,
 }) {
-  // Площадное прослеживание — срез по кусту на один момент: годятся только
-  // совпадающие замеры, интерполировать понижение между отсчётами значило бы
-  // ставить на график то, чего в журнале нет
-  if (trackingKind === TRACKING_KINDS.AREA) {
-    if (!(moment > 0)) return [];
-    const points = wellsWithDistance
-      .map((well) => {
-        const hit = (wellMeasurements[well.id] ?? NO_ROWS).find((m) =>
-          sameMoment(m.t, moment)
-        );
-        return hit ? { t: well.distance, s: hit.s } : null;
-      })
-      .filter(Boolean)
-      // По возрастанию расстояния: ломаная по таким точкам и есть профиль
-      // депрессионной воронки
-      .sort((a, b) => a.t - b.t);
+  // Фаза опыта важнее вида прослеживания. Виды с расстоянием в абсциссе —
+  // площадной s — lg r и комбинированный s — lg(t/r²) — читают журнал
+  // откачки: расстояние входит в них через понижение при работающем насосе.
+  // На восстановлении такой зависимости нет вовсе — остаточное понижение по
+  // Джейкобу равно 0.183·Q/T·lg(t/t′) и от r не зависит, — поэтому строить
+  // по кусту нечего. Обе ветки стояли выше проверки фазы, и переход на
+  // восстановление оставлял на полотне точки откачки: подписи осей менялись,
+  // данные — нет, а прямую по ним можно было ещё и подвинуть
+  if (!isRecovery) {
+    // Площадное прослеживание — срез по кусту на один момент: годятся только
+    // совпадающие замеры, интерполировать понижение между отсчётами значило бы
+    // ставить на график то, чего в журнале нет
+    if (trackingKind === TRACKING_KINDS.AREA) {
+      if (!(moment > 0)) return [];
+      const points = wellsWithDistance
+        .map((well) => {
+          const hit = (wellMeasurements[well.id] ?? NO_ROWS).find((m) =>
+            sameMoment(m.t, moment)
+          );
+          return hit ? { t: well.distance, s: hit.s } : null;
+        })
+        .filter(Boolean)
+        // По возрастанию расстояния: ломаная по таким точкам и есть профиль
+        // депрессионной воронки
+        .sort((a, b) => a.t - b.t);
 
-    return points.length
-      ? [
-          {
-            id: 'pumping',
-            name: activeWellName,
-            role: SERIES_ROLES.FIT,
-            measurements: points,
-          },
-        ]
-      : [];
-  }
+      return points.length
+        ? [
+            {
+              id: 'pumping',
+              name: activeWellName,
+              role: SERIES_ROLES.FIT,
+              measurements: points,
+            },
+          ]
+        : [];
+    }
 
-  if (trackingKind === TRACKING_KINDS.COMBINED) {
-    const points = wellsWithDistance.flatMap((well) =>
-      (wellMeasurements[well.id] ?? NO_ROWS).map((m) => ({
-        t: m.t / (well.distance * well.distance),
-        s: m.s,
-        group: well.id,
-        groupName: well.name,
-      }))
-    );
-    return points.length
-      ? [
-          {
-            id: 'pumping',
-            name: activeWellName,
-            role: SERIES_ROLES.FIT,
-            measurements: points,
-          },
-        ]
-      : [];
+    if (trackingKind === TRACKING_KINDS.COMBINED) {
+      const points = wellsWithDistance.flatMap((well) =>
+        (wellMeasurements[well.id] ?? NO_ROWS).map((m) => ({
+          t: m.t / (well.distance * well.distance),
+          s: m.s,
+          group: well.id,
+          groupName: well.name,
+        }))
+      );
+      return points.length
+        ? [
+            {
+              id: 'pumping',
+              name: activeWellName,
+              role: SERIES_ROLES.FIT,
+              measurements: points,
+            },
+          ]
+        : [];
+    }
   }
 
   const pumping = {

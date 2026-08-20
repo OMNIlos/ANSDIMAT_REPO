@@ -5,7 +5,10 @@
  * В отличие от нативных карт не требует ключей API и работает в Expo Go,
  * без отдельной сборки dev-client.
  *
- * @param {Array} points - точки наблюдения
+ * @param {Array} points - точки: { lat, lon, title, color, id, draggable, label }
+ * @param {Function} [onMovePoint] - вызывается с (id, lat, lon) после
+ *   перетаскивания маркера
+ * @param {{color: string, fromId: string}} [connect] - пунктир между точками
  * @param {Function} onPressMap - вызывается с (lat, lon) при тапе по карте
  * @param {{lat: number, lon: number}} [center] - куда центрировать карту
  * @param {number} [height] - высота карты; без неё карта занимает всё место
@@ -19,7 +22,15 @@ import { WebView } from 'react-native-webview';
 import { buildMapHtml } from './leafletMapHtml';
 import { pointTypeColors, radius } from '../theme';
 
-export default function FieldMap({ points = [], onPressMap, center, height, flush = false }) {
+export default function FieldMap({
+  points = [],
+  onPressMap,
+  onMovePoint,
+  connect,
+  center,
+  height,
+  flush = false,
+}) {
   const theme = useTheme();
   const webRef = useRef(null);
   const [ready, setReady] = useState(false);
@@ -35,14 +46,20 @@ export default function FieldMap({ points = [], onPressMap, center, height, flus
     if (!ready) return;
     post({
       type: 'points',
+      connect,
       points: points.map((p) => ({
+        id: p.id,
         lat: p.lat,
         lon: p.lon,
         title: p.title,
-        color: pointTypeColors[p.type] ?? pointTypeColors.observation,
+        // Цвет приходит готовым, если он не про тип точки дневника:
+        // у скважин куста своя раскраска по роли
+        color: p.color ?? pointTypeColors[p.type] ?? pointTypeColors.observation,
+        draggable: p.draggable,
+        label: p.label,
       })),
     });
-  }, [points, ready, post]);
+  }, [points, connect, ready, post]);
 
   // Центрирование — например, после определения своего местоположения
   useEffect(() => {
@@ -68,6 +85,7 @@ export default function FieldMap({ points = [], onPressMap, center, height, flus
     }
     if (data.type === 'ready') setReady(true);
     if (data.type === 'press') onPressMap?.(data.lat, data.lon);
+    if (data.type === 'move') onMovePoint?.(data.id, data.lat, data.lon);
   };
 
   return (

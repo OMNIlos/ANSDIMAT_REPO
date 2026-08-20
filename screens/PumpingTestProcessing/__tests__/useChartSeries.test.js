@@ -5,7 +5,12 @@
  * проверялся на полноту, но до графика не доходил никогда.
  */
 
-import { chartRawSeries, recoveryAbscissa, FIT_SERIES } from '../useChartSeries';
+import {
+  chartRawSeries,
+  recoveryAbscissa,
+  finalDrawdownAtStop,
+  FIT_SERIES,
+} from '../useChartSeries';
 import { TRACKING_KINDS } from '../../../calc/tracking';
 import { SERIES_ROLES } from '../../../calc/chartSeries';
 import I18n from '../../../Localization';
@@ -174,5 +179,97 @@ describe('recoveryAbscissa', () => {
       pumpingDuration: 90,
     });
     expect(points).toHaveLength(1);
+  });
+});
+
+/**
+ * Восстановление и виды с расстоянием в абсциссе
+ *
+ * Куст строит график по расстояниям — площадной s — lg r и комбинированный
+ * s — lg(t/r²). Оба ветвились раньше проверки фазы, и переход на
+ * восстановление оставлял на полотне точки откачки: подписи осей менялись,
+ * данные — нет. Прямую по ним можно было ещё и подвинуть, получив число из
+ * журнала, которого в этой фазе не открывали.
+ */
+describe('восстановление важнее вида прослеживания', () => {
+  const cluster = {
+    wellsWithDistance: [
+      { id: 'far', name: '2p', distance: 100 },
+      { id: 'near', name: '1p', distance: 10 },
+    ],
+    wellMeasurements: {
+      near: [{ t: 10, s: 4 }],
+      far: [{ t: 10, s: 1 }],
+    },
+  };
+
+  test('комбинированный вид на восстановлении не отдаёт точки куста', () => {
+    const series = chartRawSeries({
+      ...base,
+      ...cluster,
+      trackingKind: TRACKING_KINDS.COMBINED,
+      isRecovery: true,
+      fitSeries: FIT_SERIES.RECOVERY,
+      // Журнал восстановления пуст — строить нечего, и полотно обязано
+      // остаться пустым, а не показывать откачку
+      recoveryMeasurements: [],
+    });
+    expect(series).toEqual([]);
+  });
+
+  test('площадной вид на восстановлении не строит профиль воронки', () => {
+    const series = chartRawSeries({
+      ...base,
+      ...cluster,
+      trackingKind: TRACKING_KINDS.AREA,
+      isRecovery: true,
+      moment: 10,
+    });
+    // Кривая откачки идёт журналом времени, а не расстояниями куста
+    expect(series.find((s) => s.id === 'pumping').measurements).toEqual(
+      base.measurements
+    );
+  });
+});
+
+/**
+ * Понижение на момент остановки насоса
+ *
+ * У куста оно своё у каждой скважины: опытная садится на метры, дальняя
+ * наблюдательная — на сантиметры. Общее на весь проект число давало
+ * остаточное понижение чужой скважины, а Math.max(0, …) превращал разницу
+ * в ровный ноль — кривая ложилась горизонталью и молчала о причине.
+ */
+describe('finalDrawdownAtStop', () => {
+  test('берётся из последнего замера откачки этой же скважины', () => {
+    expect(
+      finalDrawdownAtStop({
+        measurements: [
+          { t: 1, s: 1 },
+          { t: 100, s: 5 },
+        ],
+      })
+    ).toBe(5);
+  });
+
+  test('заданное руками значение важнее журнала', () => {
+    expect(
+      finalDrawdownAtStop({ measurements: [{ t: 100, s: 5 }], stored: 4 })
+    ).toBe(4);
+  });
+
+  test('пустой журнал без заданного значения даёт ноль', () => {
+    expect(finalDrawdownAtStop({ measurements: [] })).toBe(0);
+  });
+
+  test('незаполненные строки в хвосте журнала пропускаются', () => {
+    expect(
+      finalDrawdownAtStop({
+        measurements: [
+          { t: 100, s: 5 },
+          { t: NaN, s: NaN },
+        ],
+      })
+    ).toBe(5);
   });
 });

@@ -5,7 +5,10 @@
  * вместо WebView — iframe. Metro выбирает этот файл по расширению `.web.js`,
  * поэтому нативный WebView в веб-бандл не попадает.
  *
- * @param {Array} points - точки наблюдения
+ * @param {Array} points - точки: { lat, lon, title, color, id, draggable, label }
+ * @param {Function} [onMovePoint] - вызывается с (id, lat, lon) после
+ *   перетаскивания маркера
+ * @param {{color: string, fromId: string}} [connect] - пунктир между точками
  * @param {Function} onPressMap - вызывается с (lat, lon) при клике по карте
  * @param {{lat: number, lon: number}} [center] - куда центрировать карту
  * @param {number} [height] - высота карты; без неё карта занимает всё место
@@ -18,7 +21,15 @@ import { useTheme } from 'react-native-paper';
 import { buildMapHtml } from './leafletMapHtml';
 import { pointTypeColors, radius } from '../theme';
 
-export default function FieldMap({ points = [], onPressMap, center, height, flush = false }) {
+export default function FieldMap({
+  points = [],
+  onPressMap,
+  onMovePoint,
+  connect,
+  center,
+  height,
+  flush = false,
+}) {
   const theme = useTheme();
   const frameRef = useRef(null);
   const [ready, setReady] = useState(false);
@@ -42,23 +53,30 @@ export default function FieldMap({ points = [], onPressMap, center, height, flus
       if (!data || !data.type) return;
       if (data.type === 'ready') setReady(true);
       if (data.type === 'press') onPressMap?.(data.lat, data.lon);
+      if (data.type === 'move') onMovePoint?.(data.id, data.lat, data.lon);
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [onPressMap]);
+  }, [onPressMap, onMovePoint]);
 
   useEffect(() => {
     if (!ready) return;
     post({
       type: 'points',
+      connect,
       points: points.map((p) => ({
+        id: p.id,
         lat: p.lat,
         lon: p.lon,
         title: p.title,
-        color: pointTypeColors[p.type] ?? pointTypeColors.observation,
+        // Цвет приходит готовым, если он не про тип точки дневника:
+        // у скважин куста своя раскраска по роли
+        color: p.color ?? pointTypeColors[p.type] ?? pointTypeColors.observation,
+        draggable: p.draggable,
+        label: p.label,
       })),
     });
-  }, [points, ready, post]);
+  }, [points, connect, ready, post]);
 
   useEffect(() => {
     if (!ready || !center) return;

@@ -17,6 +17,8 @@ import { useTheme } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import I18n from '../Localization';
 import { REGIMES, transmissivityFromPlateau } from '../calc/diagnostics';
+import { useUnits } from '../UnitsContext';
+import { QUANTITIES } from '../calc/units';
 import { spacing, radius, type, elevation, numericAt } from '../theme';
 
 /** Расхождение оценок T, начиная с которого стоит предупредить, доли */
@@ -109,6 +111,8 @@ export default function RegimeVerdict({ result, Q, comparisonT }) {
   const c = theme.colors;
 
   const info = describe(result?.regime, result ?? {});
+  const { unitLabel, fromBase } = useUnits();
+  // Расчёт идёт в базовых единицах, показываем в выбранных
   const plateauT = transmissivityFromPlateau(Q, result?.plateau);
 
   const accent = info.tone === 'ok' ? c.secondary : info.tone === 'warn' ? c.primaryAccent : c.textSecondary;
@@ -147,7 +151,8 @@ export default function RegimeVerdict({ result, Q, comparisonT }) {
             {I18n.t('plateauEstimate', { defaultValue: 'T по полке производной' })}
           </Text>
           <Text style={[styles.estimateValue, { color: accent }]}>
-            {plateauT.toFixed(2)} {I18n.t('unitTransmissivity', { defaultValue: 'м²/сут' })}
+            {fromBase(plateauT, QUANTITIES.TRANSMISSIVITY).toFixed(2)}{' '}
+            {unitLabel(QUANTITIES.TRANSMISSIVITY)}
           </Text>
         </View>
       )}

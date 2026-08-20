@@ -203,3 +203,99 @@ test('серии восстановления рисуются вместе с �
   });
   expect(count(json, 'RNSVGCircle')).toBe(6);
 });
+
+/**
+ * Выбор кривой, по которой ведётся прямая
+ *
+ * У куста на плоскости s — lg t лежит несколько кривых: открытая скважина и
+ * соседние. Прямая идёт по открытой, но на полотне это было видно только по
+ * пунктиру у соседних — понять, чью прямую сейчас двигаешь, было нельзя. А
+ * разница существенная: в пьезопроводность входит расстояние r, своё у
+ * каждой скважины.
+ */
+describe('выбор кривой', () => {
+  const twoWells = [
+    { id: 'w1', name: '1p', role: 'fit', measurements: pumping },
+    {
+      id: 'w2',
+      name: '2p',
+      role: 'reference',
+      measurements: [
+        { t: 1, s: 0.5 },
+        { t: 10, s: 1 },
+      ],
+    },
+  ];
+
+  /** Дерево целиком: нажатия проверяются по обработчикам, а не по разметке */
+  const mount = (props) => {
+    let tree;
+    act(() => {
+      tree = renderer.create(
+        <PaperProvider theme={lightTheme}>
+          <DrawdownChart width={340} {...props} />
+        </PaperProvider>
+      );
+    });
+    return tree;
+  };
+
+  /** Весь текст внутри узла */
+  const textOf = (node) => {
+    if (typeof node === 'string') return node;
+    if (!node || typeof node !== 'object') return '';
+    return (node.children ?? []).map(textOf).join(' ');
+  };
+
+  /**
+   * Элементы легенды по одному на кривую
+   *
+   * Обход отдаёт один и тот же TouchableOpacity несколько раз — пропсы стоят
+   * и на составном компоненте, и на обёртках под ним. Считаем по подписи:
+   * имена кривых на полотне и так не повторяются
+   */
+  const legendItems = (tree) => {
+    const seen = new Map();
+    for (const node of tree.root.findAll(
+      (one) =>
+        typeof one.props?.onPress === 'function' &&
+        one.props?.accessibilityRole === 'radio',
+      { deep: true }
+    )) {
+      const label = textOf(node);
+      if (!seen.has(label)) seen.set(label, node);
+    }
+    return [...seen.values()];
+  };
+
+  test('кривая в легенде выбирается касанием', () => {
+    const onSelectSeries = jest.fn();
+    const tree = mount({ series: twoWells, onSelectSeries });
+
+    const soutside = legendItems(tree).find((node) =>
+      textOf(node).includes('2p')
+    );
+    expect(soutside).toBeDefined();
+    act(() => {
+      soutside.props.onPress();
+    });
+    expect(onSelectSeries).toHaveBeenCalledWith('w2');
+  });
+
+  test('выбранная кривая отмечена в легенде', () => {
+    const tree = mount({ series: twoWells, onSelectSeries: () => {} });
+    const chosen = legendItems(tree).filter(
+      (node) => node.props.accessibilityState?.selected
+    );
+    // Прямая идёт по одной кривой, и отмечена в легенде тоже одна
+    expect(chosen).toHaveLength(1);
+    expect(textOf(chosen[0])).toContain('1p');
+  });
+
+  test('без обработчика легенда остаётся подписью, а не выбором', () => {
+    // На одиночной откачке выбирать нечего: вторая кривая там — фаза
+    // восстановления, а не соседняя скважина
+    const tree = mount({ series: twoWells });
+    expect(legendItems(tree)).toHaveLength(0);
+  });
+});

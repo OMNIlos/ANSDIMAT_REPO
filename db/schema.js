@@ -1,3 +1,5 @@
+import { DEFAULT_UNITS } from '../calc/units';
+
 /**
  * Схема локальной базы данных
  *
@@ -16,6 +18,34 @@ export const OFR_TYPES = {
   CLUSTER: 'cluster',     // Кустовая откачка
   FILL: 'fill',           // Налив
   RECOVERY: 'recovery',   // Восстановление уровня
+};
+
+/**
+ * Периоды опробования, к которым относится замер
+ *
+ * Одиночная откачка ведёт два раздельных журнала — как таблицы «Время» /
+ * «Понижение» и «Время восстан.» / «Восстановление» в настольном АНСДИМАТ.
+ * Общий журнал на обе фазы невозможен: время в них отсчитывается от разных
+ * моментов, а ноль восстановления отвечает максимальному понижению.
+ */
+export const MEASUREMENT_PHASES = {
+  PUMPING: 'pumping',     // Понижение уровня, время от начала откачки
+  RECOVERY: 'recovery',   // Восстановление уровня, время от остановки насоса
+};
+
+/**
+ * Роли скважин в опробовании
+ *
+ * Кустовая откачка — одна опытная скважина и сколько угодно наблюдательных
+ * вокруг неё. Опытная в списке одна: две и больше — это уже групповая
+ * откачка, отдельная схема со своими решениями.
+ *
+ * Замеры уровня ведутся по каждой скважине своим рядом: опытная, если в ней
+ * следят за уровнем, тоже наблюдательная (см. книгу, разд. 1.1.2).
+ */
+export const WELL_ROLES = {
+  PUMPING: 'pumping',           // Опытная: та, из которой качают
+  OBSERVATION: 'observation',   // Наблюдательная: в ней следят за уровнем
 };
 
 /** Типы точек полевого дневника */
@@ -180,6 +210,158 @@ export const MIGRATIONS = [
   UPDATE measurements       SET dirty = 1;
   UPDATE observation_points SET dirty = 1 WHERE deleted_at IS NULL;
   `,
+
+  // v5 — период опробования у замера.
+  //
+  // До этой версии журнал был один на обе фазы: строки, введённые как
+  // понижение, при переключении на восстановление просто читались по другой
+  // формуле. Для одиночной откачки так нельзя — время восстановления
+  // отсчитывается от остановки насоса, а не от начала опыта, и одни и те же
+  // числа в двух фазах означают разные моменты.
+  //
+  // Значение по умолчанию 'pumping' оставляет уже введённые замеры там же,
+  // где они были: журналы типа «восстановление уровня» держат свои строки
+  // в единственном журнале и обрабатываются по-прежнему.
+  `
+  ALTER TABLE measurements ADD COLUMN phase TEXT NOT NULL DEFAULT 'pumping';
+
+  CREATE INDEX IF NOT EXISTS idx_measurements_project_phase
+    ON measurements (project_id, phase, sort_order);
+
+  -- Колонка появилась только локально: на сервере её ещё нет ни у одной строки
+  UPDATE measurements SET dirty = 1 WHERE deleted_at IS NULL;
+  `,
+
+  // v6 — понижение на момент остановки насоса (табл. «Окончание»).
+  //
+  // Точка, от которой отсчитывается восстановление: ноль в журнале
+  // восстановления отвечает именно этому понижению. Без него нельзя сказать,
+  // восстановился ли уровень — остаточное понижение не с чем сравнивать.
+  `
+  ALTER TABLE projects ADD COLUMN final_drawdown REAL NOT NULL DEFAULT 0;
+
+  UPDATE projects SET dirty = 1 WHERE deleted_at IS NULL;
+  `,
+
+  // v7 — скважины опробования.
+  //
+  // До этой версии журнал был на один ряд замеров, то есть на одну скважину.
+  // Кустовая откачка так не описывается: вокруг опытной скважины стоит
+  // несколько наблюдательных, у каждой свой ряд «время — понижение» и своя
+  // кривая на графике.
+  //
+  // Замер привязан к скважине через well_id. У видов ОФР с одной скважиной он
+  // остаётся пустым: заводить им скважину-пустышку значило бы усложнить
+  // экраны ради строки в таблице.
+  //
+  // Кустовым журналам, заведённым до этой версии, выдаём пару скважин по
+  // умолчанию и отдаём их замеры наблюдательной: иначе журнал открылся бы
+  // пустым. Имена — по соглашению АНСДИМАТ: «w» у опытной, «p» у
+  // наблюдательной.
+  `
+  CREATE TABLE IF NOT EXISTS wells (
+    id          TEXT PRIMARY KEY NOT NULL,
+    project_id  TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    role        TEXT NOT NULL DEFAULT 'observation',
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    updated_at  INTEGER NOT NULL DEFAULT 0,
+    deleted_at  INTEGER,
+    dirty       INTEGER NOT NULL DEFAULT 1,
+    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_wells_project ON wells (project_id, sort_order);
+  CREATE INDEX IF NOT EXISTS idx_wells_dirty ON wells (dirty);
+
+  ALTER TABLE measurements ADD COLUMN well_id TEXT;
+
+  CREATE INDEX IF NOT EXISTS idx_measurements_well
+    ON measurements (well_id, phase, sort_order);
+
+  CREATE TABLE _well_seed AS
+  SELECT id AS project_id,
+         lower(
+           substr(hex(randomblob(4)), 1, 8) || '-' ||
+           substr(hex(randomblob(2)), 1, 4) || '-4' ||
+           substr(hex(randomblob(2)), 2, 3) || '-' ||
+           substr('89ab', (random() & 3) + 1, 1) ||
+           substr(hex(randomblob(2)), 2, 3) || '-' ||
+           substr(hex(randomblob(6)), 1, 12)
+         ) AS pumping_id,
+         lower(
+           substr(hex(randomblob(4)), 1, 8) || '-' ||
+           substr(hex(randomblob(2)), 1, 4) || '-4' ||
+           substr(hex(randomblob(2)), 2, 3) || '-' ||
+           substr('89ab', (random() & 3) + 1, 1) ||
+           substr(hex(randomblob(2)), 2, 3) || '-' ||
+           substr(hex(randomblob(6)), 1, 12)
+         ) AS observation_id
+    FROM projects
+   WHERE ofr_type = 'cluster' AND deleted_at IS NULL;
+
+  INSERT INTO wells (id, project_id, name, role, sort_order, updated_at, dirty)
+  SELECT pumping_id, project_id, '1w', 'pumping', 0, 0, 1 FROM _well_seed;
+
+  INSERT INTO wells (id, project_id, name, role, sort_order, updated_at, dirty)
+  SELECT observation_id, project_id, '1p', 'observation', 1, 0, 1 FROM _well_seed;
+
+  UPDATE measurements
+     SET well_id = (SELECT observation_id FROM _well_seed
+                     WHERE project_id = measurements.project_id),
+         dirty = 1
+   WHERE project_id IN (SELECT project_id FROM _well_seed);
+
+  DROP TABLE _well_seed;
+  `,
+
+  // v8 — расстояние от скважины до опытной.
+  //
+  // Расчётные схемы кустовой откачки строятся на расстоянии r между опытной
+  // и наблюдательной скважиной: без него по кусту нельзя ни провести площадное
+  // прослеживание, ни сопоставить кривые скважин между собой.
+  //
+  // У самой опытной скважины в этой же колонке лежит её радиус: расстояние
+  // «от опытной до опытной» — это и есть r0. Так же поступает настольный
+  // АНСДИМАТ: «при наблюдении за изменением уровня в опытной скважине
+  // в качестве расстояния обычно принимается её радиус».
+  `
+  ALTER TABLE wells ADD COLUMN distance REAL NOT NULL DEFAULT 0;
+
+  UPDATE wells SET dirty = 1 WHERE deleted_at IS NULL;
+  `,
+
+  // v9 — положение скважины на карте.
+  //
+  // Расстояния до опытной скважины удобнее расставлять на карте, чем
+  // набирать числами: куст рисуется как есть, а расстояние считается по
+  // координатам. Координаты пустые, пока скважину не разложили по карте, —
+  // поэтому колонки допускают NULL, а не заводят ложный ноль у экватора.
+  `
+  ALTER TABLE wells ADD COLUMN lat REAL;
+  ALTER TABLE wells ADD COLUMN lon REAL;
+
+  UPDATE wells SET dirty = 1 WHERE deleted_at IS NULL;
+  `,
+
+  // v10 — понижение на момент остановки насоса у каждой скважины куста.
+  //
+  // До этой версии оно было одно на весь проект (v6). Одиночной откачке
+  // этого хватает: журнал там один. У куста журналов пара на каждую
+  // скважину, и понижение на остановке своё у каждой — опытная садится на
+  // метры, дальняя наблюдательная на сантиметры.
+  //
+  // Общее число давало остаточное понижение чужой скважины: разница
+  // «понижение на остановке минус подъём уровня» выходила отрицательной,
+  // обрезалась нулём, и кривая восстановления ложилась горизонталью по нулю.
+  //
+  // Ноль здесь значит «не задано»: понижение берётся из последней строки
+  // журнала откачки этой же скважины, см. finalDrawdownAtStop.
+  `
+  ALTER TABLE wells ADD COLUMN final_drawdown REAL NOT NULL DEFAULT 0;
+
+  UPDATE wells SET dirty = 1 WHERE deleted_at IS NULL;
+  `,
 ];
 
 /** Значения настроек по умолчанию */
@@ -189,4 +371,7 @@ export const DEFAULT_SETTINGS = {
   tablet: true,           // адаптация под планшет
   autoLocation: true,     // автоопределение координат
   tabularNums: true,      // моноширинные цифры
+  // Размерности ввода и вывода. Расчёты и хранение всегда в базовых
+  // единицах, см. calc/units.js
+  units: DEFAULT_UNITS,
 };

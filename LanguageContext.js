@@ -24,8 +24,10 @@ export const LanguageContext = React.createContext({
 });
 
 export const LanguageProvider = ({ children }) => {
-  // Состояние текущего языка (по умолчанию русский)
-  const [locale, setLocale] = React.useState("ru");
+  // Системный язык уже определён и выставлен в I18n при загрузке модуля,
+  // отсюда и берём начальное значение: иначе первый рендер шёл бы по-русски
+  // независимо от языка устройства
+  const [locale, setLocale] = React.useState(I18n.locale);
   // Состояние загрузки (используется для предотвращения мерцания при инициализации)
   const [isLoading, setIsLoading] = React.useState(true);
 
@@ -63,12 +65,9 @@ export const LanguageProvider = ({ children }) => {
    * Вызывается один раз при инициализации компонента
    */
   React.useEffect(() => {
-    // Добавляем небольшую задержку для инициализации expo-localization
-    const timer = setTimeout(() => {
-      loadLanguagePreference();
-    }, 100);
-    
-    return () => clearTimeout(timer);
+    // Задержка на инициализацию expo-localization больше не нужна: язык
+    // устройства определяется синхронно в Localization.js
+    loadLanguagePreference();
   }, []);
 
   /**
@@ -88,11 +87,12 @@ export const LanguageProvider = ({ children }) => {
         setLocale(savedLocale);
         I18n.locale = savedLocale;
       } else {
-        // Если нет сохраненного языка, используем системный
+        // Своего выбора пользователь не делал — идём за системой и НЕ пишем
+        // язык в хранилище: записанный, он навсегда закрепил бы язык первого
+        // запуска, и смена языка телефона на приложение уже не влияла бы
         const systemLanguage = getSystemLanguage();
         setLocale(systemLanguage);
         I18n.locale = systemLanguage;
-        await AsyncStorage.setItem('appLocale', systemLanguage);
       }
     } catch (error) {
       console.error('Error loading language preference:', error);

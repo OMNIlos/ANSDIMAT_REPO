@@ -33,6 +33,8 @@ const REFERENCE_DOT_RADIUS = 2.6;
  * @param {number} props.height - высота полотна, px
  * @param {Object} props.colors - цвета темы
  * @param {Array<number>} props.selected - отмеченные замеры
+ * @param {boolean} props.picking - выбирается ли кривая для прямой: тогда
+ *   соседние кривые уходят на второй план заметнее обычного
  * @param {Object|null} props.ghost - эскиз пустого состояния
  */
 export default function ChartCanvas({
@@ -42,12 +44,19 @@ export default function ChartCanvas({
   height,
   colors: c,
   selected = [],
+  picking = false,
   ghost,
 }) {
   // Соседние кривые рисуются раньше основных: открытая в журнале кривая
   // должна читаться первой, а порядок наложения в SVG задаётся порядком узлов
   const reference = scene.shapes.filter((one) => one.role === SERIES_ROLES.REFERENCE);
   const fitted = scene.shapes.filter((one) => one.role !== SERIES_ROLES.REFERENCE);
+
+  // Пока кривую выбирают, соседние приглушены сильнее: у куста они той же
+  // толщины и того же вида, и понять, по какой сейчас идёт прямая, по одному
+  // пунктиру было нельзя
+  const referenceOpacity = picking ? 0.45 : 0.9;
+  const referenceDotOpacity = picking ? 0.4 : 0.85;
 
   return (
     <>
@@ -61,20 +70,31 @@ export default function ChartCanvas({
 
         {/* Полосы осей: за них тянут, чтобы растянуть одну ось. Без заливки
             этот жест ничем не обозначен, и найти его можно только случайно.
-            Заливка едва заметная — полосы подсказывают, а не спорят с данными */}
+            Заливка едва заметная — полосы подсказывают, а не спорят с данными.
+
+            Полосы повторяют зоны жеста один в один (см. pickDragTarget): всё
+            левее области построения тянет ось ординат, всё ниже неё — ось
+            абсцисс. Пока полосы были короче зон, углы полотна оставались
+            незалитыми и читались тёмными квадратами, а заодно врали про то,
+            где жест работает. Полосы не перекрываются: левая берёт всю
+            высоту, нижняя начинается от её правого края.
+
+            Размер полотна в расчёте подстрахован областью построения: у той
+            есть нижний предел, а у полотна нет, и на нулевой ширине полоса
+            оси абсцисс пропадала бы совсем */}
         <Rect
-          x={plot.x}
-          y={plot.y + plot.h}
-          width={plot.w}
-          height={Math.max(0, height - plot.y - plot.h)}
+          x={0}
+          y={0}
+          width={plot.x}
+          height={Math.max(height, plot.y + plot.h)}
           fill={c.textSecondary}
           opacity={0.05}
         />
         <Rect
-          x={0}
-          y={plot.y}
-          width={plot.x}
-          height={plot.h}
+          x={plot.x}
+          y={plot.y + plot.h}
+          width={Math.max(0, Math.max(width, plot.x + plot.w) - plot.x)}
+          height={Math.max(0, height - plot.y - plot.h)}
           fill={c.textSecondary}
           opacity={0.05}
         />
@@ -162,7 +182,7 @@ export default function ChartCanvas({
                   strokeLinecap="round"
                   strokeDasharray="6 4"
                   fill="none"
-                  opacity={0.9}
+                  opacity={referenceOpacity}
                 />
               ) : null}
               {series.dots.map((dot, i) => (
@@ -172,7 +192,7 @@ export default function ChartCanvas({
                   cy={dot.cy}
                   r={REFERENCE_DOT_RADIUS}
                   fill={series.color}
-                  opacity={0.85}
+                  opacity={referenceDotOpacity}
                 />
               ))}
             </React.Fragment>
@@ -184,7 +204,7 @@ export default function ChartCanvas({
                 key={`pl${series.id}`}
                 d={series.path}
                 stroke={series.color}
-                strokeWidth={2}
+                strokeWidth={picking ? 2.6 : 2}
                 strokeLinejoin="round"
                 strokeLinecap="round"
                 fill="none"

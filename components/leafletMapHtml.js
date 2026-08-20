@@ -6,10 +6,20 @@
  * одинаково везде и не требует ключей API, как в дизайн-прототипе.
  *
  * Протокол обмена с приложением:
- *   вниз (в карту):  { type: 'points', points: [...] }
+ *   вниз (в карту):  { type: 'points', points: [...], connect: {...} }
  *                    { type: 'center', lat, lon, zoom }
+ *                    { type: 'resize' }
  *   вверх (наружу):  { type: 'press', lat, lon }
+ *                    { type: 'move', id, lat, lon }
  *                    { type: 'ready' }
+ *
+ * Точка: { id, lat, lon, title, color, draggable, label }. `draggable`
+ * разрешает таскать маркер — так расставляют скважины куста; `label`
+ * показывает подпись постоянно, а не по нажатию.
+ *
+ * `connect` рисует пунктир между точками: { color, fromId }. С `fromId`
+ * получается звезда — лучи от одной точки ко всем остальным, что и отвечает
+ * расстояниям «до опытной скважины». Без него точки соединяются цепочкой.
  */
 
 /** Центр по умолчанию — Санкт-Петербург, родина АНСДИМАТ */
@@ -39,6 +49,14 @@ export function buildMapHtml({ center = DEFAULT_CENTER } = {}) {
     box-shadow: 0 2px 6px rgba(20,7,14,.45);
   }
   .leaflet-control-attribution { font-size: 9px; }
+  /* Подпись скважины: читается на карте без нажатия и не ловит касания,
+     иначе она перехватывала бы перетаскивание маркера */
+  .ans-label {
+    background: rgba(20,7,14,.78); border: none; box-shadow: none;
+    color: #fff; font: 600 11px/1.2 -apple-system, system-ui, sans-serif;
+    padding: 2px 6px; border-radius: 6px; pointer-events: none;
+  }
+  .ans-label::before { display: none; }
 </style>
 </head>
 <body>
@@ -57,6 +75,12 @@ export function buildMapHtml({ center = DEFAULT_CENTER } = {}) {
     }).addTo(map);
 
     var layer = L.layerGroup().addTo(map);
+    // Связки лежат отдельным слоем: их приходится перерисовывать на каждом
+    // кадре перетаскивания, а маркеры при этом трогать нельзя — маркер,
+    // пересозданный под пальцем, теряет захват
+    var lineLayer = L.layerGroup().addTo(map);
+    var placed = [];
+    var connectWith = null;
 
     /** Отправляет сообщение наружу — в WebView или в родительское окно */
     function send(payload) {
@@ -69,9 +93,36 @@ export function buildMapHtml({ center = DEFAULT_CENTER } = {}) {
       send({ type: 'press', lat: e.latlng.lat, lon: e.latlng.lng });
     });
 
+    /** Перерисовывает пунктир между точками по текущему положению маркеров */
+    function renderLines() {
+      lineLayer.clearLayers();
+      if (!connectWith || placed.length < 2) return;
+
+      var style = {
+        color: connectWith.color || '#8A0A3D',
+        weight: 2, dashArray: '6 6', opacity: 0.9
+      };
+
+      if (connectWith.fromId) {
+        var hub = null;
+        placed.forEach(function (m) { if (m.id === connectWith.fromId) hub = m; });
+        if (!hub) return;
+        placed.forEach(function (m) {
+          if (m.id === connectWith.fromId) return;
+          L.polyline([hub.marker.getLatLng(), m.marker.getLatLng()], style).addTo(lineLayer);
+        });
+        return;
+      }
+
+      L.polyline(placed.map(function (m) { return m.marker.getLatLng(); }), style).addTo(lineLayer);
+    }
+
     /** Перерисовывает маркеры точек наблюдения */
-    function renderPoints(points) {
+    function renderPoints(points, connect) {
       layer.clearLayers();
+      placed = [];
+      connectWith = connect || null;
+
       (points || []).forEach(function (p) {
         if (typeof p.lat !== 'number' || typeof p.lon !== 'number') return;
         var icon = L.divIcon({
@@ -80,9 +131,37 @@ export function buildMapHtml({ center = DEFAULT_CENTER } = {}) {
           iconSize: [16, 16],
           iconAnchor: [8, 8]
         });
-        var marker = L.marker([p.lat, p.lon], { icon: icon }).addTo(layer);
-        if (p.title) marker.bindPopup(p.title);
+        var marker = L.marker([p.lat, p.lon], {
+          icon: icon,
+          draggable: !!p.draggable,
+          autoPan: !!p.draggable
+        }).addTo(layer);
+
+        if (p.title) {
+          if (p.label) {
+            marker.bindTooltip(p.title, {
+              permanent: true, direction: 'top', offset: [0, -10], className: 'ans-label'
+            });
+          } else {
+            marker.bindPopup(p.title);
+          }
+        }
+
+        if (p.draggable) {
+          // Пунктир тянется за маркером на каждом кадре, наружу же уходит
+          // только конечное положение: слать каждый кадр в базу незачем
+          marker.on('drag', renderLines);
+          marker.on('dragend', function () {
+            var ll = marker.getLatLng();
+            renderLines();
+            send({ type: 'move', id: p.id, lat: ll.lat, lon: ll.lng });
+          });
+        }
+
+        placed.push({ id: p.id, marker: marker });
       });
+
+      renderLines();
     }
 
     /** Разбирает входящее сообщение от приложения */
@@ -90,7 +169,7 @@ export function buildMapHtml({ center = DEFAULT_CENTER } = {}) {
       var data;
       try { data = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch (err) { return; }
       if (!data || !data.type) return;
-      if (data.type === 'points') renderPoints(data.points);
+      if (data.type === 'points') renderPoints(data.points, data.connect);
       if (data.type === 'center') map.setView([data.lat, data.lon], data.zoom || map.getZoom());
       // Контейнер сменил размер (разворот на весь экран). Leaflet следит
       // только за размером окна, а оно тут не меняется — без этого вызова

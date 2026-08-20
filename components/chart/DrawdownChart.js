@@ -24,7 +24,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { useTheme } from 'react-native-paper';
@@ -111,6 +111,19 @@ export default function DrawdownChart({
   // Название открытой скважины: нужно только легенде, и только когда кривых
   // больше одной
   activeSeriesName,
+  /**
+   * Выбор кривой, по которой ведётся прямая: (seriesId) => void
+   *
+   * У куста на плоскости s — lg t лежит несколько кривых: открытая скважина и
+   * соседние. Прямая идёт по открытой, и до этого сменить её можно было
+   * только чипом скважины над журналом — далеко от полотна, на котором эту
+   * прямую и двигают. Разница не косметическая: в пьезопроводность входит
+   * расстояние r, своё у каждой скважины.
+   *
+   * Без обработчика легенда остаётся подписью: на одиночной откачке вторая
+   * кривая — это фаза восстановления, и выбирать там нечего.
+   */
+  onSelectSeries,
   mode = X_MODES.LOG,
   width = 340,
   onFitChange,
@@ -460,6 +473,7 @@ export default function DrawdownChart({
           height={chartHeight}
           colors={c}
           selected={selected}
+          picking={!!onSelectSeries}
           ghost={scene.hasData ? null : ghost}
         />
 
@@ -486,23 +500,78 @@ export default function DrawdownChart({
     </GestureDetector>
   );
 
+  /**
+   * Строка легенды
+   *
+   * Кривая подбора отмечена: по ней идёт прямая, и по её расстоянию считается
+   * пьезопроводность. Пока выбор кривой не задан, отметка не ставится — на
+   * одиночной откачке вторая кривая это фаза восстановления, и «выбранной»
+   * там ничего не бывает.
+   *
+   * @param {Object} one - серия, см. calc/chartSeries.js
+   * @returns {React.ReactNode} содержимое элемента легенды
+   */
+  const legendMark = (one) => (
+    <>
+      <View
+        style={[
+          styles.legendMark,
+          { backgroundColor: one.color },
+          one.role === SERIES_ROLES.REFERENCE && styles.legendMarkReference,
+        ]}
+      />
+      <Text
+        style={[
+          styles.legendText,
+          {
+            color:
+              onSelectSeries && one.role !== SERIES_ROLES.REFERENCE
+                ? c.text
+                : c.textSecondary,
+          },
+        ]}
+        numberOfLines={1}
+      >
+        {one.name}
+      </Text>
+    </>
+  );
+
   const legendRow = scene.hasData && legend.length > 0 && (
     <View style={[styles.legend, fullscreen && styles.legendFloating,
       fullscreen && { backgroundColor: c.surface, top: insets.top + CONTROL_ROW_HEIGHT }]}>
-      {legend.map((one) => (
-        <View key={one.id} style={styles.legendItem}>
-          <View
+      {legend.map((one) => {
+        const chosen = one.role !== SERIES_ROLES.REFERENCE;
+
+        if (!onSelectSeries) {
+          return (
+            <View key={one.id} style={styles.legendItem}>
+              {legendMark(one)}
+            </View>
+          );
+        }
+
+        // Выбор кривой — переключатель, а не кнопка: выбранной остаётся одна,
+        // и экранный диктор должен называть её выбранной, а не нажатой
+        return (
+          <TouchableOpacity
+            key={one.id}
+            onPress={() => onSelectSeries(one.id)}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: chosen }}
             style={[
-              styles.legendMark,
-              { backgroundColor: one.color },
-              one.role === SERIES_ROLES.REFERENCE && styles.legendMarkReference,
+              styles.legendItem,
+              styles.legendPick,
+              {
+                backgroundColor: chosen ? c.primaryWash : 'transparent',
+                borderColor: chosen ? c.wineBorder : c.border,
+              },
             ]}
-          />
-          <Text style={[styles.legendText, { color: c.textSecondary }]} numberOfLines={1}>
-            {one.name}
-          </Text>
-        </View>
-      ))}
+          >
+            {legendMark(one)}
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 
@@ -547,6 +616,17 @@ export default function DrawdownChart({
 
       {/* Подсказки под графиком, а не поверх: перекрывать данные,
           по которым надо попасть пальцем, — плохая идея */}
+      {/* По какой кривой идёт прямая. У куста кривых несколько, и от выбора
+          зависит не только наклон: в пьезопроводность входит расстояние r,
+          своё у каждой скважины */}
+      {scene.hasData && !!onSelectSeries && legend.length > 1 && (
+        <Text style={[styles.pickHint, { color: c.textSecondary }]} numberOfLines={2}>
+          {I18n.t('pickSeriesHint', {
+            defaultValue: 'Коснитесь названия кривой в легенде — прямая перейдёт на неё',
+          })}
+        </Text>
+      )}
+
       {scene.hasData && needsSelection && (
         <View style={[styles.hint, { backgroundColor: c.primaryWash, borderColor: c.wineBorder }]}>
           <Text style={[styles.hintText, { color: c.primaryAccent }]}>
@@ -627,6 +707,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 5,
   },
+  // Выбираемая кривая обведена рамкой: без неё подпись не читается как то,
+  // по чему можно попасть пальцем
+  legendPick: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
   legendMark: {
     width: 10,
     height: 3,
@@ -637,6 +725,11 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontWeight: '600',
     maxWidth: 120,
+  },
+  pickHint: {
+    ...type.caption,
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.xs,
   },
   axisRow: {
     flexDirection: 'row',

@@ -169,3 +169,76 @@ test('обе кривые остаются доступны переключат
   // Три замера откачки плюс три остаточного понижения
   expect(countCircles(tree)).toBe(6);
 });
+
+/**
+ * Нажимает кнопку по метке для экранного диктора
+ *
+ * Кнопки управления графиком подписаны значками, текста в них нет — искать
+ * их приходится по accessibilityLabel.
+ */
+const pressLabel = async (tree, label) => {
+  const target = tree.root
+    .findAll(
+      (node) =>
+        typeof node.props?.onPress === 'function' &&
+        node.props?.accessibilityLabel === label,
+      { deep: true }
+    )
+    .pop();
+  expect(target).toBeDefined();
+  await act(async () => {
+    target.props.onPress();
+  });
+};
+
+test('разворот графика не разрушает список экрана', async () => {
+  // Развёрнутый график рисовался вместо всего экрана, и прокрутка вместе со
+  // списком уходила в небытие: возврат в обычный вид монтировал список
+  // заново, то есть с самого верха. Список обязан пережить разворот —
+  // иначе позицию прокрутки сохранять не в чем
+  const { ScrollView } = require('react-native-gesture-handler');
+  const tree = await mount();
+  expect(tree.root.findAllByType(ScrollView).length).toBe(1);
+
+  await pressLabel(tree, 'Развернуть график на весь экран');
+  // Развёрнутый вид действительно открылся
+  expect(
+    tree.root.findAll(
+      (node) => node.props?.accessibilityLabel === 'Свернуть график',
+      { deep: true }
+    ).length
+  ).toBeGreaterThan(0);
+  // …и открылся именно в Modal. Обычной накладкой поверх списка это не
+  // сделать: экран лежит в карточке навигатора, а та на вебе выше окна и
+  // сдвинута transform — и absolute, и fixed внутри неё уезжают вместе с
+  // прокруткой, и график встаёт мимо экрана
+  const { Modal } = require('react-native');
+  expect(
+    tree.root.findAllByType(Modal).filter((node) => node.props.visible).length
+  ).toBe(1);
+  // …и список экрана при этом остался смонтированным
+  expect(tree.root.findAllByType(ScrollView).length).toBe(1);
+  expect(textOf(tree.root)).toContain('Опыт');
+});
+
+test('на время разворота место графика в списке сохраняет высоту', async () => {
+  // Иначе список бы укоротился на весь график, прокрутка съехала бы к новому
+  // концу, и возврат в обычный вид показывал бы уже не то место
+  const tree = await mount();
+  // Первый узел с onLayout в порядке дерева — обёртка места графика:
+  // остальные лежат внутри самого графика, то есть ниже
+  const slot = () =>
+    tree.root.findAll((node) => typeof node.props?.onLayout === 'function', {
+      deep: true,
+    })[0];
+  expect(slot().props.style).toBeNull();
+
+  await act(async () => {
+    slot().props.onLayout({ nativeEvent: { layout: { width: 300, height: 420 } } });
+  });
+  await pressLabel(tree, 'Развернуть график на весь экран');
+  expect(slot().props.style).toEqual({ height: 420 });
+
+  await pressLabel(tree, 'Свернуть график');
+  expect(slot().props.style).toBeNull();
+});
