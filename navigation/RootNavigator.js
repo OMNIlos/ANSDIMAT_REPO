@@ -28,6 +28,7 @@ import AuthScreen from '../screens/AuthScreen';
 import AccountScreen from '../screens/AccountScreen';
 import TopBar from '../components/TopBar';
 import I18n from '../Localization';
+import { PREMIUM_ENABLED } from '../billing/config';
 
 const Stack = createStackNavigator();
 
@@ -38,6 +39,11 @@ export default function RootNavigator() {
       screenOptions={{
         header: (props) => <TopBar {...props} />,
         ...TransitionPresets.SlideFromRightIOS,
+        // Карточка экрана обязана держать высоту окна. Без этого на вебе
+        // react-navigation ставит ей minHeight: 100% без flex, карточка
+        // растягивается по содержимому, и внутренний ScrollView перестаёт
+        // быть прокруткой: длинные экраны (калькулятор) просто обрезались
+        cardStyle: { flex: 1, minHeight: 0 },
       }}
     >
       <Stack.Screen
@@ -97,11 +103,16 @@ export default function RootNavigator() {
         component={AccountScreen}
         options={{ title: I18n.t('accountTitle', { defaultValue: 'Аккаунт' }) }}
       />
-      <Stack.Screen
-        name="Subscription"
-        component={SubscriptionScreen}
-        options={{ title: I18n.t('subscription', { defaultValue: 'Подписка' }) }}
-      />
+      {/* Тарифы. Пока премиум выключен, маршрут не регистрируется: вести на
+          него неоткуда, а живой экран покупки посреди бесплатного приложения
+          обещал бы то, чего нет */}
+      {PREMIUM_ENABLED && (
+        <Stack.Screen
+          name="Subscription"
+          component={SubscriptionScreen}
+          options={{ title: I18n.t('subscription', { defaultValue: 'Подписка' }) }}
+        />
+      )}
       <Stack.Screen
         name="Order"
         component={OrderScreen}

@@ -9,6 +9,9 @@
  * @param {Function} [onMovePoint] - вызывается с (id, lat, lon) после
  *   перетаскивания маркера
  * @param {{color: string, fromId: string}} [connect] - пунктир между точками
+ * @param {Array} [polygons] - залитые контуры: { id, points: [[lat, lon]], color,
+ *   fill, fillOpacity, title }
+ * @param {boolean} [fitPolygons] - подогнать обзор под контуры
  * @param {Function} onPressMap - вызывается с (lat, lon) при тапе по карте
  * @param {{lat: number, lon: number}} [center] - куда центрировать карту
  * @param {number} [height] - высота карты; без неё карта занимает всё место
@@ -27,6 +30,8 @@ export default function FieldMap({
   onPressMap,
   onMovePoint,
   connect,
+  polygons,
+  fitPolygons = false,
   center,
   height,
   flush = false,
@@ -62,6 +67,13 @@ export default function FieldMap({
   }, [points, connect, ready, post]);
 
   // Центрирование — например, после определения своего местоположения
+  // Контуры приходят отдельным сообщением: маркеры при их смене трогать
+  // нельзя, иначе маркер под пальцем пересоздастся и потеряет захват
+  useEffect(() => {
+    if (!ready || !polygons) return;
+    post({ type: 'polygons', polygons, fit: fitPolygons });
+  }, [polygons, fitPolygons, ready, post]);
+
   useEffect(() => {
     if (!ready || !center) return;
     post({ type: 'center', lat: center.lat, lon: center.lon, zoom: 15 });

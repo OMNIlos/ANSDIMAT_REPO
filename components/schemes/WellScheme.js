@@ -12,7 +12,7 @@
  */
 
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import Svg, {
   G,
   Line,
@@ -24,6 +24,7 @@ import Svg, {
 } from 'react-native-svg';
 import I18n from '../../Localization';
 import { WIDTH, PALETTE, wellSchemeLayout, screenLines } from './wellSchemeLayout';
+import { fontFamily, radius, spacing } from '../../theme';
 
 /** Шрифт математических обозначений */
 const MATH_FONT = 'Times New Roman';
@@ -143,21 +144,32 @@ function Dimension({ from, to, y, label, labelY }) {
 
 export default function WellScheme({ scheme = 'theis', width = WIDTH, caption }) {
   const layout = wellSchemeLayout(scheme);
-  const height = (width * layout.height) / WIDTH;
+  // Объявленная высота схемы с запасом: у Тейса и Болтона под нижним слоем
+  // оставалась полоса пустой бумаги. Меряем по фактическому содержимому
+  const content = Math.max(
+    ...layout.layers.map((layer) => layer.y + layer.h),
+    ...layout.dims.map((dim) => dim.labelY + 6),
+    layout.river ? layout.river.y + layout.river.h : 0
+  );
+  const box = Math.min(layout.height, content) + 8;
+  const height = (width * box) / WIDTH;
   const { pumped, observer, thickness } = layout;
   const pumpedCenter = pumped.x + PUMPED_WIDTH / 2;
   const observerCenter = observer.x + OBSERVER_WIDTH / 2;
   const labelY = pumped.top - 8;
 
   return (
-    <View style={[styles.frame, { width, height }]}>
-      <Svg width={width} height={height} viewBox={`0 -8 ${WIDTH} ${layout.height}`}>
-        {caption ? (
-          <SvgText x={8} y={18} fontSize={16} fill={PALETTE.caption}>
-            {caption}
-          </SvgText>
-        ) : null}
-
+    <View style={{ width }}>
+      {/* Подпись вынесена из чертежа наружу: внутри полотна она набиралась
+          шрифтом SVG по умолчанию и при сжатии до ширины экрана падала
+          до девяти пикселей — числа в ней не читались */}
+      {caption ? (
+        <Text style={styles.caption} numberOfLines={1}>
+          {caption}
+        </Text>
+      ) : null}
+      <View style={[styles.frame, { width, height }]}>
+        <Svg width={width} height={height} viewBox={`0 -8 ${WIDTH} ${box}`}>
         {layout.layers.map((layer) => (
           <Rect key={layer.y} x={0} y={layer.y} width={WIDTH} height={layer.h} fill={layer.fill} />
         ))}
@@ -301,7 +313,8 @@ export default function WellScheme({ scheme = 'theis', width = WIDTH, caption })
         {layout.dims.map((dim) => (
           <Dimension key={dim.label} {...dim} />
         ))}
-      </Svg>
+        </Svg>
+      </View>
     </View>
   );
 }
@@ -311,7 +324,20 @@ const styles = StyleSheet.create({
   // читается как вклеенная страница справочника
   frame: {
     backgroundColor: '#fbfaf6',
-    borderRadius: 12,
+    borderRadius: radius.card,
+    // Контур одинаков в обеих темах: на светлом фоне приложения бумага
+    // чертежа почти совпадает с ним по тону и без рамки растворялась
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(26, 7, 16, 0.12)',
     overflow: 'hidden',
+  },
+  // Цвет совпадает с приглушённым текстом обеих тем: подпись стоит на фоне
+  // приложения, а не на бумаге чертежа
+  caption: {
+    fontFamily: fontFamily.mono,
+    fontSize: 11,
+    lineHeight: 15,
+    color: '#8A8087',
+    marginBottom: spacing.sm,
   },
 });

@@ -8,7 +8,11 @@
  * Схем четыре, и отличаются они тем, откуда пласт берёт воду: ниоткуда (Тейс),
  * сверху через слабопроницаемый слой (Хантуш–Джейкоб), из осушаемых пор
  * (Болтон) или из реки (граница питания). Выбор схемы меняет и набор полей,
- * и типовой чертёж над результатом.
+ * и типовой чертёж под ним.
+ *
+ * Порядок блоков — от постановки задачи к ответу: схема с чертежом, исходные
+ * данные, результат. Формула, подробности и таблица свёрнуты: они нужны при
+ * проверке расчёта, а не при каждом изменении расхода.
  */
 
 import React, { useMemo, useState } from 'react';
@@ -21,14 +25,19 @@ import { computeWellDrawdown, drawdownSeries } from '../../calc/wellDrawdown';
 import { WELL_LITHOLOGY, storativityFromSs } from '../../calc/lithology';
 import WellScheme from '../../components/schemes/WellScheme';
 import DrawdownLogChart from '../../components/charts/DrawdownLogChart';
-import { spacing, type } from '../../theme';
+import AppearIn from '../../components/ui/AppearIn';
+import { spacing, fontFamily } from '../../theme';
 import {
   Card,
+  Collapsible,
   Field,
+  Formula,
+  Note,
+  Notices,
+  OptionRow,
+  PresetRow,
   ResultCard,
   SectionLabel,
-  OptionRow,
-  Notices,
   StatRow,
   parseNumber,
   formatValue,
@@ -39,10 +48,10 @@ import {
 
 /** Расчётные схемы в порядке веб-версии */
 const SCHEMES = [
-  { value: 'theis', labelKey: 'wellSchemeTheis' },
-  { value: 'hantush', labelKey: 'wellSchemeHantush' },
-  { value: 'boulton', labelKey: 'wellSchemeBoulton' },
-  { value: 'boundary', labelKey: 'wellSchemeBoundary' },
+  { value: 'theis', labelKey: 'wellSchemeTheis', methodKey: 'wellMethodTheis' },
+  { value: 'hantush', labelKey: 'wellSchemeHantush', methodKey: 'wellMethodHantush' },
+  { value: 'boulton', labelKey: 'wellSchemeBoulton', methodKey: 'wellMethodBoulton' },
+  { value: 'boundary', labelKey: 'wellSchemeBoundary', methodKey: 'wellMethodBoundary' },
 ];
 
 /** Сколько строк таблицы понижений показывать */
@@ -120,9 +129,9 @@ export default function ForecastTab({ contentWidth }) {
   const result = useMemo(() => computeWellDrawdown(raw), [raw]);
   const series = useMemo(() => (result.ok ? drawdownSeries(raw) : []), [result, raw]);
 
-  const caption = result.ok
-    ? `k = ${formatCompact(fromBase(result.k, QUANTITIES.CONDUCTIVITY))} ${uCond} · Q = ${formatCompact(fromBase(result.Q, QUANTITIES.FLOW))} ${uFlow}`
-    : null;
+  const caption = I18n.t(
+    (SCHEMES.find((item) => item.value === scheme) || SCHEMES[0]).methodKey
+  );
 
   const hasError = (code) => !result.ok && result.errors.includes(code);
 
@@ -155,144 +164,164 @@ export default function ForecastTab({ contentWidth }) {
 
   return (
     <>
-      <SectionLabel style={styles.firstLabel}>{I18n.t('wellSchemeGroup')}</SectionLabel>
-      <OptionRow options={localize(SCHEMES)} value={scheme} onChange={setScheme} />
+      <AppearIn index={0}>
+        <SectionLabel style={styles.firstLabel}>{I18n.t('wellSchemeGroup')}</SectionLabel>
+        <OptionRow options={localize(SCHEMES)} value={scheme} onChange={setScheme} />
+        {/* Чертёж стоит сразу под выбором: он отвечает на вопрос, какую задачу
+            вообще решает выбранная схема, и читается раньше, чем поля */}
+        <View style={styles.scheme}>
+          <WellScheme scheme={scheme} width={contentWidth} caption={caption} />
+        </View>
+      </AppearIn>
 
-      <SectionLabel>{I18n.t('wellPumpingGroup')}</SectionLabel>
-      <Card>
-        <Field label={I18n.t('wellFlow')} value={flow} onChange={setFlow} unit={uFlow} error={hasError('Q')}
-          hint={result.ok ? `${formatValue(result.Q / 24)} ${I18n.t('unitM3Hour')} · ${formatValue(result.Q / 86.4)} ${I18n.t('unitLSec')}` : null} />
-        <Field
-          label={I18n.t('wellTime')}
-          value={time}
-          onChange={setTime}
-          unit={I18n.t('unitDays')}
-          error={hasError('t')}
-          hint={yearsHint}
-        />
-        <Field label={I18n.t('wellRadius')} value={wellRadius} onChange={setWellRadius} unit={uLen} error={hasError('r0')} />
-        <Field label={I18n.t('wellDistance')} value={distance} onChange={setDistance} unit={uLen} error={hasError('r')} />
-      </Card>
+      <AppearIn index={1}>
+        <SectionLabel>{I18n.t('wellPumpingGroup')}</SectionLabel>
+        <Card>
+          <Field
+            label={I18n.t('wellFlow')}
+            symbol="Q"
+            value={flow}
+            onChange={setFlow}
+            unit={uFlow}
+            error={hasError('Q')}
+            hint={result.ok ? `${formatValue(result.Q / 24)} ${I18n.t('unitM3Hour')} · ${formatValue(result.Q / 86.4)} ${I18n.t('unitLSec')}` : null}
+          />
+          <Field
+            label={I18n.t('wellTime')}
+            symbol="t"
+            value={time}
+            onChange={setTime}
+            unit={I18n.t('unitDays')}
+            error={hasError('t')}
+            hint={yearsHint}
+          />
+          <Field label={I18n.t('wellRadius')} symbol="r₀" value={wellRadius} onChange={setWellRadius} unit={uLen} error={hasError('r0')} />
+          <Field label={I18n.t('wellDistance')} symbol="r" value={distance} onChange={setDistance} unit={uLen} error={hasError('r')} />
+          <Field label={I18n.t('wellAllowable')} symbol="s_доп" value={allowable} onChange={setAllowable} unit={uDraw} />
+        </Card>
+      </AppearIn>
 
       {scheme === 'boundary' ? (
-        <>
+        <AppearIn index={2}>
           <SectionLabel>{I18n.t('wellBoundaryGroup')}</SectionLabel>
           <Card>
-            <Field label={I18n.t('wellToRiver')} value={wellToRiver} onChange={setWellToRiver} unit={uLen} error={hasError('Lw')} />
-            <Field label={I18n.t('wellObsToRiver')} value={obsToRiver} onChange={setObsToRiver} unit={uLen} error={hasError('Lp')} />
+            <Field label={I18n.t('wellToRiver')} symbol="L_w" value={wellToRiver} onChange={setWellToRiver} unit={uLen} error={hasError('Lw')} />
+            <Field label={I18n.t('wellObsToRiver')} symbol="L_p" value={obsToRiver} onChange={setObsToRiver} unit={uLen} error={hasError('Lp')} />
           </Card>
-        </>
+        </AppearIn>
       ) : null}
 
-      <SectionLabel>{I18n.t('wellAquiferGroup')}</SectionLabel>
-      <OptionRow
-        options={WELL_LITHOLOGY.map((entry) => ({ value: entry.id, label: I18n.t(entry.labelKey) }))}
-        value={null}
-        onChange={applyLithology}
-      />
-      <Text style={[type.caption, styles.note, { color: theme.colors.textSecondary }]}>
-        {I18n.t('wellLithologyNote')}
-      </Text>
-      <Card style={styles.spaced}>
-        <Field label={I18n.t('wellConductivity')} value={k} onChange={setK} unit={uCond} error={hasError('k')} />
-        <Field
-          label={unconfined ? I18n.t('wellSaturated') : I18n.t('wellThickness')}
-          value={thickness}
-          onChange={setThickness}
-          unit={uLen}
-          error={hasError('m') || hasError('h0')}
+      <AppearIn index={3}>
+        <SectionLabel>{I18n.t('wellAquiferGroup')}</SectionLabel>
+        <PresetRow
+          options={WELL_LITHOLOGY.map((entry) => ({ value: entry.id, label: I18n.t(entry.labelKey) }))}
+          onPick={applyLithology}
         />
-        {unconfined ? (
-          <Field label={I18n.t('wellYield')} value={yieldValue} onChange={setYieldValue} unit="" error={hasError('Sy')} />
-        ) : null}
-        <Field label={I18n.t('wellStorativity')} value={storativity} onChange={setStorativity} unit="" error={hasError('S')} />
-        {unconfined ? null : (
-          <Field label={I18n.t('wellDiffusivity')} value={diffusivity} onChange={setDiffusivity} unit={uDiff}
-            hint={I18n.t('wellDiffusivityHint')} />
-        )}
-        {scheme === 'hantush' ? (
-          <Field label={I18n.t('wellLeakage')} value={leakage} onChange={setLeakage} unit={uLen} error={hasError('B')} />
-        ) : null}
-      </Card>
-
-      <SectionLabel>{I18n.t('wellAllowableGroup')}</SectionLabel>
-      <Card>
-        <Field label={I18n.t('wellAllowable')} value={allowable} onChange={setAllowable} unit={uDraw} />
-      </Card>
-
-      <SectionLabel>{I18n.t('wellSectionGroup')}</SectionLabel>
-      <WellScheme scheme={scheme} width={contentWidth} caption={caption} />
+        <Card style={styles.spaced}>
+          <Field label={I18n.t('wellConductivity')} symbol="k" value={k} onChange={setK} unit={uCond} error={hasError('k')} />
+          <Field
+            label={unconfined ? I18n.t('wellSaturated') : I18n.t('wellThickness')}
+            symbol={unconfined ? 'h₀' : 'm'}
+            value={thickness}
+            onChange={setThickness}
+            unit={uLen}
+            error={hasError('m') || hasError('h0')}
+            hint={
+              result.ok
+                ? `${I18n.t('wellTransmissivityHint')} = ${formatCompact(fromBase(result.T, QUANTITIES.TRANSMISSIVITY))} ${unitLabel(QUANTITIES.TRANSMISSIVITY)}`
+                : null
+            }
+          />
+          {unconfined ? (
+            <Field label={I18n.t('wellYield')} symbol="Sy" value={yieldValue} onChange={setYieldValue} error={hasError('Sy')} />
+          ) : null}
+          <Field label={I18n.t('wellStorativity')} symbol="S" value={storativity} onChange={setStorativity} error={hasError('S')} />
+          {unconfined ? null : (
+            <Field
+              label={I18n.t('wellDiffusivity')}
+              symbol="a"
+              value={diffusivity}
+              onChange={setDiffusivity}
+              unit={uDiff}
+              hint={I18n.t('wellDiffusivityHint')}
+            />
+          )}
+          {scheme === 'hantush' ? (
+            <Field label={I18n.t('wellLeakage')} symbol="B" value={leakage} onChange={setLeakage} unit={uLen} error={hasError('B')} />
+          ) : null}
+        </Card>
+      </AppearIn>
 
       {result.ok ? (
-        <>
+        <AppearIn index={4}>
           <ResultCard
+            title={I18n.t('wellResultTitle')}
             label="s(r₀)"
             value={out(result.sWell, QUANTITIES.DRAWDOWN)}
             unit={uDraw}
-            formula={result.formula}
-            extra={
-              <View style={styles.secondValue}>
-                <Text style={styles.secondLabel}>s(r) =</Text>
-                <Text style={styles.secondNumber}>{out(result.sObs, QUANTITIES.DRAWDOWN)}</Text>
-                <Text style={styles.secondUnit}>{uDraw}</Text>
-              </View>
-            }
+            rows={[
+              {
+                label: `${I18n.t('wellResultObs')}  s(r)`,
+                value: out(result.sObs, QUANTITIES.DRAWDOWN),
+                unit: uDraw,
+              },
+              ...(result.allowable
+                ? [{
+                    label: I18n.t('wellStatReserve'),
+                    value: out(result.allowable - result.sWell, QUANTITIES.DRAWDOWN),
+                    unit: uDraw,
+                  }]
+                : []),
+            ]}
           />
           <Notices codes={result.warnings} prefix="wellWarn_" tone={result.dewatered ? 'error' : 'warning'} />
 
-          <SectionLabel>{I18n.t('wellStatsGroup')}</SectionLabel>
-          <Card style={shared.listCard}>
-            <View style={styles.stats}>
+          <Collapsible title={I18n.t('wellStatsGroup')} note={result.formula ? 'ƒ' : null}>
+            {result.formula ? <Formula>{result.formula}</Formula> : null}
+            <Card style={shared.listCard}>
               <StatRow label={I18n.t('wellStatT')} value={`${out(result.T, QUANTITIES.TRANSMISSIVITY)} ${unitLabel(QUANTITIES.TRANSMISSIVITY)}`} />
               <StatRow label={I18n.t('wellStatA')} value={`${out(result.a, QUANTITIES.DIFFUSIVITY)} ${uDiff}`} />
               <StatRow label={I18n.t('wellStatS')} value={formatExponential(result.S)} />
               {result.rImage > 0 ? (
                 <StatRow label={I18n.t('wellStatImage')} value={`${out(result.rImage, QUANTITIES.DISTANCE)} ${uLen}`} />
               ) : null}
-              {result.allowable ? (
-                <StatRow
-                  label={I18n.t('wellStatReserve')}
-                  value={`${out(result.allowable - result.sWell, QUANTITIES.DRAWDOWN)} ${uDraw}`}
-                />
-              ) : null}
-            </View>
-          </Card>
+            </Card>
+          </Collapsible>
 
           {series.length > 1 ? (
             <>
-              <SectionLabel>{I18n.t('wellChartGroup')}</SectionLabel>
-              <DrawdownLogChart series={series} width={contentWidth} />
+              <Collapsible title={I18n.t('wellChartGroup')} initiallyOpen>
+                <DrawdownLogChart series={series} width={contentWidth} />
+              </Collapsible>
 
-              <SectionLabel>{I18n.t('wellTableGroup')}</SectionLabel>
-              <Card style={shared.listCard}>
-                <View style={[styles.tableHead, { borderBottomColor: theme.colors.border }]}>
-                  <Text style={[styles.cell, styles.cellIndex, { color: theme.colors.textSecondary }]}>№</Text>
-                  <Text style={[styles.cell, { color: theme.colors.textSecondary }]}>t</Text>
-                  <Text style={[styles.cell, { color: theme.colors.textSecondary }]}>s(r₀)</Text>
-                  <Text style={[styles.cell, { color: theme.colors.textSecondary }]}>s(r)</Text>
-                </View>
-                {series.slice(0, TABLE_ROWS).map((point, index) => (
-                  <View
-                    key={point.t}
-                    style={[styles.tableRow, { borderBottomColor: theme.colors.border }]}
-                  >
-                    <Text style={[styles.cell, styles.cellIndex, { color: theme.colors.textSecondary }]}>
-                      {index + 1}
-                    </Text>
-                    <Text style={[styles.cell, { color: theme.colors.text }]}>{formatExponential(point.t)}</Text>
-                    <Text style={[styles.cell, { color: theme.colors.text }]}>{point.sWell.toFixed(4)}</Text>
-                    <Text style={[styles.cell, { color: theme.colors.text }]}>{point.sObs.toFixed(4)}</Text>
+              <Collapsible title={I18n.t('wellTableGroup')} note={`${Math.min(series.length, TABLE_ROWS)}`}>
+                <Card style={shared.listCard}>
+                  <View style={[styles.tableHead, { borderBottomColor: theme.colors.border }]}>
+                    <Text style={[styles.cell, styles.cellIndex, { color: theme.colors.faint }]}>№</Text>
+                    <Text style={[styles.cell, { color: theme.colors.faint }]}>t</Text>
+                    <Text style={[styles.cell, { color: theme.colors.faint }]}>s(r₀)</Text>
+                    <Text style={[styles.cell, { color: theme.colors.faint }]}>s(r)</Text>
                   </View>
-                ))}
-              </Card>
-              <Text style={[type.caption, styles.note, { color: theme.colors.textSecondary }]}>
-                {I18n.t('wellTableNote')}
-              </Text>
+                  {series.slice(0, TABLE_ROWS).map((point, index) => (
+                    <View key={point.t} style={styles.tableRow}>
+                      <Text style={[styles.cell, styles.cellIndex, { color: theme.colors.faint }]}>
+                        {index + 1}
+                      </Text>
+                      <Text style={[styles.cell, { color: theme.colors.text }]}>{formatExponential(point.t)}</Text>
+                      <Text style={[styles.cell, { color: theme.colors.text }]}>{point.sWell.toFixed(4)}</Text>
+                      <Text style={[styles.cell, { color: theme.colors.text }]}>{point.sObs.toFixed(4)}</Text>
+                    </View>
+                  ))}
+                </Card>
+                <Note>{I18n.t('wellTableNote')}</Note>
+              </Collapsible>
             </>
           ) : null}
-        </>
+        </AppearIn>
       ) : (
-        <Notices codes={result.errors} prefix="wellError_" tone="error" />
+        <AppearIn index={4}>
+          <Notices codes={result.errors} prefix="wellError_" tone="error" />
+        </AppearIn>
       )}
     </>
   );
@@ -303,54 +332,25 @@ const styles = StyleSheet.create({
     marginTop: 0,
   },
   spaced: {
-    marginTop: spacing.sm,
+    marginTop: spacing.md,
   },
-  note: {
-    marginTop: spacing.sm,
-    lineHeight: 18,
-  },
-  stats: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
-  secondValue: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginTop: spacing.sm,
-    gap: spacing.sm,
-  },
-  secondLabel: {
-    ...type.numeric,
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.85)',
-  },
-  secondNumber: {
-    ...type.numeric,
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  secondUnit: {
-    ...type.numeric,
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.8)',
+  scheme: {
+    marginTop: spacing.md,
   },
   tableHead: {
     flexDirection: 'row',
-    paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   tableRow: {
     flexDirection: 'row',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: 6,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 5,
   },
   cell: {
-    ...type.numeric,
+    fontFamily: fontFamily.mono,
     flex: 1,
     fontSize: 12,
+    lineHeight: 17,
     textAlign: 'right',
   },
   cellIndex: {

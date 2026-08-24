@@ -7,18 +7,30 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Switch } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import I18n from '../../Localization';
 import { QUANTITIES } from '../../calc/units';
 import { estimateConductivity, AQUIFER_TYPES } from '../../calc/aquifer';
-import { type, elevation, spacing } from '../../theme';
-import { Field, ResultCard, useCalcUnits, parseNumber, formatValue, styles } from './shared';
+import AppearIn from '../../components/ui/AppearIn';
+import Toggle from '../../components/ui/Toggle';
+import { type, spacing, fontFamily } from '../../theme';
+import {
+  Card,
+  Collapsible,
+  Field,
+  Formula,
+  Notices,
+  OptionRow,
+  ResultCard,
+  SectionLabel,
+  useCalcUnits,
+  parseNumber,
+} from './shared';
 
 export default function ParamsTab() {
   const theme = useTheme();
-  const { inFlow, inLen, inDraw, inTrans, inCond, inDays, out, uFlow, uLen, uDraw, uTrans, uCond, uTime } =
-    useCalcUnits();
+  const { inFlow, inLen, inDraw, out, uFlow, uLen, uDraw, uCond } = useCalcUnits();
 
   const [pQ, setPQ] = useState('100');
   const [pS, setPS] = useState('15');
@@ -29,203 +41,110 @@ export default function ParamsTab() {
   const [imperfect, setImperfect] = useState(false);
   const [penetration, setPenetration] = useState('0.5');
 
-  /**
-   * Поле ввода с подписью и единицей измерения
-   *
-   * @param {string} label - подпись поля
-   * @param {string} value - текущее значение
-   * @param {Function} onChange - обработчик правки
-   * @param {string} unit - подпись размерности
-   * @returns {React.ReactElement} строка формы
-   */
-  const renderField = (label, value, onChange, unit) => (
-    <Field key={label} label={label} value={value} onChange={onChange} unit={unit} />
-  );
+  const { k, formula, warnings } = estimateConductivity({
+    Q: inFlow(pQ),
+    s: inDraw(pS),
+    m: inLen(pM),
+    aquiferType: aquifer,
+    R: inLen(pR),
+    r0: inLen(pR0),
+    imperfect,
+    penetrationRatio: parseNumber(penetration),
+  });
 
-  /**
-   * Карточка результата с формулой
-   *
-   * @param {string} label - обозначение величины
-   * @param {string} value - значение
-   * @param {string} unit - подпись размерности
-   * @param {string} formula - запись формулы
-   * @returns {React.ReactElement} карточка результата
-   */
-  const renderResult = (label, value, unit, formula) => (
-    <ResultCard label={label} value={value} unit={unit} formula={formula} />
-  );
+  const aquifers = [
+    { value: AQUIFER_TYPES.UNCONFINED, label: I18n.t('unconfined') },
+    { value: AQUIFER_TYPES.CONFINED, label: I18n.t('confined') },
+  ];
 
-  const renderSegment = (options, value, onChange) => (
-    <View
-      style={[styles.segment, { backgroundColor: theme.colors.surfaceSunken }]}
-    >
-      {options.map((option) => {
-        const active = option.key === value;
-        return (
-          <TouchableOpacity
-            key={option.key}
-            onPress={() => onChange(option.key)}
-            style={[
-              styles.segmentItem,
-              active && { backgroundColor: theme.colors.surface },
-            ]}
-            accessibilityRole="button"
-            accessibilityState={{ selected: active }}
-          >
-            <Text
-              style={[
-                styles.segmentText,
-                {
-                  color: active
-                    ? theme.colors.primaryAccent
-                    : theme.colors.textSecondary,
-                },
-              ]}
-            >
-              {I18n.t(option.labelKey)}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
-  );
-  const renderParams = () => {
-    const { k, formula, warnings } = estimateConductivity({
-      Q: inFlow(pQ),
-      s: inDraw(pS),
-      m: inLen(pM),
-      aquiferType: aquifer,
-      R: inLen(pR),
-      r0: inLen(pR0),
-      imperfect,
-      penetrationRatio: parseNumber(penetration),
-    });
+  return (
+    <>
+      <AppearIn index={0}>
+        <SectionLabel style={styles.firstLabel}>
+          {I18n.t('aquiferType', { defaultValue: 'Тип водоносного горизонта' })}
+        </SectionLabel>
+        <OptionRow options={aquifers} value={aquifer} onChange={setAquifer} />
+      </AppearIn>
 
-    return (
-      <>
-        <View
-          style={[
-            styles.card,
-            elevation.card,
-            {
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.border,
-            },
-          ]}
-        >
-          {renderField(I18n.t("flowRate"), pQ, setPQ, uFlow)}
-          {renderField(I18n.t("drawdown"), pS, setPS, uDraw)}
-          {renderField(
-            I18n.t("thickness", { defaultValue: "Мощность m" }),
-            pM,
-            setPM,
-            uLen,
-          )}
-          {renderField(
-            I18n.t("influenceRadius", { defaultValue: "Радиус влияния R" }),
-            pR,
-            setPR,
-            uLen,
-          )}
-          {renderField(I18n.t("wellRadius"), pR0, setPR0, uLen)}
+      <AppearIn index={1}>
+        <SectionLabel>{I18n.t('wellPumpingGroup', { defaultValue: 'Откачка' })}</SectionLabel>
+        <Card>
+          <Field label={I18n.t('flowRate')} symbol="Q" value={pQ} onChange={setPQ} unit={uFlow} />
+          <Field label={I18n.t('drawdown')} symbol="s" value={pS} onChange={setPS} unit={uDraw} />
+          <Field label={I18n.t('thickness')} symbol="m" value={pM} onChange={setPM} unit={uLen} />
+          <Field label={I18n.t('influenceRadius')} symbol="R" value={pR} onChange={setPR} unit={uLen} />
+          <Field label={I18n.t('wellRadius')} symbol="r₀" value={pR0} onChange={setPR0} unit={uLen} />
+        </Card>
 
-          <Text
-            style={[type.body, styles.groupLabel, { color: theme.colors.text }]}
-          >
-            {I18n.t("aquiferType", { defaultValue: "Тип пласта" })}
+        <View style={[styles.switchRow, { backgroundColor: theme.colors.surfaceSunken }]}>
+          <Text style={[type.body, styles.switchLabel, { color: theme.colors.text }]}>
+            {I18n.t('imperfectWell')}
           </Text>
-          <View
-            style={[
-              styles.segment,
-              { backgroundColor: theme.colors.surfaceSunken },
-            ]}
-          >
-            {[
-              { key: AQUIFER_TYPES.UNCONFINED, labelKey: "unconfined" },
-              { key: AQUIFER_TYPES.CONFINED, labelKey: "confined" },
-            ].map((option) => {
-              const active = option.key === aquifer;
-              return (
-                <TouchableOpacity
-                  key={option.key}
-                  onPress={() => setAquifer(option.key)}
-                  style={[
-                    styles.segmentItem,
-                    active && { backgroundColor: theme.colors.surface },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                >
-                  <Text
-                    style={[
-                      styles.segmentText,
-                      {
-                        color: active
-                          ? theme.colors.primaryAccent
-                          : theme.colors.textSecondary,
-                      },
-                    ]}
-                  >
-                    {I18n.t(option.labelKey)}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          <View style={styles.switchRow}>
-            <Text style={[type.body, { color: theme.colors.text }]}>
-              {I18n.t("imperfectWell")}
-            </Text>
-            <Switch
-              value={imperfect}
-              onValueChange={setImperfect}
-              trackColor={{ true: theme.colors.primary }}
-            />
-          </View>
-
-          {imperfect &&
-            renderField(
-              I18n.t("penetrationRatio", { defaultValue: "Доля вскрытия l/m" }),
-              penetration,
-              setPenetration,
-              "",
-            )}
+          <Toggle
+            value={imperfect}
+            onValueChange={setImperfect}
+            accessibilityLabel={I18n.t('imperfectWell')}
+          />
         </View>
+        {imperfect ? (
+          <Card style={styles.spaced}>
+            <Field
+              label={I18n.t('penetrationRatio')}
+              symbol="l/m"
+              value={penetration}
+              onChange={setPenetration}
+            />
+          </Card>
+        ) : null}
+      </AppearIn>
 
-        {renderResult("k", out(k, QUANTITIES.CONDUCTIVITY), uCond, formula)}
-
-        {warnings.includes("defaultInfluenceRatio") && (
-          <Text
-            style={[
-              type.caption,
-              styles.warning,
-              { color: theme.colors.textSecondary },
-            ]}
-          >
-            {I18n.t("defaultInfluenceRatioNote", {
-              defaultValue:
-                "R и r₀ не заданы — принято отношение R/r₀ = 300. Для точного результата укажите фактические значения.",
-            })}
-          </Text>
-        )}
-        {warnings.includes("drawdownExceedsThickness") && (
-          <Text
-            style={[
-              type.caption,
-              styles.warning,
-              { color: theme.colors.error },
-            ]}
-          >
-            {I18n.t("drawdownExceedsThicknessNote", {
-              defaultValue:
-                "Понижение больше мощности пласта — проверьте исходные данные.",
-            })}
-          </Text>
-        )}
-      </>
-    );
-  };
-
-  return renderParams();
+      <AppearIn index={2}>
+        <ResultCard
+          title={I18n.t('filtrationCoefficient')}
+          label="k"
+          value={out(k, QUANTITIES.CONDUCTIVITY)}
+          unit={uCond}
+        />
+        {/* Ключи предупреждений заканчиваются на Note: подставляем окончание,
+            а не приставку */}
+        <Notices
+          codes={warnings.filter((code) => code !== 'drawdownExceedsThickness')}
+          suffix="Note"
+        />
+        <Notices
+          codes={warnings.filter((code) => code === 'drawdownExceedsThickness')}
+          suffix="Note"
+          tone="error"
+        />
+        {formula ? (
+          <Collapsible title={I18n.t('wellStatsGroup', { defaultValue: 'Подробности' })} note="ƒ">
+            <Formula>{formula}</Formula>
+          </Collapsible>
+        ) : null}
+      </AppearIn>
+    </>
+  );
 }
+
+const styles = StyleSheet.create({
+  firstLabel: {
+    marginTop: 0,
+  },
+  spaced: {
+    marginTop: spacing.md,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: 14,
+  },
+  switchLabel: {
+    flex: 1,
+    fontFamily: fontFamily.medium,
+  },
+});

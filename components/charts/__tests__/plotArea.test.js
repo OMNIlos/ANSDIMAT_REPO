@@ -9,6 +9,8 @@ import {
   niceTicks,
   decadeTicks,
   polyline,
+  clamp,
+  formatReadout,
   HEIGHT,
 } from '../plotArea';
 
@@ -94,5 +96,54 @@ describe('polyline', () => {
 
   it('пустой список даёт пустой путь', () => {
     expect(polyline([])).toBe('');
+  });
+});
+
+describe('обратный перевод координаты в значение', () => {
+  it('линейная шкала возвращает исходное значение', () => {
+    const scale = linearScale(0, 5, 20, 200);
+    expect(scale.invert(scale(3.2))).toBeCloseTo(3.2, 9);
+  });
+
+  it('линейная шкала работает и на перевёрнутой оси', () => {
+    // У притока ось расхода растёт вверх: минимум внизу полотна
+    const scale = linearScale(0, 10000, 200, 20);
+    expect(scale.invert(scale(7500))).toBeCloseTo(7500, 6);
+  });
+
+  it('логарифмическая шкала возвращает исходное значение', () => {
+    const scale = logScale(1e-4, 9125, 58, 330);
+    expect(scale.invert(scale(2.5))).toBeCloseTo(2.5, 6);
+  });
+
+  it('вырожденный диапазон не роняет обратный перевод', () => {
+    expect(linearScale(5, 5, 0, 100).invert(50)).toBe(5);
+    expect(logScale(0, 100, 0, 100).invert(50)).toBe(0);
+  });
+});
+
+describe('clamp', () => {
+  it('прижимает значение к границам отрезка', () => {
+    expect(clamp(-5, 0, 10)).toBe(0);
+    expect(clamp(15, 0, 10)).toBe(10);
+    expect(clamp(4, 0, 10)).toBe(4);
+  });
+});
+
+describe('formatReadout', () => {
+  it('малые и большие числа уходят в экспоненциальную запись', () => {
+    expect(formatReadout(0.000481)).toBe('4.81e-4');
+    expect(formatReadout(123456)).toBe('1.23e+5');
+  });
+
+  it('обычные числа показываются знаками по величине', () => {
+    expect(formatReadout(2697.8)).toBe('2698');
+    expect(formatReadout(53.87)).toBe('53.9');
+    expect(formatReadout(2.334)).toBe('2.33');
+  });
+
+  it('ноль и нечисло не ломают подпись', () => {
+    expect(formatReadout(0)).toBe('0');
+    expect(formatReadout(NaN)).toBe('—');
   });
 });

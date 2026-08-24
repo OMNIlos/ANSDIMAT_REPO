@@ -78,6 +78,8 @@ import {
   setWellPosition,
 } from "../../db/wells";
 import ConfirmDialog from "../../components/ui/ConfirmDialog";
+import PremiumLock from "../../components/ui/PremiumLock";
+import { useEntitlements } from "../../billing/EntitlementsContext";
 import DiagonalHatch from "../../components/DiagonalHatch";
 import * as Location from "expo-location";
 import FieldMap from "../../components/FieldMap";
@@ -638,6 +640,12 @@ export default function DataProcessingScreen({ route, navigation }) {
     project?.ofrType === OFR_TYPES.CLUSTER;
 
   const clusterWells = project?.ofrType === OFR_TYPES.CLUSTER;
+
+  // Карта куста закрыта подпиской. Права выдаёт сервер, поэтому без ответа и
+  // без входа в аккаунт карта считается закрытой — иначе премиум открывался бы
+  // отсутствием связи
+  const { has } = useEntitlements();
+  const mapAllowed = has("clusterMap");
 
   // Поле понижения на остановке правит открытый журнал, а не проект целиком
   const finalDrawdownText = finalDrawdownTexts[journalKey] ?? "";
@@ -1305,6 +1313,13 @@ export default function DataProcessingScreen({ route, navigation }) {
   const [wellError, setWellError] = useState("");
   const [pendingWellDelete, setPendingWellDelete] = useState(null);
   const [mapFullscreen, setMapFullscreen] = useState(false);
+
+  // Потеря подписки сворачивает развёрнутую карту. Без этого состояние
+  // осталось бы взведённым, и после повторной оплаты экран открылся бы сразу
+  // картой во весь экран — вместо того места, где человек остановился
+  useEffect(() => {
+    if (!mapAllowed) setMapFullscreen(false);
+  }, [mapAllowed]);
   const [locating, setLocating] = useState(false);
   // Сообщение о геопозиции показывается плашкой на самой карте, а не
   // Alert.alert: на вебе тот не выводится вовсе, и отказ в доступе выглядел
@@ -2064,8 +2079,11 @@ export default function DataProcessingScreen({ route, navigation }) {
   }
 
   // Развёрнутая карта занимает экран целиком и лежит вне прокрутки: иначе
-  // перетаскивание маркера доставалось бы списку
-  if (mapFullscreen) {
+  // перетаскивание маркера доставалось бы списку.
+  //
+  // Право проверяется и здесь, а не только у кнопки разворота: подписка может
+  // кончиться, пока карта уже раскрыта на весь экран
+  if (mapFullscreen && mapAllowed) {
     return (
       <View
         style={[styles.mapFull, { backgroundColor: theme.colors.background }]}
@@ -2443,7 +2461,22 @@ export default function DataProcessingScreen({ route, navigation }) {
         {/* Карта куста под таблицей: то же расстояние, но руками. Скважину
             тащат по карте, расстояние считается по координатам и садится
             в таблицу — там его потом можно поправить и вручную */}
-        {clusterWells && mapPoints.length > 0 && (
+        {clusterWells && mapPoints.length > 0 && !mapAllowed && (
+          <PremiumLock
+            style={styles.mapBlock}
+            height={mapHeight}
+            title={I18n.t("clusterMapLockTitle", {
+              defaultValue: "Карта куста — в Premium",
+            })}
+            note={I18n.t("clusterMapLockNote", {
+              defaultValue:
+                "Без подписки расстояния до скважин вводятся в таблице выше.",
+            })}
+            onPress={() => navigation?.navigate?.("Subscription")}
+          />
+        )}
+
+        {clusterWells && mapPoints.length > 0 && mapAllowed && (
           <View style={styles.mapBlock}>
             <FieldMap
               points={mapPoints}

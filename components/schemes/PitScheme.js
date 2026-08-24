@@ -13,7 +13,7 @@
  */
 
 import React, { useMemo } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import Svg, {
   Circle,
   Defs,
@@ -27,6 +27,7 @@ import Svg, {
   TSpan,
 } from 'react-native-svg';
 import I18n from '../../Localization';
+import { fontFamily, radius, spacing } from '../../theme';
 import {
   WIDTH,
   HEIGHT,
@@ -152,8 +153,16 @@ export default function PitScheme({ result, width = WIDTH, caption }) {
   const r0End = g.cx + Math.max(g.pitBottomRight - g.cx, g.r0px);
 
   return (
-    <View style={[styles.frame, { width, height }]}>
-      <Svg width={width} height={height} viewBox={`0 0 ${WIDTH} ${HEIGHT}`}>
+    <View style={{ width }}>
+      {/* Подпись вынесена наружу: внутри полотна её кегль сжимался вместе с
+          чертежом, и числа переставали читаться */}
+      {caption ? (
+        <Text style={styles.caption} numberOfLines={1}>
+          {caption}
+        </Text>
+      ) : null}
+      <View style={[styles.frame, { width, height }]}>
+        <Svg width={width} height={height} viewBox={`0 0 ${WIDTH} ${HEIGHT}`}>
         <Defs>
           <Pattern
             id="pitHatch"
@@ -318,12 +327,8 @@ export default function PitScheme({ result, width = WIDTH, caption }) {
           label={g.river ? 'L' : 'R'}
         />
 
-        {caption ? (
-          <Word x={g.x0} y={HEIGHT - 8} size={17}>
-            {caption}
-          </Word>
-        ) : null}
-      </Svg>
+        </Svg>
+      </View>
     </View>
   );
 }
@@ -333,7 +338,20 @@ const styles = StyleSheet.create({
   // и в тёмной теме приложения он читается как вклеенный чертёж
   frame: {
     backgroundColor: PALETTE.paper,
-    borderRadius: 12,
+    borderRadius: radius.card,
+    // Контур одинаков в обеих темах: на светлом фоне приложения бумага
+    // чертежа почти совпадает с ним по тону и без рамки растворялась
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(26, 7, 16, 0.12)',
     overflow: 'hidden',
+  },
+  // Цвет совпадает с приглушённым текстом обеих тем: подпись стоит на фоне
+  // приложения, а не на бумаге чертежа
+  caption: {
+    fontFamily: fontFamily.mono,
+    fontSize: 11,
+    lineHeight: 15,
+    color: '#8A8087',
+    marginBottom: spacing.sm,
   },
 });

@@ -7,6 +7,7 @@
  *
  * Протокол обмена с приложением:
  *   вниз (в карту):  { type: 'points', points: [...], connect: {...} }
+*                    { type: 'polygons', polygons: [...], fit: true }
  *                    { type: 'center', lat, lon, zoom }
  *                    { type: 'resize' }
  *   вверх (наружу):  { type: 'press', lat, lon }
@@ -74,6 +75,9 @@ export function buildMapHtml({ center = DEFAULT_CENTER } = {}) {
       attribution: '© OpenStreetMap'
     }).addTo(map);
 
+    // Контуры лежат ниже всего: по ним ходят маркеры, и заливка пояса не
+    // должна перехватывать нажатие на точку
+    var areaLayer = L.layerGroup().addTo(map);
     var layer = L.layerGroup().addTo(map);
     // Связки лежат отдельным слоем: их приходится перерисовывать на каждом
     // кадре перетаскивания, а маркеры при этом трогать нельзя — маркер,
@@ -92,6 +96,36 @@ export function buildMapHtml({ center = DEFAULT_CENTER } = {}) {
     map.on('click', function (e) {
       send({ type: 'press', lat: e.latlng.lat, lon: e.latlng.lng });
     });
+
+    /**
+     * Перерисовывает залитые контуры — например, пояса зоны санитарной охраны
+     *
+     * Флаг fit подгоняет обзор под контуры: пояса тянутся на сотни метров, и
+     * без подгонки карта осталась бы на прежнем масштабе, где виден только
+     * один из трёх
+     */
+    function renderPolygons(polygons, fit) {
+      areaLayer.clearLayers();
+      var bounds = null;
+
+      (polygons || []).forEach(function (poly) {
+        if (!poly || !poly.points || poly.points.length < 3) return;
+        var shape = L.polygon(poly.points, {
+          color: poly.color || '#72002F',
+          weight: poly.weight || 1.5,
+          opacity: 0.95,
+          fillColor: poly.fill || poly.color || '#72002F',
+          fillOpacity: typeof poly.fillOpacity === 'number' ? poly.fillOpacity : 0.18,
+          interactive: !!poly.title
+        }).addTo(areaLayer);
+        if (poly.title) shape.bindTooltip(poly.title, { sticky: true });
+        bounds = bounds ? bounds.extend(shape.getBounds()) : shape.getBounds();
+      });
+
+      if (fit && bounds && bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [18, 18], animate: false });
+      }
+    }
 
     /** Перерисовывает пунктир между точками по текущему положению маркеров */
     function renderLines() {
@@ -170,6 +204,7 @@ export function buildMapHtml({ center = DEFAULT_CENTER } = {}) {
       try { data = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch (err) { return; }
       if (!data || !data.type) return;
       if (data.type === 'points') renderPoints(data.points, data.connect);
+      if (data.type === 'polygons') renderPolygons(data.polygons, data.fit);
       if (data.type === 'center') map.setView([data.lat, data.lon], data.zoom || map.getZoom());
       // Контейнер сменил размер (разворот на весь экран). Leaflet следит
       // только за размером окна, а оно тут не меняется — без этого вызова

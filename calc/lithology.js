@@ -8,6 +8,9 @@
  * подставлять в котлован параметры, которых там не спрашивают, а в водозабор —
  * породы без водоотдачи.
  *
+ * Третий набор — для зоны санитарной охраны: там кроме проницаемости нужна
+ * активная пористость, и справочник взят иностранный (Domenico & Schwartz).
+ *
  * Значения совпадают с веб-калькуляторами АНСДИМАТ: они служат подсказкой на
  * этапе прикидки, когда своих опытных данных ещё нет.
  */
@@ -51,6 +54,47 @@ export const WELL_LITHOLOGY = [
   { id: 'limestone', labelKey: 'lithoWellLimestone', k: 20, Sy: 0.14, Ss: 2e-5 },
   { id: 'fractured', labelKey: 'lithoWellFractured', k: 5, Sy: 0.02, Ss: 1e-5 },
 ];
+
+/**
+ * Грунты для расчёта зоны санитарной охраны
+ *
+ * `kMin`, `kMax` — границы коэффициента фильтрации, м/сут;
+ * `nMin`, `nMax` — границы активной пористости.
+ *
+ * Справочник Domenico & Schwartz (1990) даёт не числа, а диапазоны, и у
+ * проницаемости они тянутся на четыре-пять порядков. Поэтому подставляемое
+ * значение считается, а не хранится: у проницаемости — среднее
+ * геометрическое, у пористости — обычное. Арифметическое среднее диапазона
+ * 25…2600 дало бы 1312 м/сут, то есть верхнюю границу, а не типичный гравий.
+ */
+export const WHPA_LITHOLOGY = [
+  { id: 'gravel', labelKey: 'whpaLithoGravel', kMin: 25, kMax: 2600, nMin: 0.1, nMax: 0.3 },
+  { id: 'coarseSand', labelKey: 'whpaLithoCoarseSand', kMin: 0.08, kMax: 520, nMin: 0.15, nMax: 0.3 },
+  { id: 'mediumSand', labelKey: 'whpaLithoMediumSand', kMin: 0.08, kMax: 40, nMin: 0.15, nMax: 0.32 },
+  { id: 'fineSand', labelKey: 'whpaLithoFineSand', kMin: 0.02, kMax: 20, nMin: 0.15, nMax: 0.35 },
+  { id: 'loess', labelKey: 'whpaLithoLoess', kMin: 0.0001, kMax: 2, nMin: 0.05, nMax: 0.2 },
+  { id: 'till', labelKey: 'whpaLithoTill', kMin: 1e-7, kMax: 0.2, nMin: 0.05, nMax: 0.2 },
+  { id: 'clay', labelKey: 'whpaLithoClay', kMin: 1e-6, kMax: 4e-4, nMin: 0.05, nMax: 0.1 },
+  { id: 'marineClay', labelKey: 'whpaLithoMarineClay', kMin: 1e-7, kMax: 2e-4, nMin: 0.05, nMax: 0.1 },
+  { id: 'karst', labelKey: 'whpaLithoKarst', kMin: 0.1, kMax: 1700, nMin: 0.05, nMax: 0.15 },
+  { id: 'limestone', labelKey: 'whpaLithoLimestone', kMin: 0.0001, kMax: 5, nMin: 0.005, nMax: 0.05 },
+  { id: 'sandstone', labelKey: 'whpaLithoSandstone', kMin: 3e-5, kMax: 2, nMin: 0.1, nMax: 0.3 },
+  { id: 'siltstone', labelKey: 'whpaLithoSiltstone', kMin: 1e-6, kMax: 0.001, nMin: 0.05, nMax: 0.2 },
+  { id: 'shale', labelKey: 'whpaLithoShale', kMin: 1e-8, kMax: 2e-4, nMin: 0.05, nMax: 0.3 },
+];
+
+/**
+ * Типичные значения породы из справочника ЗСО
+ *
+ * @param {Object} entry - запись справочника
+ * @returns {{k: number, n: number}} подставляемые значения
+ */
+export function whpaTypical(entry) {
+  return {
+    k: Math.sqrt(entry.kMin * entry.kMax),
+    n: (entry.nMin + entry.nMax) / 2,
+  };
+}
 
 /**
  * Находит породу в справочнике

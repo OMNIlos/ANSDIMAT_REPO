@@ -42,6 +42,7 @@ const PLANS = [
 ];
 
 const FEATURES = [
+  { icon: 'map', key: 'clusterMapFeature' },
   { icon: 'all-inclusive', key: 'unlimitedProjects' },
   { icon: 'insights', key: 'advancedAnalytics' },
   { icon: 'tune', key: 'advancedFunctionality' },

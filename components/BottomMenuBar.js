@@ -31,7 +31,7 @@ import { useAuth } from '../AuthContext';
 import ConfirmDialog from './ui/ConfirmDialog';
 import { navigationRef } from '../navigation/navigationRef';
 import { useMenuHidden } from './chromeVisibility';
-import { palette, fontFamily, elevation } from '../theme';
+import { palette, fontFamily, elevation, MENU_BAR_HEIGHT } from '../theme';
 
 /**
  * Переходит на корневой экран раздела и сбрасывает историю переходов,
@@ -44,14 +44,9 @@ function resetTo(routeName) {
   );
 }
 
-/**
- * Высота полосы меню без отступа снизу
- *
- * Нужна экранам, которые кладут поверх содержимого свои плавающие кнопки:
- * без общей константы приходилось подбирать отступ на глаз, и на телефонах
- * с жестовой навигацией кнопки наезжали на меню.
- */
-export const MENU_BAR_HEIGHT = 61;
+// Высота полосы меню объявлена в дизайн-системе; здесь переизлучается,
+// чтобы прежние ссылки на неё продолжали работать
+export { MENU_BAR_HEIGHT };
 
 export default function BottomMenuBar({ active = 'home' }) {
   const insets = useSafeAreaInsets();

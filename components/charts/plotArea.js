@@ -9,8 +9,13 @@
 /** Высота полотна графиков */
 export const HEIGHT = 220;
 
-/** Отступы под подписи осей */
-export const PADDING = { left: 46, right: 14, top: 18, bottom: 34 };
+/**
+ * Отступы под подписи осей
+ *
+ * Слева шире остальных: там стоят и вертикальная подпись оси, и плашка
+ * значения курсора — вплотную они наезжали друг на друга.
+ */
+export const PADDING = { left: 64, right: 14, top: 18, bottom: 34 };
 
 /**
  * Прямоугольник, внутри которого лежат кривые
@@ -38,8 +43,16 @@ export function plotArea(width) {
  */
 export function linearScale(min, max, from, to) {
   const span = max - min;
-  if (!(span > 0)) return () => (from + to) / 2;
-  return (value) => from + ((value - min) / span) * (to - from);
+  if (!(span > 0)) {
+    const scale = () => (from + to) / 2;
+    scale.invert = () => min;
+    return scale;
+  }
+  const scale = (value) => from + ((value - min) / span) * (to - from);
+  // Обратный перевод нужен курсору: под пальцем известна координата, а
+  // показать надо значение
+  scale.invert = (coord) => min + ((coord - from) / (to - from)) * span;
+  return scale;
 }
 
 /**
@@ -55,10 +68,17 @@ export function linearScale(min, max, from, to) {
  * @returns {function(number): number} перевод значения в координату
  */
 export function logScale(min, max, from, to) {
-  if (!(min > 0) || !(max > min)) return () => (from + to) / 2;
+  if (!(min > 0) || !(max > min)) {
+    const scale = () => (from + to) / 2;
+    scale.invert = () => min;
+    return scale;
+  }
   const lo = Math.log10(min);
   const hi = Math.log10(max);
-  return (value) => from + ((Math.log10(Math.max(value, min)) - lo) / (hi - lo)) * (to - from);
+  const scale = (value) =>
+    from + ((Math.log10(Math.max(value, min)) - lo) / (hi - lo)) * (to - from);
+  scale.invert = (coord) => Math.pow(10, lo + ((coord - from) / (to - from)) * (hi - lo));
+  return scale;
 }
 
 /**
@@ -98,6 +118,38 @@ export function decadeTicks(min, max) {
     ticks.push(Number(`1e${power}`));
   }
   return ticks;
+}
+
+/**
+ * Прижимает значение к отрезку
+ *
+ * @param {number} value - значение
+ * @param {number} min - нижняя граница
+ * @param {number} max - верхняя граница
+ * @returns {number} значение внутри отрезка
+ */
+export function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+/**
+ * Короткая запись значения для плашки курсора
+ *
+ * Плашка узкая и стоит на оси: три знака после запятой в ней не помещаются, а
+ * порядок величины теряться не должен — очень малые и очень большие числа
+ * уходят в экспоненциальную запись.
+ *
+ * @param {number} value - значение
+ * @returns {string} запись значения
+ */
+export function formatReadout(value) {
+  if (!isFinite(value)) return '—';
+  const abs = Math.abs(value);
+  if (abs === 0) return '0';
+  if (abs < 0.01 || abs >= 1e5) return value.toExponential(2);
+  if (abs >= 1000) return value.toFixed(0);
+  if (abs >= 10) return value.toFixed(1);
+  return value.toFixed(2);
 }
 
 /**

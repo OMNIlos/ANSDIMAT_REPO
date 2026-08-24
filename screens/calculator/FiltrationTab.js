@@ -7,12 +7,13 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, TextInput, Platform, StyleSheet } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import I18n from '../../Localization';
 import { convertToAllUnits, FILTRATION_UNITS } from '../../calc/units';
-import { type, elevation } from '../../theme';
-import { parseNumber, formatValue, styles } from './shared';
+import AppearIn from '../../components/ui/AppearIn';
+import { type, spacing, fontFamily } from '../../theme';
+import { Card, OptionRow, SectionLabel, parseNumber, formatValue, styles as shared } from './shared';
 
 export default function FiltrationTab() {
   const theme = useTheme();
@@ -20,125 +21,119 @@ export default function FiltrationTab() {
   const [kValue, setKValue] = useState('5');
   const [kUnit, setKUnit] = useState('m_day');
 
+  const converted = convertToAllUnits(parseNumber(kValue), kUnit);
+  const units = FILTRATION_UNITS.map((unit) => ({
+    value: unit.key,
+    label: I18n.t(unit.labelKey),
+  }));
+  const active = units.find((unit) => unit.value === kUnit);
 
-  const renderFiltration = () => {
-    const converted = convertToAllUnits(parseNumber(kValue), kUnit);
+  return (
+    <>
+      <AppearIn index={0}>
+        <Card>
+          <View style={styles.hero}>
+            <Text style={[type.eyebrow, { color: theme.colors.faint }]}>
+              {I18n.t('value', { defaultValue: 'Значение' })}
+            </Text>
+            <View style={styles.heroRow}>
+              <TextInput
+                value={kValue}
+                onChangeText={setKValue}
+                keyboardType="decimal-pad"
+                placeholder="—"
+                placeholderTextColor={theme.colors.faint}
+                selectionColor={theme.colors.primary}
+                style={[shared.bigInput, styles.heroInput, { color: theme.colors.text }]}
+              />
+              <Text style={[styles.heroUnit, { color: theme.colors.faint }]}>{active?.label}</Text>
+            </View>
+          </View>
+          <View style={[styles.unitBox, { borderTopColor: theme.colors.border }]}>
+            <OptionRow options={units} value={kUnit} onChange={setKUnit} />
+          </View>
+        </Card>
+      </AppearIn>
 
-    return (
-      <>
-        <View
-          style={[
-            styles.card,
-            elevation.card,
-            {
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.border,
-            },
-          ]}
-        >
-          <Text style={[type.eyebrow, { color: theme.colors.textSecondary }]}>
-            {I18n.t("value", { defaultValue: "Значение" })}
-          </Text>
-          <TextInput
-            value={kValue}
-            onChangeText={setKValue}
-            keyboardType="decimal-pad"
-            style={[styles.bigInput, { color: theme.colors.text }]}
-          />
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.unitRow}
-          >
-            {FILTRATION_UNITS.map((unit) => {
-              const active = unit.key === kUnit;
-              return (
-                <TouchableOpacity
-                  key={unit.key}
-                  onPress={() => setKUnit(unit.key)}
-                  style={[
-                    styles.unitChip,
-                    {
-                      backgroundColor: active
-                        ? theme.colors.primary
-                        : "transparent",
-                      borderColor: active
-                        ? theme.colors.primary
-                        : theme.colors.border,
-                    },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                >
-                  <Text
-                    style={[
-                      styles.unitChipText,
-                      {
-                        color: active ? "#FFFFFF" : theme.colors.textSecondary,
-                      },
-                    ]}
-                  >
-                    {I18n.t(unit.labelKey)}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        <Text
-          style={[
-            type.eyebrow,
-            styles.sectionLabel,
-            { color: theme.colors.textSecondary },
-          ]}
-        >
-          {I18n.t("convertedToAllUnits", {
-            defaultValue: "Пересчёт по всем единицам",
-          })}
-        </Text>
-
-        <View
-          style={[
-            styles.card,
-            styles.listCard,
-            {
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.border,
-            },
-          ]}
-        >
-          {converted.map((row) => {
-            const active = row.key === kUnit;
+      <AppearIn index={1}>
+        <SectionLabel>
+          {I18n.t('convertedToAllUnits', { defaultValue: 'Пересчёт по всем единицам' })}
+        </SectionLabel>
+        <Card style={shared.listCard}>
+          {converted.map((row, index) => {
+            const selected = row.key === kUnit;
             return (
               <View
                 key={row.key}
                 style={[
+                  shared.convertRow,
                   styles.convertRow,
-                  {
-                    borderBottomColor: theme.colors.border,
-                    backgroundColor: active
-                      ? theme.colors.primaryWash
-                      : "transparent",
-                  },
+                  index > 0
+                    ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.colors.border }
+                    : null,
                 ]}
               >
-                <Text style={[type.body, { color: theme.colors.text }]}>
+                <Text
+                  style={[
+                    styles.convertLabel,
+                    { color: selected ? theme.colors.primaryAccent : theme.colors.textSecondary },
+                  ]}
+                >
                   {I18n.t(row.labelKey)}
                 </Text>
                 <Text
-                  style={[styles.convertValue, { color: theme.colors.text }]}
+                  style={[
+                    shared.convertValue,
+                    { color: selected ? theme.colors.primaryAccent : theme.colors.text },
+                  ]}
                 >
                   {formatValue(row.value)}
                 </Text>
               </View>
             );
           })}
-        </View>
-      </>
-    );
-  };
-
-  return renderFiltration();
+        </Card>
+      </AppearIn>
+    </>
+  );
 }
+
+const styles = StyleSheet.create({
+  hero: {
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+  },
+  heroRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: spacing.sm,
+  },
+  heroInput: {
+    flex: 1,
+    minWidth: 0,
+    // Значение прижато к размерности справа, как во всех остальных строках
+    // калькулятора: при выключке влево между числом и «м/сут» зияла дыра
+    // в треть экрана, и строка читалась как незаполненная
+    textAlign: 'right',
+    ...Platform.select({ web: { outlineStyle: 'none' }, default: {} }),
+  },
+  heroUnit: {
+    fontFamily: fontFamily.mono,
+    fontSize: 14,
+  },
+  unitBox: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginHorizontal: -spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  // Строка пересчёта живёт в карточке-списке: горизонтальные поля карточка уже
+  // задала, здесь остаётся только убрать их дубль
+  convertRow: {
+    paddingHorizontal: 0,
+  },
+  convertLabel: {
+    fontFamily: fontFamily.medium,
+    fontSize: 15,
+  },
+});

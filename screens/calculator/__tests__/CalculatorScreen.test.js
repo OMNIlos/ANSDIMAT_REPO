@@ -13,6 +13,10 @@ import CalculatorScreen from '../../CalculatorScreen';
 import { UnitsProvider } from '../../../UnitsContext';
 import { lightTheme, darkTheme } from '../../../theme';
 
+// Карта ЗСО тянет WebView, а тот требует нативного модуля: в тесте на
+// вёрстку экрана он не нужен
+jest.mock('../../../components/FieldMap', () => 'FieldMap');
+
 jest.mock('../../../db/settings', () => ({
   getSettings: () => Promise.resolve({}),
   setSetting: () => Promise.resolve(),
@@ -102,12 +106,12 @@ function selectTab(tree, index) {
 }
 
 describe('CalculatorScreen', () => {
-  it('открывается и показывает все шесть вкладок', () => {
+  it('открывается и показывает все семь вкладок', () => {
     const tree = renderScreen();
-    expect(tabButtons(tree).length).toBe(6);
+    expect(tabButtons(tree).length).toBe(7);
   });
 
-  [0, 1, 2, 3, 4, 5].forEach((index) => {
+  [0, 1, 2, 3, 4, 5, 6].forEach((index) => {
     it(`вкладка ${index + 1} отрисовывается без ошибок`, () => {
       const tree = renderScreen();
       selectTab(tree, index);
@@ -124,6 +128,15 @@ describe('CalculatorScreen', () => {
     expect(text).toContain('2697');
   });
 
+  it('вкладка ЗСО считает пояса по примеру веб-версии', () => {
+    const tree = renderScreen();
+    selectTab(tree, 4);
+    const text = screenText(tree);
+    // Значения по умолчанию совпадают с примером веб-версии: III пояс
+    // уходит вверх по потоку на 547.8 м
+    expect(text).toContain('547');
+  });
+
   it('вкладка прогноза считает понижение по Тейсу', () => {
     const tree = renderScreen();
     selectTab(tree, 2);
@@ -134,7 +147,7 @@ describe('CalculatorScreen', () => {
 
   it('экран работает и в тёмной теме', () => {
     const tree = renderScreen(darkTheme);
-    selectTab(tree, 3);
+    selectTab(tree, 4);
     expect(screenText(tree).length).toBeGreaterThan(50);
   });
 });

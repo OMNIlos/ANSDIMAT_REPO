@@ -8,12 +8,12 @@
  *
  * Форма собрана в том же порядке, что и на сайте — геометрия, пласт, граница
  * и радиус влияния, — потому что этот порядок повторяет ход рассуждения:
- * сначала что копаем, потом в чём, потом откуда идёт вода.
+ * сначала что копаем, потом в чём, потом откуда идёт вода. Разрез стоит сразу
+ * под выбором схемы: он показывает задачу раньше, чем начинается ввод.
  */
 
 import React, { useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { useTheme } from 'react-native-paper';
+import { View, StyleSheet } from 'react-native';
 import I18n from '../../Localization';
 import { QUANTITIES } from '../../calc/units';
 import { useUnits } from '../../UnitsContext';
@@ -21,27 +21,31 @@ import { compute, seriesQ, compareR, PIT_EXAMPLES } from '../../calc/pitInflow';
 import { PIT_LITHOLOGY } from '../../calc/lithology';
 import PitScheme from '../../components/schemes/PitScheme';
 import InflowChart from '../../components/charts/InflowChart';
-import { spacing, radius, type } from '../../theme';
+import AppearIn from '../../components/ui/AppearIn';
+import { spacing } from '../../theme';
 import {
   Card,
+  Collapsible,
   Field,
+  Formula,
+  Note,
+  Notices,
+  OptionRow,
+  PresetRow,
   ResultCard,
   SectionLabel,
-  OptionRow,
-  Notices,
   StatRow,
   parseNumber,
   formatValue,
-  formatCompact,
   styles as shared,
 } from './shared';
 
 /** Расчётные схемы в порядке веб-версии */
 const SCHEMES = [
-  { value: 'unconfined_unlimited', labelKey: 'pitSchemeUnconfined' },
-  { value: 'unconfined_river', labelKey: 'pitSchemeUnconfinedRiver' },
-  { value: 'confined_unlimited', labelKey: 'pitSchemeConfined' },
-  { value: 'confined_river', labelKey: 'pitSchemeConfinedRiver' },
+  { value: 'unconfined_unlimited', labelKey: 'pitSchemeUnconfined', methodKey: 'pitMethodUnconfined' },
+  { value: 'unconfined_river', labelKey: 'pitSchemeUnconfinedRiver', methodKey: 'pitMethodUnconfinedRiver' },
+  { value: 'confined_unlimited', labelKey: 'pitSchemeConfined', methodKey: 'pitMethodConfined' },
+  { value: 'confined_river', labelKey: 'pitSchemeConfinedRiver', methodKey: 'pitMethodConfinedRiver' },
 ];
 
 /** Способы задания геометрии выработки */
@@ -88,7 +92,6 @@ function localize(items) {
 }
 
 export default function PitTab({ contentWidth }) {
-  const theme = useTheme();
   const { unitLabel, toBase, fromBase } = useUnits();
 
   const inArea = (text) => toBase(parseNumber(text), QUANTITIES.AREA);
@@ -157,9 +160,11 @@ export default function PitTab({ contentWidth }) {
   const series = useMemo(() => (result.ok ? seriesQ(raw, parseNumber(time), 24) : []), [result, raw, time]);
   const comparison = useMemo(() => (result.ok && !river ? compareR(raw) : []), [result, raw, river]);
 
-  const caption = result.ok
-    ? `k = ${formatCompact(fromBase(result.k, QUANTITIES.CONDUCTIVITY))} ${uCond} · Q = ${formatCompact(fromBase(result.Q, QUANTITIES.FLOW))} ${uFlow}`
-    : null;
+  // Подпись над разрезом называет схему и метод: чипы выбора укорочены до
+  // одного слова, а по какой формуле идёт счёт — вопрос не праздный
+  const caption = I18n.t(
+    (SCHEMES.find((item) => item.value === scheme) || SCHEMES[0]).methodKey
+  );
 
   /**
    * Подставляет готовый пример из веб-калькулятора
@@ -186,176 +191,186 @@ export default function PitTab({ contentWidth }) {
 
   return (
     <>
-      <SectionLabel style={styles.firstLabel}>{I18n.t('pitSchemeGroup')}</SectionLabel>
-      <OptionRow options={localize(SCHEMES)} value={scheme} onChange={setScheme} />
-
-      <SectionLabel>{I18n.t('pitGeometryGroup')}</SectionLabel>
-      <OptionRow options={localize(GEOMETRIES)} value={geom} onChange={setGeom} />
-      <Card style={styles.spaced}>
-        {geom === 'area' ? (
-          <Field label={I18n.t('pitArea')} value={area} onChange={setArea} unit={uArea} error={hasError('F')} />
-        ) : null}
-        {geom === 'rect' ? (
-          <>
-            <Field label={I18n.t('pitLength')} value={length} onChange={setLength} unit={uLen} error={hasError('rect')} />
-            <Field label={I18n.t('pitWidth')} value={pitWidth} onChange={setPitWidth} unit={uLen} error={hasError('rect')} />
-          </>
-        ) : null}
-        {geom === 'radius' ? (
-          <Field label={I18n.t('pitReducedRadius')} value={radiusInput} onChange={setRadiusInput} unit={uLen} error={hasError('r0')} />
-        ) : null}
-      </Card>
-      {geom === 'rect' ? (
-        <View style={styles.spaced}>
-          <OptionRow options={localize(R0_MODES)} value={r0mode} onChange={setR0mode} />
+      <AppearIn index={0}>
+        <SectionLabel style={styles.firstLabel}>{I18n.t('pitSchemeGroup')}</SectionLabel>
+        <OptionRow options={localize(SCHEMES)} value={scheme} onChange={setScheme} />
+        <View style={styles.scheme}>
+          <PitScheme result={result} width={contentWidth} caption={caption} />
         </View>
-      ) : null}
+      </AppearIn>
 
-      <SectionLabel>{I18n.t('pitAquiferGroup')}</SectionLabel>
-      <OptionRow
-        options={PIT_LITHOLOGY.map((entry) => ({
-          value: entry.id,
-          label: `${I18n.t(entry.labelKey)} · ${entry.k}`,
-        }))}
-        value={null}
-        onChange={(id) => {
-          const entry = PIT_LITHOLOGY.find((item) => item.id === id);
-          if (entry) setK(String(fromBase(entry.k, QUANTITIES.CONDUCTIVITY)));
-        }}
-      />
-      <Card style={styles.spaced}>
-        <Field label={I18n.t('pitConductivity')} value={k} onChange={setK} unit={uCond} error={hasError('k')}
-          hint={result.ok ? `${formatValue(result.k_ms)} ${I18n.t('unitMSecond')}` : null} />
-        <Field
-          label={confined ? I18n.t('pitThicknessConfined') : I18n.t('pitThicknessUnconfined')}
-          value={thickness}
-          onChange={setThickness}
-          unit={uLen}
-          error={hasError('m') || hasError('h0')}
-        />
-        <Field
-          label={I18n.t('pitDrawdown')}
-          value={drawdown}
-          onChange={setDrawdown}
-          unit={uDraw}
-          error={hasError('S') || hasError('S_gt_h0')}
-        />
-      </Card>
+      <AppearIn index={1}>
+        <SectionLabel>{I18n.t('pitGeometryGroup')}</SectionLabel>
+        <OptionRow options={localize(GEOMETRIES)} value={geom} onChange={setGeom} />
+        <Card style={styles.spaced}>
+          {geom === 'area' ? (
+            <Field label={I18n.t('pitArea')} symbol="F" value={area} onChange={setArea} unit={uArea} error={hasError('F')} />
+          ) : null}
+          {geom === 'rect' ? (
+            <>
+              <Field label={I18n.t('pitLength')} symbol="L" value={length} onChange={setLength} unit={uLen} error={hasError('rect')} />
+              <Field label={I18n.t('pitWidth')} symbol="B" value={pitWidth} onChange={setPitWidth} unit={uLen} error={hasError('rect')} />
+            </>
+          ) : null}
+          {geom === 'radius' ? (
+            <Field label={I18n.t('pitReducedRadius')} symbol="r₀" value={radiusInput} onChange={setRadiusInput} unit={uLen} error={hasError('r0')} />
+          ) : null}
+        </Card>
+        {geom === 'rect' ? (
+          <View style={styles.spaced}>
+            <OptionRow options={localize(R0_MODES)} value={r0mode} onChange={setR0mode} />
+          </View>
+        ) : null}
+      </AppearIn>
 
-      <SectionLabel>{I18n.t('pitBoundaryGroup')}</SectionLabel>
-      {river ? null : <OptionRow options={localize(R_METHODS)} value={rMethod} onChange={setRMethod} />}
-      <Card style={styles.spaced}>
-        {river ? (
+      <AppearIn index={2}>
+        <SectionLabel>{I18n.t('pitAquiferGroup')}</SectionLabel>
+        <PresetRow
+          options={PIT_LITHOLOGY.map((entry) => ({
+            value: entry.id,
+            label: `${I18n.t(entry.labelKey)} · ${entry.k}`,
+          }))}
+          onPick={(id) => {
+            const entry = PIT_LITHOLOGY.find((item) => item.id === id);
+            if (entry) setK(String(fromBase(entry.k, QUANTITIES.CONDUCTIVITY)));
+          }}
+        />
+        <Card style={styles.spaced}>
           <Field
-            label={I18n.t('pitRiverDistance')}
-            value={riverDistance}
-            onChange={setRiverDistance}
-            unit={uLen}
-            error={hasError('L') || hasError('L_le_r0')}
-            hint={I18n.t('pitRiverHint')}
+            label={I18n.t('pitConductivity')}
+            symbol="k"
+            value={k}
+            onChange={setK}
+            unit={uCond}
+            error={hasError('k')}
+            hint={result.ok ? `${formatValue(result.k_ms)} ${I18n.t('unitMSecond')}` : null}
           />
-        ) : null}
-        {!river && rMethod === 'manual' ? (
-          <Field label={I18n.t('pitManualR')} value={manualR} onChange={setManualR} unit={uLen} error={hasError('Rmanual') || hasError('R_le_r0')} />
-        ) : null}
-        {!river && rMethod === 'fromWall' ? (
-          <>
-            <Field label={I18n.t('pitTime')} value={time} onChange={setTime} unit={I18n.t('unitDays')} error={hasError('t')} />
-            <Field
-              label={I18n.t('pitDiffusivity')}
-              value={diffusivity}
-              onChange={setDiffusivity}
-              unit={uDiff}
-              error={hasError('a')}
-              hint={I18n.t('pitDiffusivityHint')}
-            />
-            <Field label={I18n.t('pitStorage')} value={storage} onChange={setStorage} unit="" />
-          </>
-        ) : null}
-        <Field label={I18n.t('pitFactor')} value={factor} onChange={setFactor} unit="" hint={I18n.t('pitFactorHint')} />
-      </Card>
+          <Field
+            label={confined ? I18n.t('pitThicknessConfined') : I18n.t('pitThicknessUnconfined')}
+            symbol={confined ? 'm' : 'h₀'}
+            value={thickness}
+            onChange={setThickness}
+            unit={uLen}
+            error={hasError('m') || hasError('h0')}
+          />
+          <Field
+            label={I18n.t('pitDrawdown')}
+            symbol="s"
+            value={drawdown}
+            onChange={setDrawdown}
+            unit={uDraw}
+            error={hasError('S') || hasError('S_gt_h0')}
+          />
+        </Card>
+      </AppearIn>
 
-      <SectionLabel>{I18n.t('pitExamplesGroup')}</SectionLabel>
-      <View style={styles.examples}>
-        {Object.keys(PIT_EXAMPLES).map((id) => (
-          <TouchableOpacity
-            key={id}
-            onPress={() => applyExample(id)}
-            style={[styles.example, { borderColor: theme.colors.border }]}
-          >
-            <Text style={[type.caption, { color: theme.colors.primary }]}>
-              {I18n.t(`pitExample_${id}`)}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <AppearIn index={3}>
+        <SectionLabel>{I18n.t('pitBoundaryGroup')}</SectionLabel>
+        {river ? null : <OptionRow options={localize(R_METHODS)} value={rMethod} onChange={setRMethod} />}
+        <Card style={river ? null : styles.spaced}>
+          {river ? (
+            <Field
+              label={I18n.t('pitRiverDistance')}
+              symbol="L"
+              value={riverDistance}
+              onChange={setRiverDistance}
+              unit={uLen}
+              error={hasError('L') || hasError('L_le_r0')}
+              hint={I18n.t('pitRiverHint')}
+            />
+          ) : null}
+          {!river && rMethod === 'manual' ? (
+            <Field label={I18n.t('pitManualR')} symbol="R" value={manualR} onChange={setManualR} unit={uLen} error={hasError('Rmanual') || hasError('R_le_r0')} />
+          ) : null}
+          {!river && rMethod === 'fromWall' ? (
+            <>
+              <Field label={I18n.t('pitTime')} symbol="t" value={time} onChange={setTime} unit={I18n.t('unitDays')} error={hasError('t')} />
+              <Field
+                label={I18n.t('pitDiffusivity')}
+                symbol="a"
+                value={diffusivity}
+                onChange={setDiffusivity}
+                unit={uDiff}
+                error={hasError('a')}
+                hint={I18n.t('pitDiffusivityHint')}
+              />
+              <Field label={I18n.t('pitStorage')} symbol="μ" value={storage} onChange={setStorage} />
+            </>
+          ) : null}
+          <Field label={I18n.t('pitFactor')} symbol="n" value={factor} onChange={setFactor} hint={I18n.t('pitFactorHint')} />
+        </Card>
+      </AppearIn>
+
+      <AppearIn index={4}>
+        <Collapsible title={I18n.t('pitExamplesGroup')}>
+          <OptionRow
+            options={Object.keys(PIT_EXAMPLES).map((id) => ({
+              value: id,
+              label: I18n.t(`pitExample_${id}`),
+            }))}
+            value={null}
+            onChange={applyExample}
+          />
+        </Collapsible>
+      </AppearIn>
 
       {result.ok ? (
-        <>
+        <AppearIn index={5}>
           <ResultCard
+            title={I18n.t('pitResultTitle')}
             label="Q"
             value={out(result.Q, QUANTITIES.FLOW)}
             unit={uFlow}
-            formula={
-              confined
-                ? 'Q = 2π k m s / ln(R/r₀)'
-                : 'Q = π k (h₀² − h_w²) / ln(R/r₀)'
-            }
+            rows={[
+              { label: I18n.t('pitStatQHour'), value: formatValue(result.Q_m3h) },
+              { label: I18n.t('pitStatQSec'), value: formatValue(result.Q_ls) },
+              ...(result.factor !== 1
+                ? [{ label: I18n.t('pitStatDesign'), value: out(result.Qdesign, QUANTITIES.FLOW), unit: uFlow }]
+                : []),
+            ]}
           />
           <Notices codes={result.warnings} prefix="pitWarn_" />
 
-          <SectionLabel>{I18n.t('pitStatsGroup')}</SectionLabel>
-          <Card style={shared.listCard}>
-            <View style={styles.stats}>
+          <Collapsible title={I18n.t('pitStatsGroup')} note="ƒ">
+            {/* Формула — внутри раздела: в шапке она переносилась на вторую
+                строку и налезала на заголовок */}
+            <Formula>
+              {confined ? 'Q = 2π k m s / ln(R/r₀)' : 'Q = π k (h₀² − h_w²) / ln(R/r₀)'}
+            </Formula>
+            <Card style={shared.listCard}>
               <StatRow label={I18n.t('pitStatR0')} value={`${out(result.r0, QUANTITIES.DISTANCE)} ${uLen}`} />
               <StatRow label={I18n.t('pitStatR')} value={`${out(result.R, QUANTITIES.DISTANCE)} ${uLen}`} />
               <StatRow label={I18n.t('pitStatRatio')} value={formatValue(result.ratio)} />
               <StatRow label={I18n.t('pitStatLn')} value={formatValue(result.lnTerm)} />
               <StatRow label={I18n.t('pitStatT')} value={`${out(result.T, QUANTITIES.TRANSMISSIVITY)} ${unitLabel(QUANTITIES.TRANSMISSIVITY)}`} />
-              <StatRow label={I18n.t('pitStatQHour')} value={formatValue(result.Q_m3h)} />
-              <StatRow label={I18n.t('pitStatQSec')} value={formatValue(result.Q_ls)} />
-              {result.factor !== 1 ? (
-                <StatRow label={I18n.t('pitStatDesign')} value={`${out(result.Qdesign, QUANTITIES.FLOW)} ${uFlow}`} />
-              ) : null}
-            </View>
-          </Card>
-
-          <SectionLabel>{I18n.t('pitSectionGroup')}</SectionLabel>
-          <PitScheme result={result} width={contentWidth} caption={caption} />
+            </Card>
+          </Collapsible>
 
           {series.length > 1 ? (
-            <>
-              <SectionLabel>{I18n.t('pitChartGroup')}</SectionLabel>
+            <Collapsible title={I18n.t('pitChartGroup')} initiallyOpen>
               <InflowChart points={series} markerT={parseNumber(time)} width={contentWidth} />
-            </>
+            </Collapsible>
           ) : null}
 
           {comparison.length > 0 ? (
-            <>
-              <SectionLabel>{I18n.t('pitCompareGroup')}</SectionLabel>
+            <Collapsible title={I18n.t('pitCompareGroup')} note={`${comparison.length}`}>
               <Card style={shared.listCard}>
-                <View style={styles.stats}>
-                  {comparison.map((row) => (
-                    <StatRow
-                      key={row.method}
-                      label={compareLabel(row.method)}
-                      value={`R = ${out(row.R, QUANTITIES.DISTANCE)} · Q = ${out(row.Q, QUANTITIES.FLOW)}`}
-                    />
-                  ))}
-                </View>
+                {comparison.map((row) => (
+                  <StatRow
+                    key={row.method}
+                    label={compareLabel(row.method)}
+                    value={`R = ${out(row.R, QUANTITIES.DISTANCE)} · Q = ${out(row.Q, QUANTITIES.FLOW)}`}
+                  />
+                ))}
               </Card>
-              <Text style={[type.caption, styles.note, { color: theme.colors.textSecondary }]}>
-                {I18n.t('pitCompareNote')}
-              </Text>
-            </>
+              <Note>{I18n.t('pitCompareNote')}</Note>
+            </Collapsible>
           ) : null}
-        </>
+        </AppearIn>
       ) : (
-        <>
+        <AppearIn index={5}>
           <Notices codes={result.errors} prefix="pitError_" tone="error" />
-          <SectionLabel>{I18n.t('pitSectionGroup')}</SectionLabel>
-          <PitScheme result={result} width={contentWidth} />
-        </>
+        </AppearIn>
       )}
     </>
   );
@@ -366,25 +381,9 @@ const styles = StyleSheet.create({
     marginTop: 0,
   },
   spaced: {
-    marginTop: spacing.sm,
+    marginTop: spacing.md,
   },
-  examples: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  example: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.chip,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  stats: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
-  note: {
-    marginTop: spacing.sm,
-    lineHeight: 18,
+  scheme: {
+    marginTop: spacing.md,
   },
 });

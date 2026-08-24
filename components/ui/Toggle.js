@@ -16,13 +16,23 @@ import { useTheme } from 'react-native-paper';
 export default function Toggle({ value, onValueChange, accessibilityLabel }) {
   const { colors } = useTheme();
   const anim = useRef(new Animated.Value(value ? 1 : 0)).current;
+  const mounted = useRef(false);
 
   useEffect(() => {
-    Animated.timing(anim, {
+    // На первом проходе ручка уже стоит на месте: анимировать нечего, а
+    // запущенный таймер продолжал бы тикать и после размонтирования
+    if (!mounted.current) {
+      mounted.current = true;
+      anim.setValue(value ? 1 : 0);
+      return undefined;
+    }
+    const animation = Animated.timing(anim, {
       toValue: value ? 1 : 0,
       duration: 200,
       useNativeDriver: false,
-    }).start();
+    });
+    animation.start();
+    return () => animation.stop();
   }, [value, anim]);
 
   const trackColor = anim.interpolate({

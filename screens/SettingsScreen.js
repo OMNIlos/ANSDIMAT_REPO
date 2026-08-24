@@ -3,7 +3,7 @@
  *
  * Воссоздаёт экран из дизайн-прототипа:
  * - «Оформление»: сегменты темы (Светлая/Тёмная/Системная) + язык RU/EN
- * - «Подписка»: бордовый Premium-баннер
+ * - «Подписка»: бордовый Premium-баннер — скрыт, пока премиум выключен
  * - «Данные и расчёты»: тумблеры (планшет, автокоординаты, моноширинные цифры)
  * - «О приложении»: карточка с логотипом и версией
  *
@@ -28,6 +28,7 @@ import { ThemeContext } from "../ThemeContext";
 import { LanguageContext } from "../LanguageContext";
 import { useAuth } from "../AuthContext";
 import { useEntitlements } from "../billing/EntitlementsContext";
+import { PREMIUM_ENABLED } from "../billing/config";
 import I18n from "../Localization";
 import Segmented from "../components/ui/Segmented";
 import Toggle from "../components/ui/Toggle";
@@ -243,52 +244,57 @@ export default function SettingsScreen({ navigation }) {
             />
           </TouchableOpacity>
 
-          {/* Подписка */}
-          <Eyebrow>
-            {I18n.t("subscription", { defaultValue: "Подписка" })}
-          </Eyebrow>
-          <TouchableOpacity
-            activeOpacity={0.9}
-            onPress={() => navigation.navigate("Subscription")}
-          >
-            <LinearGradient
-              colors={["#8A0A3D", "#4A001F"]}
-              start={{ x: 0.1, y: 0 }}
-              end={{ x: 0.9, y: 1 }}
-              style={styles.premiumCard}
-            >
-              <MaterialIcons
-                name="workspace-premium"
-                size={30}
-                color="#E0A83C"
-              />
-              <View style={styles.premiumText}>
-                <Text style={styles.premiumTitle}>
-                  {entitlements.premium
-                    ? I18n.t("planPremium", { defaultValue: "Премиум-доступ" })
-                    : I18n.t("basicVersion", {
-                        defaultValue: "Базовая версия",
-                      })}
-                </Text>
-                <Text style={styles.premiumSub}>
-                  {entitlements.premium
-                    ? I18n.t("premiumActive", {
-                        defaultValue:
-                          "Синхронизация и расширенные расчёты открыты",
-                      })
-                    : I18n.t("premiumPitch", {
-                        defaultValue:
-                          "Расширьте до Premium: приток, барраж, утечки",
-                      })}
-                </Text>
-              </View>
-              <MaterialIcons
-                name="chevron-right"
-                size={22}
-                color="rgba(255,255,255,0.8)"
-              />
-            </LinearGradient>
-          </TouchableOpacity>
+          {/* Подписка. Скрыта вместе со всем премиумом: PREMIUM_ENABLED
+              выключен, платить не за что — баннер вёл бы на пустой экран */}
+          {PREMIUM_ENABLED && (
+            <>
+              <Eyebrow>
+                {I18n.t("subscription", { defaultValue: "Подписка" })}
+              </Eyebrow>
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() => navigation.navigate("Subscription")}
+              >
+                <LinearGradient
+                  colors={["#8A0A3D", "#4A001F"]}
+                  start={{ x: 0.1, y: 0 }}
+                  end={{ x: 0.9, y: 1 }}
+                  style={styles.premiumCard}
+                >
+                  <MaterialIcons
+                    name="workspace-premium"
+                    size={30}
+                    color="#E0A83C"
+                  />
+                  <View style={styles.premiumText}>
+                    <Text style={styles.premiumTitle}>
+                      {entitlements.premium
+                        ? I18n.t("planPremium", { defaultValue: "Премиум-доступ" })
+                        : I18n.t("basicVersion", {
+                            defaultValue: "Базовая версия",
+                          })}
+                    </Text>
+                    <Text style={styles.premiumSub}>
+                      {entitlements.premium
+                        ? I18n.t("premiumActive", {
+                            defaultValue:
+                              "Синхронизация и расширенные расчёты открыты",
+                          })
+                        : I18n.t("premiumPitch", {
+                            defaultValue:
+                              "Расширьте до Premium: приток, барраж, утечки",
+                          })}
+                    </Text>
+                  </View>
+                  <MaterialIcons
+                    name="chevron-right"
+                    size={22}
+                    color="rgba(255,255,255,0.8)"
+                  />
+                </LinearGradient>
+              </TouchableOpacity>
+            </>
+          )}
 
           {/* Данные и расчёты */}
           <Eyebrow>

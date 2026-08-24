@@ -7,8 +7,7 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text } from 'react-native';
-import { useTheme } from 'react-native-paper';
+import { StyleSheet } from 'react-native';
 import I18n from '../../Localization';
 import { QUANTITIES } from '../../calc/units';
 import {
@@ -17,12 +16,21 @@ import {
   leakyDrawdown,
   steadyLeakyDrawdown,
 } from '../../calc/leakage';
-import { type, elevation, spacing } from '../../theme';
-import { Field, ResultCard, useCalcUnits, parseNumber, formatValue, styles } from './shared';
+import AppearIn from '../../components/ui/AppearIn';
+import {
+  Card,
+  Collapsible,
+  Field,
+  Formula,
+  ResultCard,
+  SectionLabel,
+  useCalcUnits,
+  parseNumber,
+  formatValue,
+} from './shared';
 
 export default function LeakageTab() {
-  const theme = useTheme();
-  const { inFlow, inLen, inDraw, inTrans, inCond, inDays, out, uFlow, uLen, uDraw, uTrans, uCond, uTime } =
+  const { inFlow, inLen, inArea, inTrans, inCond, inDays, out, uFlow, uLen, uDraw, uTrans, uCond, uArea, uTime } =
     useCalcUnits();
 
   const [lQ, setLQ] = useState('1000');
@@ -34,173 +42,77 @@ export default function LeakageTab() {
   const [lK, setLK] = useState('0.01');
   const [lArea, setLArea] = useState('10000');
 
-  /**
-   * Поле ввода с подписью и единицей измерения
-   *
-   * @param {string} label - подпись поля
-   * @param {string} value - текущее значение
-   * @param {Function} onChange - обработчик правки
-   * @param {string} unit - подпись размерности
-   * @returns {React.ReactElement} строка формы
-   */
-  const renderField = (label, value, onChange, unit) => (
-    <Field key={label} label={label} value={value} onChange={onChange} unit={unit} />
+  const T = inTrans(lT);
+  const aquitardThickness = inLen(lThickness);
+  const aquitardK = inCond(lK);
+
+  const B = leakageFactor({ T, aquitardThickness, aquitardK });
+  const { s, beta, W } = leakyDrawdown({
+    Q: inFlow(lQ),
+    T,
+    S: parseNumber(lS),
+    r: inLen(lR),
+    t: inDays(lTime),
+    B,
+  });
+  const steady = steadyLeakyDrawdown({ Q: inFlow(lQ), T, r: inLen(lR), B });
+  const { rate, total, formula: rateFormula } = leakageRate({
+    s,
+    aquitardThickness,
+    aquitardK,
+    area: inArea(lArea),
+  });
+
+  return (
+    <>
+      <AppearIn index={0}>
+        <SectionLabel style={styles.firstLabel}>
+          {I18n.t('wellPumpingGroup', { defaultValue: 'Откачка' })}
+        </SectionLabel>
+        <Card>
+          <Field label={I18n.t('flowRate')} symbol="Q" value={lQ} onChange={setLQ} unit={uFlow} />
+          <Field label={I18n.t('transmissivity')} symbol="T" value={lT} onChange={setLT} unit={uTrans} />
+          <Field label={I18n.t('storativity')} symbol="S" value={lS} onChange={setLS} />
+          <Field label={I18n.t('distance')} symbol="r" value={lR} onChange={setLR} unit={uLen} />
+          <Field label={I18n.t('time')} symbol="t" value={lTime} onChange={setLTime} unit={uTime} />
+        </Card>
+      </AppearIn>
+
+      <AppearIn index={1}>
+        <SectionLabel>
+          {I18n.t('aquitardGroup', { defaultValue: 'Слабопроницаемый слой' })}
+        </SectionLabel>
+        <Card>
+          <Field label={I18n.t('aquitardThickness')} symbol="m′" value={lThickness} onChange={setLThickness} unit={uLen} />
+          <Field label={I18n.t('aquitardK')} symbol="k′" value={lK} onChange={setLK} unit={uCond} />
+          <Field label={I18n.t('leakageArea')} symbol="F" value={lArea} onChange={setLArea} unit={uArea} />
+        </Card>
+      </AppearIn>
+
+      <AppearIn index={2}>
+        <ResultCard
+          title={I18n.t('drawdown')}
+          label="s"
+          value={out(s, QUANTITIES.DRAWDOWN)}
+          unit={uDraw}
+          rows={[
+            { label: I18n.t('steadyDrawdown'), value: out(steady.s, QUANTITIES.DRAWDOWN), unit: uDraw },
+            { label: I18n.t('leakageTotal'), value: out(total, QUANTITIES.FLOW), unit: uFlow },
+          ]}
+        />
+
+        <Collapsible title={I18n.t('wellStatsGroup', { defaultValue: 'Подробности' })} note="ƒ">
+          <Formula>
+            {`s = Q / (4π·T) · W(u, r/B)\nB = ${out(B, QUANTITIES.DISTANCE)} ${uLen} · r/B = ${formatValue(beta)} · W = ${formatValue(W)}\n${rateFormula}\nw = ${out(rate, QUANTITIES.CONDUCTIVITY)} ${uCond}`}
+          </Formula>
+        </Collapsible>
+      </AppearIn>
+    </>
   );
-
-  /**
-   * Карточка результата с формулой
-   *
-   * @param {string} label - обозначение величины
-   * @param {string} value - значение
-   * @param {string} unit - подпись размерности
-   * @param {string} formula - запись формулы
-   * @returns {React.ReactElement} карточка результата
-   */
-  const renderResult = (label, value, unit, formula) => (
-    <ResultCard label={label} value={value} unit={unit} formula={formula} />
-  );
-
-  const renderLeakage = () => {
-    const T = inTrans(lT);
-    const aquitardThickness = inLen(lThickness);
-    const aquitardK = inCond(lK);
-
-    const B = leakageFactor({ T, aquitardThickness, aquitardK });
-    const { s, beta, W } = leakyDrawdown({
-      Q: inFlow(lQ),
-      T,
-      S: parseNumber(lS),
-      r: inLen(lR),
-      t: inDays(lTime),
-      B,
-    });
-    const steady = steadyLeakyDrawdown({ Q: inFlow(lQ), T, r: inLen(lR), B });
-    const {
-      rate,
-      total,
-      formula: rateFormula,
-    } = leakageRate({
-      s,
-      aquitardThickness,
-      aquitardK,
-      area: parseNumber(lArea),
-    });
-
-    return (
-      <>
-        <View
-          style={[
-            styles.card,
-            elevation.card,
-            {
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.border,
-            },
-          ]}
-        >
-          {renderField(I18n.t("flowRate"), lQ, setLQ, uFlow)}
-          {renderField(
-            I18n.t("transmissivity", { defaultValue: "Водопроводимость T" }),
-            lT,
-            setLT,
-            uTrans,
-          )}
-          {renderField(
-            I18n.t("storativity", { defaultValue: "Водоотдача S" }),
-            lS,
-            setLS,
-            "",
-          )}
-          {renderField(
-            I18n.t("distance", { defaultValue: "Расстояние r" }),
-            lR,
-            setLR,
-            uLen,
-          )}
-          {renderField(I18n.t("time"), lTime, setLTime, uTime)}
-          {renderField(
-            I18n.t("aquitardThickness", {
-              defaultValue: "Мощность слабопроницаемого слоя m′",
-            }),
-            lThickness,
-            setLThickness,
-            uLen,
-          )}
-          {renderField(
-            I18n.t("aquitardK", { defaultValue: "Коэф. фильтрации слоя k′" }),
-            lK,
-            setLK,
-            uCond,
-          )}
-        </View>
-
-        {renderResult(
-          "s",
-          out(s, QUANTITIES.DRAWDOWN),
-          uDraw,
-          "s = Q/(4π·T) · W(u, r/B)",
-        )}
-
-        <View style={styles.auxRow}>
-          <Text style={[styles.auxText, { color: theme.colors.textSecondary }]}>
-            B = {out(B, QUANTITIES.DISTANCE)} {uLen}
-          </Text>
-          <Text style={[styles.auxText, { color: theme.colors.textSecondary }]}>
-            r/B = {formatValue(beta)}
-          </Text>
-          <Text style={[styles.auxText, { color: theme.colors.textSecondary }]}>
-            W(u, r/B) = {formatValue(W)}
-          </Text>
-          <Text style={[styles.auxText, { color: theme.colors.textSecondary }]}>
-            {I18n.t("steadyDrawdown", { defaultValue: "Стационар" })} ={" "}
-            {out(steady.s, QUANTITIES.DRAWDOWN)} {uDraw}
-          </Text>
-        </View>
-
-        {/* Расход перетекания */}
-        <Text
-          style={[
-            type.eyebrow,
-            styles.sectionLabel,
-            { color: theme.colors.textSecondary },
-          ]}
-        >
-          {I18n.t("leakageVolumeTitle", { defaultValue: "Расход перетекания" })}
-        </Text>
-        <View
-          style={[
-            styles.card,
-            elevation.card,
-            {
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.border,
-            },
-          ]}
-        >
-          {renderField(
-            I18n.t("leakageArea", { defaultValue: "Площадь F" }),
-            lArea,
-            setLArea,
-            "м²",
-          )}
-        </View>
-
-        {renderResult(
-          "w",
-          out(rate, QUANTITIES.CONDUCTIVITY),
-          uCond,
-          rateFormula,
-        )}
-
-        <View style={styles.auxRow}>
-          <Text style={[styles.auxText, { color: theme.colors.textSecondary }]}>
-            {I18n.t("leakageTotal", { defaultValue: "Расход по площади" })} ={" "}
-            {out(total, QUANTITIES.FLOW)} {uFlow}
-          </Text>
-        </View>
-      </>
-    );
-  };
-
-  return renderLeakage();
 }
+
+const styles = StyleSheet.create({
+  firstLabel: {
+    marginTop: 0,
+  },
+});

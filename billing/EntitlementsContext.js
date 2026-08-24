@@ -12,13 +12,18 @@
  *
  * Что закрыто подпиской, а что нет: обработка ОФР и базовый калькулятор
  * бесплатны — это ядро продукта. Платными становятся синхронизация,
- * расширенные расчёты и экспорт.
+ * расширенные расчёты, экспорт и карта куста.
+ *
+ * Сейчас премиум выключен флагом PREMIUM_ENABLED (см. ./config): права
+ * выдаются открытыми, сервер о них не спрашивается. Всё описанное ниже
+ * остаётся рабочим и включается обратно тем же флагом.
  */
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { getSetting, setSetting } from '../db/settings';
 import { useAuth } from '../AuthContext';
+import { PREMIUM_ENABLED } from './config';
 
 /** Сколько кэш считается свежим без связи с сервером */
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -27,20 +32,52 @@ const FREE = {
   premium: false,
   source: 'none',
   expiresAt: null,
-  features: { sync: false, advancedCalc: false, exportPdf: false, unlimitedProjects: false },
+  features: {
+    sync: false,
+    advancedCalc: false,
+    exportPdf: false,
+    unlimitedProjects: false,
+    // Карта куста в обработке ОФР: расстановка скважин по местности вместо
+    // ввода расстояний числами
+    clusterMap: false,
+  },
 };
 
+/**
+ * Права при выключенном премиуме
+ *
+ * Подписки нет ни у кого — поэтому `premium` остаётся false, — но платных
+ * функций тоже больше нет: открыто всё и всем, включая тех, кто не входил в
+ * аккаунт. Отдельная константа рядом с FREE, чтобы видеть разницу и не
+ * править список возможностей при возврате премиума.
+ */
+const UNLOCKED = {
+  premium: false,
+  source: 'disabled',
+  expiresAt: null,
+  features: {
+    sync: true,
+    advancedCalc: true,
+    exportPdf: true,
+    unlimitedProjects: true,
+    clusterMap: true,
+  },
+};
+
+/** С чего начинаем и что отдаём вне провайдера */
+const INITIAL = PREMIUM_ENABLED ? FREE : UNLOCKED;
+
 const EntitlementsContext = createContext({
-  entitlements: FREE,
+  entitlements: INITIAL,
   loading: false,
   refresh: async () => {},
   redeemPromo: async () => ({ ok: false }),
-  has: () => false,
+  has: () => !PREMIUM_ENABLED,
 });
 
 export function EntitlementsProvider({ children }) {
   const { session } = useAuth();
-  const [entitlements, setEntitlements] = useState(FREE);
+  const [entitlements, setEntitlements] = useState(INITIAL);
   const [loading, setLoading] = useState(false);
 
   /** Достаёт из кэша, если он ещё свежий */
@@ -59,6 +96,8 @@ export function EntitlementsProvider({ children }) {
   }, []);
 
   const refresh = useCallback(async () => {
+    if (!PREMIUM_ENABLED) return UNLOCKED;
+
     if (!isSupabaseConfigured || !session) {
       setEntitlements(FREE);
       return FREE;
@@ -85,6 +124,8 @@ export function EntitlementsProvider({ children }) {
   }, [session, loadCache]);
 
   useEffect(() => {
+    if (!PREMIUM_ENABLED) return;
+
     if (!session) {
       setEntitlements(FREE);
       return;
@@ -103,6 +144,7 @@ export function EntitlementsProvider({ children }) {
    */
   const redeemPromo = useCallback(
     async (code) => {
+      if (!PREMIUM_ENABLED) return { ok: false, error: 'disabled' };
       if (!isSupabaseConfigured) return { ok: false, error: 'notConfigured' };
       if (!session) return { ok: false, error: 'notSignedIn' };
 
@@ -122,7 +164,10 @@ export function EntitlementsProvider({ children }) {
    * @returns {boolean} доступна ли функция
    */
   const has = useCallback(
-    (feature) => Boolean(entitlements?.features?.[feature]),
+    (feature) => {
+      if (!PREMIUM_ENABLED) return true;
+      return Boolean(entitlements?.features?.[feature]);
+    },
     [entitlements]
   );
 

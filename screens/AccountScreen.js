@@ -23,6 +23,7 @@ import I18n from '../Localization';
 import { useAuth } from '../AuthContext';
 import { useSync } from '../sync/SyncContext';
 import { useEntitlements } from '../billing/EntitlementsContext';
+import { PREMIUM_ENABLED } from '../billing/config';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import PressableScale from '../components/ui/PressableScale';
 import AppearIn from '../components/ui/AppearIn';
@@ -125,11 +126,15 @@ export default function AccountScreen({ navigation }) {
                   <Text style={[type.cardTitle, { color: colors.text }]} numberOfLines={1}>
                     {user?.email ?? '—'}
                   </Text>
-                  <Text style={[type.caption, { color: colors.textSecondary }]}>
-                    {entitlements.premium
-                      ? I18n.t('planPremium', { defaultValue: 'Премиум-доступ' })
-                      : I18n.t('planBasic', { defaultValue: 'Базовый доступ' })}
-                  </Text>
+                  {/* Тариф. Пока премиум выключен, тарифов нет вовсе —
+                      «Базовый доступ» намекал бы на платный сверху */}
+                  {PREMIUM_ENABLED && (
+                    <Text style={[type.caption, { color: colors.textSecondary }]}>
+                      {entitlements.premium
+                        ? I18n.t('planPremium', { defaultValue: 'Премиум-доступ' })
+                        : I18n.t('planBasic', { defaultValue: 'Базовый доступ' })}
+                    </Text>
+                  )}
                 </View>
               </View>
             </View>
@@ -210,37 +215,40 @@ export default function AccountScreen({ navigation }) {
             </AppearIn>
           )}
 
-          {/* Промокод */}
-          <AppearIn index={3}>
-            <Text style={[type.eyebrow, styles.sectionLabel, { color: colors.textSecondary }]}>
-              {I18n.t('promoSection', { defaultValue: 'Промокод' })}
-            </Text>
-            <View style={[styles.card, elevation.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <TextInput
-                value={promo}
-                onChangeText={setPromo}
-                autoCapitalize="characters"
-                placeholder={I18n.t('promoPlaceholder', { defaultValue: 'Код от партнёра' })}
-                placeholderTextColor={colors.textSecondary}
-                style={[styles.input, { borderColor: colors.border, color: colors.text }]}
-              />
-              <PressableScale
-                onPress={handlePromo}
-                disabled={busy || !promo.trim()}
-                style={[styles.button, { backgroundColor: colors.primary, opacity: promo.trim() ? 1 : 0.5 }]}
-                accessibilityRole="button"
-              >
-                <Text style={styles.buttonText}>
-                  {I18n.t('promoApply', { defaultValue: 'Применить' })}
-                </Text>
-              </PressableScale>
-              {!!promoNote && (
-                <Text style={[type.caption, styles.note, { color: promoNote.ok ? colors.success : colors.error }]}>
-                  {promoNote.text}
-                </Text>
-              )}
-            </View>
-          </AppearIn>
+          {/* Промокод. Скрыт вместе с премиумом: открывать ему нечего,
+              все возможности и так доступны */}
+          {PREMIUM_ENABLED && (
+            <AppearIn index={3}>
+              <Text style={[type.eyebrow, styles.sectionLabel, { color: colors.textSecondary }]}>
+                {I18n.t('promoSection', { defaultValue: 'Промокод' })}
+              </Text>
+              <View style={[styles.card, elevation.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <TextInput
+                  value={promo}
+                  onChangeText={setPromo}
+                  autoCapitalize="characters"
+                  placeholder={I18n.t('promoPlaceholder', { defaultValue: 'Код от партнёра' })}
+                  placeholderTextColor={colors.textSecondary}
+                  style={[styles.input, { borderColor: colors.border, color: colors.text }]}
+                />
+                <PressableScale
+                  onPress={handlePromo}
+                  disabled={busy || !promo.trim()}
+                  style={[styles.button, { backgroundColor: colors.primary, opacity: promo.trim() ? 1 : 0.5 }]}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.buttonText}>
+                    {I18n.t('promoApply', { defaultValue: 'Применить' })}
+                  </Text>
+                </PressableScale>
+                {!!promoNote && (
+                  <Text style={[type.caption, styles.note, { color: promoNote.ok ? colors.success : colors.error }]}>
+                    {promoNote.text}
+                  </Text>
+                )}
+              </View>
+            </AppearIn>
+          )}
 
           {/* Пароль */}
           <AppearIn index={4}>
