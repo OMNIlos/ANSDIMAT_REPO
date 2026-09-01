@@ -10,7 +10,10 @@ import {
   processRecovery,
   recoveryCompleteness,
   toRecoveryPoints,
+  diffusivityFromRecovery,
+  storageRatioFromIntercept,
 } from '../recovery';
+import { COOPER_JACOB_FACTOR } from '../cooperJacob';
 
 describe('toRecoveryPoints', () => {
   test('считает x = lg(t/t′)', () => {
@@ -107,6 +110,90 @@ describe('processRecovery', () => {
     });
     expect(result.T).toBeNaN();
     expect(result.warnings).toContain('needMoreMeasurements');
+  });
+});
+
+describe('пьезопроводность по восстановлению', () => {
+  // Табл. 3.13 АНСДИМАТ: lg a = lg(r²/2.25) + s₀/C − lg t₀, время в сутках
+  const Q = 500;
+  const T = 250;
+  const a = 5000;
+  const r = 12;
+  const pumpingDuration = 720; // 12 ч
+  const C = (COOPER_JACOB_FACTOR * Q) / T;
+
+  /**
+   * Понижение на конец откачки по Куперу — Джейкобу
+   *
+   * s₀ = C·lg(2.25·a·t₀/r²), время в сутках: именно эта точка замыкает
+   * уравнение для пьезопроводности
+   */
+  const finalDrawdown =
+    C * Math.log10((2.25 * a * (pumpingDuration / 1440)) / (r * r));
+
+  /** Замеры остаточного понижения точно по прямой Тейса */
+  const measurements = [780, 840, 960, 1200, 1800, 3000].map((t) => ({
+    t,
+    s: C * Math.log10(t / (t - pumpingDuration)),
+  }));
+
+  test('возвращает заданную пьезопроводность', () => {
+    const value = diffusivityFromRecovery({
+      slope: C,
+      finalDrawdown,
+      pumpingDuration,
+      r,
+    });
+    expect(value / a).toBeCloseTo(1, 6);
+  });
+
+  test('обработка отдаёт a и водоотдачу S = T/a', () => {
+    const result = processRecovery({
+      measurements,
+      Q,
+      pumpingDuration,
+      r,
+      finalDrawdown,
+    });
+    expect(result.a / a).toBeCloseTo(1, 4);
+    expect(result.S / (T / a)).toBeCloseTo(1, 4);
+  });
+
+  test('без расстояния и без понижения на остановке остаётся прочерк', () => {
+    const noRadius = processRecovery({ measurements, Q, pumpingDuration, finalDrawdown });
+    const noDrawdown = processRecovery({ measurements, Q, pumpingDuration, r });
+    expect(noRadius.a).toBeNaN();
+    expect(noRadius.S).toBeNaN();
+    expect(noDrawdown.a).toBeNaN();
+  });
+
+  test('минуты журнала переводятся в сутки формулы', () => {
+    // Без поправки lg 1440 пьезопроводность вышла бы ровно в 1440 раз меньше
+    const value = diffusivityFromRecovery({
+      slope: C,
+      finalDrawdown,
+      pumpingDuration,
+      r,
+    });
+    const naive = Math.pow(
+      10,
+      Math.log10((r * r) / 2.25) + finalDrawdown / C - Math.log10(pumpingDuration)
+    );
+    expect(value / naive).toBeCloseTo(1440, 3);
+  });
+});
+
+describe('storageRatioFromIntercept', () => {
+  test('прямая из начала координат даёт S/S′ = 1', () => {
+    expect(storageRatioFromIntercept(0.5, 0)).toBeCloseTo(1, 12);
+  });
+
+  test('отсечка в один наклон даёт десятикратное расхождение', () => {
+    expect(storageRatioFromIntercept(0.5, 0.5)).toBeCloseTo(10, 9);
+  });
+
+  test('без наклона отношения нет', () => {
+    expect(storageRatioFromIntercept(0, 0.5)).toBeNaN();
   });
 });
 

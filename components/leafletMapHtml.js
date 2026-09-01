@@ -50,6 +50,11 @@ export function buildMapHtml({ center = DEFAULT_CENTER } = {}) {
     box-shadow: 0 2px 6px rgba(20,7,14,.45);
   }
   .leaflet-control-attribution { font-size: 9px; }
+  /* Leaflet 1.9 подмешивает в подпись карты флаг Украины. Подпись
+     остаётся (её требует лицензия OSM), эмблема — нет: приложение
+     нейтрально. Флаг убран и из разметки, и стилем — на случай, если
+     CDN отдаст сборку с другой подписью */
+  .leaflet-attribution-flag { display: none !important; }
   /* Подпись скважины: читается на карте без нажатия и не ловит касания,
      иначе она перехватывала бы перетаскивание маркера */
   .ans-label {
@@ -69,6 +74,11 @@ export function buildMapHtml({ center = DEFAULT_CENTER } = {}) {
   (function () {
     var map = L.map('map', { zoomControl: false, attributionControl: true })
       .setView([${center.lat}, ${center.lon}], ${center.zoom});
+
+    // Подпись без флага: ссылка на Leaflet сохраняется, картинка выкидывается
+    map.attributionControl.setPrefix(
+      '<a href="https://leafletjs.com" title="A JavaScript library for interactive maps">Leaflet</a>'
+    );
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,

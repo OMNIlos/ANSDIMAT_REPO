@@ -14,18 +14,30 @@
  * разумны, а форму даёт производная. Сравнивать их между собой не нужно —
  * важно, что они на одной оси времени.
  *
- * График неподвижен, в отличие от основного. Здесь не подбирают прямую
- * пальцем — здесь смотрят на форму, и лишний жест только мешал бы читать.
+ * Плоскость живая, как и у основного графика: полку производной ищут на
+ * позднем участке, а он на общем масштабе сжат в несколько точек у правого
+ * края. Прямую здесь по-прежнему не ведут — только смотрят, — поэтому от
+ * основного графика взяты жесты и масштаб, но не подбор наклона.
  */
 
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Path, Line, Circle, G, Rect, Defs, ClipPath } from 'react-native-svg';
+import { GestureDetector } from 'react-native-gesture-handler';
 import { useTheme } from 'react-native-paper';
 import I18n from '../Localization';
+import useChartViewport from './chart/useChartViewport';
+import ChartToolbar from './chart/ChartToolbar';
 import { spacing, radius, type } from '../theme';
 
 const HEIGHT = 250;
+// Те же пределы, что у основного графика: плоскости одинаковые, и разные
+// пределы читались бы как поломка одной из них
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 50;
+
+/** Отметок замеров у диагностики нет: общая ссылка вместо нового массива */
+const EMPTY_POINTS = [];
 // Снизу два ряда подписей: деления и название осей
 const PADDING = { left: 48, right: 16, top: 16, bottom: 46 };
 
@@ -68,7 +80,12 @@ function logTicks(lgFrom, lgTo) {
   return values.slice(0, 8);
 }
 
-export default function DiagnosticPlot({ result, width = 340 }) {
+export default function DiagnosticPlot({
+  result,
+  width = 340,
+  viewportStore,
+  scrollRef,
+}) {
   const theme = useTheme();
   const c = theme.colors;
 
@@ -82,19 +99,46 @@ export default function DiagnosticPlot({ result, width = 340 }) {
     [width]
   );
 
-  const scene = useMemo(() => {
-    const points = (result?.derivative ?? []).filter((p) => p.t > 0 && p.d > 0 && p.s > 0);
-    if (points.length < 2) return { hasData: false };
+  const points = useMemo(
+    () => (result?.derivative ?? []).filter((p) => p.t > 0 && p.d > 0 && p.s > 0),
+    [result]
+  );
 
-    // Обе величины на одной оси Y: масштаб общий, поэтому расстояние между
-    // кривыми на графике означает ровно то, что оно означает в расчёте
+  // Обе величины на одной оси Y: масштаб общий, поэтому расстояние между
+  // кривыми на графике означает ровно то, что оно означает в расчёте
+  const base = useMemo(() => {
+    if (points.length < 2) return { x0: 0, x1: 1, y0: 0, y1: 1 };
     const values = points.flatMap((p) => [p.d, p.s]);
     const lgT = points.map((p) => Math.log10(p.t));
+    return {
+      x0: Math.min(...lgT) - 0.15,
+      x1: Math.max(...lgT) + 0.15,
+      y0: Math.log10(Math.min(...values)) - 0.2,
+      y1: Math.log10(Math.max(...values)) + 0.2,
+    };
+  }, [points]);
 
-    const x0 = Math.min(...lgT) - 0.15;
-    const x1 = Math.max(...lgT) + 0.15;
-    const y0 = Math.log10(Math.min(...values)) - 0.2;
-    const y1 = Math.log10(Math.max(...values)) + 0.2;
+  // Ключ системы координат: у диагностики она одна, но хранилище областей
+  // общее с основным графиком, и без своего ключа они делили бы одно окно
+  const { view, gesture, zoomBy, reset } = useChartViewport({
+    base,
+    plot,
+    viewKey: 'diagnostic',
+    viewportStore,
+    scrollRef,
+    freedom: false,
+    fitPoints: EMPTY_POINTS,
+    anchors: null,
+    onAnchorsChange: undefined,
+    onSelectPoint: undefined,
+    minZoom: MIN_ZOOM,
+    maxZoom: MAX_ZOOM,
+  });
+
+  const scene = useMemo(() => {
+    if (points.length < 2) return { hasData: false };
+
+    const { x0, x1, y0, y1 } = view;
 
     const toX = (lg) => plot.x + ((lg - x0) / (x1 - x0)) * plot.w;
     const toY = (lg) => plot.y + plot.h - ((lg - y0) / (y1 - y0)) * plot.h;
@@ -129,7 +173,7 @@ export default function DiagnosticPlot({ result, width = 340 }) {
       plateauY,
       earlyX,
     };
-  }, [result, plot]);
+  }, [points, result, plot, view]);
 
   if (!scene.hasData) {
     return (
@@ -156,7 +200,20 @@ export default function DiagnosticPlot({ result, width = 340 }) {
 
   return (
     <View>
-      <View style={[styles.canvas, { backgroundColor: c.plotBg, borderColor: c.border, width }]}>
+      <ChartToolbar
+        caption={I18n.t('diagnosticCaption', { defaultValue: 's и ds/dlnt — lg t' })}
+        onZoomIn={() => zoomBy(1.6)}
+        onZoomOut={() => zoomBy(1 / 1.6)}
+        onReset={reset}
+        colors={c}
+      />
+      <GestureDetector gesture={gesture}>
+        <View
+          style={[
+            styles.canvas,
+            { backgroundColor: c.plotBg, borderColor: c.border, width },
+          ]}
+        >
         <Svg width={width} height={HEIGHT}>
           <Defs>
             <ClipPath id="diagClip">
@@ -254,7 +311,8 @@ export default function DiagnosticPlot({ result, width = 340 }) {
         <Text style={[styles.axisName, { color: c.faint }]}>
           {I18n.t('diagnosticAxes', { defaultValue: 't, мин · по вертикали — метры' })}
         </Text>
-      </View>
+        </View>
+      </GestureDetector>
 
       <View style={styles.legend}>
         <View style={styles.legendItem}>

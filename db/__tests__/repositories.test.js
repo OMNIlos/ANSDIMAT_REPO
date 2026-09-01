@@ -84,7 +84,13 @@ import {
 } from '../projects';
 import { listPoints, createPoint, updatePoint, deletePoint, getPointStats } from '../points';
 import { getSettings, setSetting, updateSettings, resetSettings } from '../settings';
-import { OFR_TYPES, POINT_TYPES, DEFAULT_SETTINGS } from '../schema';
+import {
+  OFR_TYPES,
+  POINT_TYPES,
+  DEFAULT_SETTINGS,
+  WELL_ROLES,
+  DEFAULT_CLUSTER_DISTANCES,
+} from '../schema';
 
 // На Node без встроенного SQLite набор пропускается целиком
 const describeDb = hasNodeSqlite ? describe : describe.skip;
@@ -113,6 +119,33 @@ describeDb('проекты', () => {
     expect(loaded.measurements).toEqual([]);
   });
 
+  test('куст заводится с типовыми расстояниями, а не с нулями', async () => {
+    const created = await createProject({
+      name: 'Куст. 12',
+      ofrType: OFR_TYPES.CLUSTER,
+      pumpingWellName: '1оп',
+      observationWellName: '1н',
+    });
+
+    const loaded = await getProject(created.id);
+    const pumping = loaded.wells.find((well) => well.role === WELL_ROLES.PUMPING);
+    const observation = loaded.wells.find(
+      (well) => well.role === WELL_ROLES.OBSERVATION
+    );
+
+    // «Опытная — опытная» держит радиус опытной, «наблюдательная — опытная»
+    // отход первого ряда
+    expect(pumping.distance).toBeCloseTo(DEFAULT_CLUSTER_DISTANCES.PUMPING_RADIUS, 6);
+    expect(observation.distance).toBeCloseTo(DEFAULT_CLUSTER_DISTANCES.OBSERVATION, 6);
+
+    // То же самое возвращает и сам createProject: экран обработки открывается
+    // сразу после него и читает скважины из ответа
+    expect(created.wells.map((well) => well.distance)).toEqual([
+      DEFAULT_CLUSTER_DISTANCES.PUMPING_RADIUS,
+      DEFAULT_CLUSTER_DISTANCES.OBSERVATION,
+    ]);
+  });
+
   test('обновляются отдельные поля, остальные не затрагиваются', async () => {
     const project = await createProject({ name: 'Куст. 38', ofrType: OFR_TYPES.CLUSTER, Q: 50 });
 
@@ -125,7 +158,7 @@ describeDb('проекты', () => {
   });
 
   test('сохраняется результат расчёта', async () => {
-    const project = await createProject({ name: 'Налив. 3г', ofrType: OFR_TYPES.FILL });
+    const project = await createProject({ name: 'Экспресс. 3г', ofrType: OFR_TYPES.SLUG });
 
     await updateProject(project.id, {
       results: { T: 123.45, slope: 0.183, method: 'cooper-jacob' },

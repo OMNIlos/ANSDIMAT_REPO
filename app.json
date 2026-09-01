@@ -11,7 +11,27 @@
       "bundleIdentifier": "com.omnion.Ansdimat",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app uses location to show your position on the map and add field diary points.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses location to show your position on the map and add field diary points."
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses location to show your position on the map and add field diary points.",
+        "UTExportedTypeDeclarations": [
+          {
+            "UTTypeIdentifier": "com.omnion.ansdimat.project",
+            "UTTypeDescription": "ANSDIMAT Project",
+            "UTTypeConformsTo": ["public.data", "public.json"],
+            "UTTypeTagSpecification": {
+              "public.filename-extension": ["ansdimat"],
+              "public.mime-type": ["application/vnd.ansdimat.project+json"]
+            }
+          }
+        ],
+        "CFBundleDocumentTypes": [
+          {
+            "CFBundleTypeName": "ANSDIMAT Project",
+            "CFBundleTypeRole": "Editor",
+            "LSHandlerRank": "Owner",
+            "LSItemContentTypes": ["com.omnion.ansdimat.project"]
+          }
+        ],
+        "LSSupportsOpeningDocumentsInPlace": false
       }
     },
     "android": {
@@ -29,6 +49,22 @@
         "android.permission.ACCESS_MEDIA_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "category": ["DEFAULT", "BROWSABLE"],
+          "data": [
+            { "scheme": "file", "host": "*", "mimeType": "*/*", "pathPattern": ".*\\\\.ansdimat" },
+            { "scheme": "file", "host": "*", "mimeType": "*/*", "pathPattern": ".*\\\\..*\\\\.ansdimat" },
+            { "scheme": "file", "host": "*", "mimeType": "*/*", "pathPattern": ".*\\\\..*\\\\..*\\\\.ansdimat" },
+            { "scheme": "file", "host": "*", "mimeType": "*/*", "pathPattern": ".*\\\\..*\\\\..*\\\\..*\\\\.ansdimat" },
+            { "scheme": "content", "host": "*", "mimeType": "*/*", "pathPattern": ".*\\\\.ansdimat" },
+            { "scheme": "content", "host": "*", "mimeType": "*/*", "pathPattern": ".*\\\\..*\\\\.ansdimat" },
+            { "scheme": "content", "host": "*", "mimeType": "*/*", "pathPattern": ".*\\\\..*\\\\..*\\\\.ansdimat" },
+            { "scheme": "content", "host": "*", "mimeType": "*/*", "pathPattern": ".*\\\\..*\\\\..*\\\\..*\\\\.ansdimat" }
+          ]
+        }
       ]
     },
     "web": {

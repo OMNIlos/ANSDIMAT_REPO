@@ -25,10 +25,12 @@ import { UnitsProvider } from './UnitsContext.js';
 import { AuthProvider } from './AuthContext.js';
 import { SyncProvider } from './sync/SyncContext.js';
 import { EntitlementsProvider } from './billing/EntitlementsContext.js';
+import { ImportProvider } from './share/ImportContext.js';
 import RootNavigator from './navigation/RootNavigator.js';
 import SplashScreen from './components/SplashScreen.js';
 import * as NativeSplash from 'expo-splash-screen';
 import BottomMenuBar from './components/BottomMenuBar.js';
+import ImportProjectDialog from './components/ImportProjectDialog.js';
 import { navigationRef } from './navigation/navigationRef.js';
 import {
   useFonts,
@@ -105,6 +107,11 @@ export default function App() {
           <AuthProvider>
           <SyncProvider>
           <EntitlementsProvider>
+          {/* Провайдер импорта поднят выше заставки намеренно: файл
+              «.ansdimat» может открыть само приложение, и ссылку на него
+              надо поймать сразу при запуске, а не после того, как заставка
+              уступит место навигатору */}
+          <ImportProvider>
           <NavigationContainer ref={navigationRef} onStateChange={handleStateChange}>
             {isLoading || (!fontsLoaded && !fontError) ? (
               <SplashScreen onFinish={handleSplashFinish} />
@@ -112,9 +119,12 @@ export default function App() {
               <View style={styles.root}>
                 <RootNavigator />
                 <BottomMenuBar active={activeMenuKey} />
+                {/* Поверх навигатора: журнал может приехать на любом экране */}
+                <ImportProjectDialog />
               </View>
             )}
           </NavigationContainer>
+          </ImportProvider>
           </EntitlementsProvider>
           </SyncProvider>
           </AuthProvider>

@@ -31,6 +31,21 @@ const MIN_PER_DAY = 1440;
 const SQM_PER_HA = 10000;
 /** Квадратных метров в квадратном километре */
 const SQM_PER_KM2 = 1e6;
+/** Литров в кубометре */
+const L_PER_M3 = 1000;
+/** Кубических футов в кубометре */
+const CUFT_PER_CUM = FT_PER_M * FT_PER_M * FT_PER_M;
+/**
+ * Паскалей в метре водяного столба
+ *
+ * Ровно ρg при ρ = 1000 кг/м³ и g = 9.80665 м/с² — то же произведение, что
+ * стоит в формуле Мойе. Манометр на нагнетании гидрогеолог читает то в
+ * атмосферах, то в метрах столба, и без этой пары единиц поинтервальное
+ * нагнетание пришлось бы пересчитывать на бумаге.
+ */
+const PA_PER_M_H2O = 9806.65;
+/** Паскалей в технической атмосфере (кгс/см²) */
+const PA_PER_AT = 98066.5;
 
 /**
  * Минут в сутках — наружу
@@ -51,6 +66,8 @@ export const QUANTITIES = {
   DIFFUSIVITY: 'diffusivity',
   DRAWDOWN: 'drawdown',
   AREA: 'area',
+  VOLUME: 'volume',
+  PRESSURE: 'pressure',
 };
 
 /**
@@ -146,7 +163,68 @@ export const UNITS = {
       { key: 'ft2', labelKey: 'unitFt2', factor: SQFT_PER_SQM },
     ],
   },
+  // Объём спрашивают на наливе в шурф: расход там получается делением
+  // налитого объёма на интервал времени. Литры стоят первыми не случайно —
+  // мерную ёмкость в шурф доливают литрами, кубометр на опыте не наберётся
+  [QUANTITIES.VOLUME]: {
+    labelKey: 'quantityVolume',
+    base: 'm3',
+    default: 'l',
+    options: [
+      { key: 'l', labelKey: 'unitLiters', factor: L_PER_M3 },
+      { key: 'm3', labelKey: 'unitM3', factor: 1 },
+      { key: 'ft3', labelKey: 'unitFt3', factor: CUFT_PER_CUM },
+      { key: 'gal', labelKey: 'unitGallons', factor: GAL_PER_M3 },
+    ],
+  },
+  // Давление нужно поинтервальному нагнетанию: ступень задаётся напором над
+  // статическим уровнем. Базовая единица — паскаль, в нём написана формула
+  // Мойе и параметр Люжона (P₀ = 1 МПа)
+  [QUANTITIES.PRESSURE]: {
+    labelKey: 'quantityPressure',
+    base: 'pa',
+    default: 'bar',
+    options: [
+      { key: 'pa', labelKey: 'unitPascal', factor: 1 },
+      { key: 'kpa', labelKey: 'unitKiloPascal', factor: 1e-3 },
+      { key: 'mpa', labelKey: 'unitMegaPascal', factor: 1e-6 },
+      { key: 'bar', labelKey: 'unitBar', factor: 1e-5 },
+      { key: 'at', labelKey: 'unitAtmosphere', factor: 1 / PA_PER_AT },
+      { key: 'm_h2o', labelKey: 'unitMeterH2O', factor: 1 / PA_PER_M_H2O },
+    ],
+  },
 };
+
+/**
+ * Базовые размерности: те, в которых идут расчёты и хранение
+ *
+ * Совпадают с `default` у всех величин, но по смыслу это разные вещи, и
+ * путать их нельзя. `default` — что показать новому пользователю, его можно
+ * поменять хоть завтра. `base` — в чём лежат числа в базе и в файле обмена;
+ * смена этой единицы означала бы пересчёт всех сохранённых журналов.
+ *
+ * Нужны обмену проектами: файл `.ansdimat` объявляет, в каких единицах в нём
+ * лежат числа, и получатель приводит их к своим базовым, каким бы ни был
+ * список размерностей у отправителя.
+ */
+export const BASE_UNITS = Object.fromEntries(
+  Object.entries(UNITS).map(([quantity, spec]) => [quantity, spec.base])
+);
+
+/**
+ * Проверяет, что такая размерность у величины существует
+ *
+ * Отличается от `resolveUnit` тем, что не подставляет запасной вариант:
+ * при разборе чужого файла неизвестная размерность означает, что масштаб
+ * чисел неизвестен, и молча счесть их метрами нельзя.
+ *
+ * @param {string} quantity - величина, см. QUANTITIES
+ * @param {string} unitKey - ключ размерности
+ * @returns {boolean} известна ли размерность
+ */
+export function isKnownUnit(quantity, unitKey) {
+  return Boolean(UNITS[quantity]?.options.some((option) => option.key === unitKey));
+}
 
 /** Размерности по умолчанию: то, что стоит в приложении до правки настроек */
 export const DEFAULT_UNITS = Object.fromEntries(

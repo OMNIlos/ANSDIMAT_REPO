@@ -37,6 +37,9 @@ export const SYNC_TABLES = [
       q: row.q,
       pumping_duration: row.pumping_duration,
       final_drawdown: row.final_drawdown,
+      // Исходные данные видов ОФР со своей схемой — строка JSON, см.
+      // db/params.js. У откачек тут null
+      params: row.params ?? null,
       starred: row.starred === 1,
       result_t: row.result_t,
       result_slope: row.result_slope,
@@ -53,6 +56,7 @@ export const SYNC_TABLES = [
       pumping_duration: row.pumping_duration,
       // Журналы, уехавшие до появления колонки, приходят без неё
       final_drawdown: row.final_drawdown ?? 0,
+      params: row.params ?? null,
       starred: row.starred ? 1 : 0,
       result_t: row.result_t,
       result_slope: row.result_slope,
@@ -62,8 +66,8 @@ export const SYNC_TABLES = [
       deleted_at: toMs(row.deleted_at),
     }),
     columns: [
-      'id', 'name', 'ofr_type', 'q', 'pumping_duration', 'final_drawdown', 'starred',
-      'result_t', 'result_slope', 'result_method',
+      'id', 'name', 'ofr_type', 'q', 'pumping_duration', 'final_drawdown', 'params',
+      'starred', 'result_t', 'result_slope', 'result_method',
       'created_at', 'updated_at', 'deleted_at',
     ],
   },

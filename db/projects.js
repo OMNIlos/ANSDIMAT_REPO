@@ -7,7 +7,13 @@
  */
 
 import { getDatabase, createId } from './index';
-import { OFR_TYPES, MEASUREMENT_PHASES, WELL_ROLES } from './schema';
+import {
+  OFR_TYPES,
+  MEASUREMENT_PHASES,
+  WELL_ROLES,
+  DEFAULT_CLUSTER_DISTANCES,
+} from './schema';
+import { defaultParams, parseParams, serializeParams } from './params';
 
 /**
  * Преобразует строку таблицы в объект проекта
@@ -27,11 +33,18 @@ function mapProject(row) {
     // восстановление уровня
     finalDrawdown: row.final_drawdown ?? 0,
     starred: row.starred === 1,
+    // Идентификатор журнала у отправителя, если журнал импортирован из
+    // файла `.ansdimat`. По нему узнаётся повторный импорт того же файла
+    sourceId: row.source_id ?? null,
     results: {
       T: row.result_t ?? null,
       slope: row.result_slope ?? null,
       method: row.result_method ?? null,
     },
+    // Исходные данные видов ОФР со своей схемой — экспресс-опробования,
+    // поинтервального нагнетания, налива в шурф. У откачек их нет, см.
+    // db/params.js
+    params: parseParams(row.ofr_type, row.params ?? null),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     // Есть только в списке: getProject отдаёт сами замеры, и считать их там
@@ -151,12 +164,19 @@ export async function getProject(id) {
  * не за чем, — поэтому обе создаются здесь, а не по первому нажатию
  * «добавить» на экране обработки.
  *
+ * Расстояния у обеих сразу типовые, см. DEFAULT_CLUSTER_DISTANCES: у
+ * опытной её радиус, у наблюдательной отход от опытной. Ноль в этой
+ * колонке значит «не задано» и гасит расчёт, а куст без единого
+ * расстояния считать нечем — поэтому таблица открывается заполненной.
+ *
  * @param {Object} params
  * @param {string} params.name - название
  * @param {string} [params.ofrType] - тип ОФР
  * @param {number} [params.Q] - дебит, м³/сут
  * @param {string} [params.pumpingWellName] - название опытной скважины
  * @param {string} [params.observationWellName] - название наблюдательной
+ * @param {Object} [params.params] - исходные данные видов ОФР со своей
+ *   схемой; по умолчанию типовые, см. db/params.js
  * @returns {Promise<Object>} созданный проект вместе со скважинами
  */
 export async function createProject({
@@ -165,32 +185,48 @@ export async function createProject({
   Q = 0,
   pumpingWellName,
   observationWellName,
+  params,
 }) {
   const database = await getDatabase();
   const id = createId();
   const now = Date.now();
 
+  // Виды ОФР со своей схемой заводятся с типовой геометрией, а не с нулями:
+  // ноль в радиусе фильтра гасит расчёт, и журнал открывался бы пустым
+  // экраном без единого числа, см. db/params.js
+  const initialParams = params ?? defaultParams(ofrType);
+
   const wells =
     ofrType === OFR_TYPES.CLUSTER
       ? [
-          { id: createId(), name: pumpingWellName || '1w', role: WELL_ROLES.PUMPING },
-          { id: createId(), name: observationWellName || '1p', role: WELL_ROLES.OBSERVATION },
+          {
+            id: createId(),
+            name: pumpingWellName || '1w',
+            role: WELL_ROLES.PUMPING,
+            distance: DEFAULT_CLUSTER_DISTANCES.PUMPING_RADIUS,
+          },
+          {
+            id: createId(),
+            name: observationWellName || '1p',
+            role: WELL_ROLES.OBSERVATION,
+            distance: DEFAULT_CLUSTER_DISTANCES.OBSERVATION,
+          },
         ]
       : [];
 
   await database.withTransactionAsync(async () => {
     await database.runAsync(
-      `INSERT INTO projects (id, name, ofr_type, q, starred, created_at, updated_at, dirty)
-       VALUES (?, ?, ?, ?, 0, ?, ?, 1)`,
-      [id, name, ofrType, Q, now, now]
+      `INSERT INTO projects (id, name, ofr_type, q, params, starred, created_at, updated_at, dirty)
+       VALUES (?, ?, ?, ?, ?, 0, ?, ?, 1)`,
+      [id, name, ofrType, Q, serializeParams(ofrType, initialParams), now, now]
     );
 
     for (let index = 0; index < wells.length; index++) {
       const well = wells[index];
       await database.runAsync(
         `INSERT INTO wells (id, project_id, name, role, distance, sort_order, updated_at, dirty)
-         VALUES (?, ?, ?, ?, 0, ?, ?, 1)`,
-        [well.id, id, well.name, well.role, index, now]
+         VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+        [well.id, id, well.name, well.role, well.distance, index, now]
       );
     }
   });
@@ -201,6 +237,7 @@ export async function createProject({
     ofrType,
     Q,
     starred: false,
+    params: initialParams,
     wells: wells.map((well, index) => ({ ...well, projectId: id, order: index })),
     results: { T: null, slope: null, method: null },
     createdAt: now,
@@ -212,7 +249,8 @@ export async function createProject({
  * Обновляет поля проекта
  *
  * @param {string} id - идентификатор
- * @param {Object} patch - изменяемые поля: name, ofrType, Q, starred, results
+ * @param {Object} patch - изменяемые поля: name, ofrType, Q, starred, results,
+ *   params (вместе с ofrType — по нему разбирается набор величин)
  * @returns {Promise<void>}
  */
 export async function updateProject(id, patch) {
@@ -240,6 +278,24 @@ export async function updateProject(id, patch) {
   if (patch.finalDrawdown !== undefined) {
     columns.push('final_drawdown = ?');
     values.push(patch.finalDrawdown);
+  }
+  // Исходные данные пишутся целиком: набор величин у вида ОФР один, и
+  // править его по одному полю значило бы читать журнал перед каждой
+  // правкой поля ввода.
+  //
+  // Вид ОФР нужен, чтобы выбрать схему разбора. Экран его не передаёт —
+  // журнал уже заведён, и тип у него свой, — поэтому берётся из базы
+  if (patch.params !== undefined) {
+    let ofrType = patch.ofrType;
+    if (ofrType === undefined) {
+      const row = await database.getFirstAsync(
+        'SELECT ofr_type FROM projects WHERE id = ?',
+        [id]
+      );
+      ofrType = row?.ofr_type;
+    }
+    columns.push('params = ?');
+    values.push(serializeParams(ofrType, patch.params));
   }
   if (patch.starred !== undefined) {
     columns.push('starred = ?');
@@ -421,4 +477,175 @@ export async function deleteMeasurement(id) {
     'UPDATE measurements SET deleted_at = ?, updated_at = ?, dirty = 1 WHERE id = ?',
     [now, now, id]
   );
+}
+
+/**
+ * Ищет журнал, уже заведённый из этого же файла
+ *
+ * Совпадение проверяется по двум признакам сразу. `source_id` ловит повторный
+ * импорт того же файла. Сравнение с `id` — случай, когда у отправителя и
+ * получателя один аккаунт: журнал уже приехал синхронизацией, и его
+ * идентификатор равен тому, что записан в файле.
+ *
+ * @param {string} sourceId - идентификатор проекта у отправителя
+ * @returns {Promise<Object|null>} найденный проект или null
+ */
+export async function findProjectBySourceId(sourceId) {
+  if (!sourceId) return null;
+
+  const database = await getDatabase();
+  const row = await database.getFirstAsync(
+    `SELECT * FROM projects
+      WHERE deleted_at IS NULL AND (id = ? OR source_id = ?)
+      ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END
+      LIMIT 1`,
+    [sourceId, sourceId, sourceId]
+  );
+
+  return row ? mapProject(row) : null;
+}
+
+/**
+ * Разворачивает содержимое файла `.ansdimat` в журнал
+ *
+ * Идентификаторы всегда выдаются новые, даже в режиме замены для скважин и
+ * замеров: связь «замер — скважина» внутри файла держится на `wellSourceId`,
+ * и перекладывать её на выданные ключи проще, чем пытаться сохранить чужие.
+ * Чужой ключ здесь и опасен: у двух устройств одного аккаунта он бы совпал
+ * с существующей строкой и импорт затёр бы её.
+ *
+ * Всё помечается `dirty = 1` — импортированный журнал уезжает на сервер как
+ * собственный.
+ *
+ * @param {Object} payload - проверенное содержимое файла
+ * @param {Object} [options]
+ * @param {'copy'|'replace'} [options.mode] - создать копию или заменить журнал
+ * @param {string} [options.replaceId] - какой журнал заменить
+ * @param {string} [options.name] - название взамен указанного в файле
+ * @returns {Promise<{id: string, mode: string}>} идентификатор журнала
+ */
+export async function importProject(payload, options = {}) {
+  const database = await getDatabase();
+  const mode = options.mode === 'replace' ? 'replace' : 'copy';
+  const now = Date.now();
+
+  if (mode === 'replace' && !options.replaceId) {
+    throw new Error('importProject: replace mode requires replaceId');
+  }
+
+  // В режиме замены идентификатор журнала сохраняется: синхронизация должна
+  // увидеть правку существующей записи, а не новую запись рядом с ней
+  const projectId = mode === 'replace' ? options.replaceId : createId();
+  const name = options.name ?? payload.name;
+
+  // Ключ — идентификатор скважины в файле, значение — выданный здесь
+  const wellIds = new Map();
+  for (const well of payload.wells) {
+    wellIds.set(well.sourceId, createId());
+  }
+
+  await database.withTransactionAsync(async () => {
+    if (mode === 'replace') {
+      // Прежнее содержимое сносим мягко: физически стёртую строку второе
+      // устройство не увидит и при синхронизации зальёт обратно
+      await database.runAsync(
+        `UPDATE measurements SET deleted_at = ?, updated_at = ?, dirty = 1
+          WHERE project_id = ? AND deleted_at IS NULL`,
+        [now, now, projectId]
+      );
+      await database.runAsync(
+        `UPDATE wells SET deleted_at = ?, updated_at = ?, dirty = 1
+          WHERE project_id = ? AND deleted_at IS NULL`,
+        [now, now, projectId]
+      );
+      await database.runAsync(
+        `UPDATE projects
+            SET name = ?, ofr_type = ?, q = ?, pumping_duration = ?, final_drawdown = ?,
+                params = ?, result_t = ?, result_slope = ?, result_method = ?,
+                source_id = ?, updated_at = ?, deleted_at = NULL, dirty = 1
+          WHERE id = ?`,
+          [
+            name,
+            payload.ofrType,
+            payload.Q,
+            payload.pumpingDuration,
+            payload.finalDrawdown,
+            serializeParams(payload.ofrType, payload.params ?? null),
+            payload.results?.T ?? null,
+            payload.results?.slope ?? null,
+            payload.results?.method ?? null,
+            payload.sourceId ?? null,
+            now,
+            projectId,
+          ]
+      );
+    } else {
+      // `starred` не переносится: избранное — пометка получателя, а не
+      // свойство журнала. `created_at` берётся из файла, чтобы журнал
+      // сохранил дату опыта, а не дату пересылки
+      await database.runAsync(
+        `INSERT INTO projects
+           (id, name, ofr_type, q, pumping_duration, final_drawdown, params, starred,
+            result_t, result_slope, result_method, source_id,
+            created_at, updated_at, dirty)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, 1)`,
+        [
+          projectId,
+          name,
+          payload.ofrType,
+          payload.Q,
+          payload.pumpingDuration,
+          payload.finalDrawdown,
+          serializeParams(payload.ofrType, payload.params ?? null),
+          payload.results?.T ?? null,
+          payload.results?.slope ?? null,
+          payload.results?.method ?? null,
+          payload.sourceId ?? null,
+          payload.createdAt,
+          now,
+        ]
+      );
+    }
+
+    for (const well of payload.wells) {
+      await database.runAsync(
+        `INSERT INTO wells
+           (id, project_id, name, role, distance, final_drawdown, lat, lon,
+            sort_order, updated_at, dirty)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+        [
+          wellIds.get(well.sourceId),
+          projectId,
+          well.name,
+          well.role,
+          well.distance,
+          well.finalDrawdown,
+          well.lat,
+          well.lon,
+          well.order,
+          now,
+        ]
+      );
+    }
+
+    for (const measurement of payload.measurements) {
+      await database.runAsync(
+        `INSERT INTO measurements
+           (id, project_id, well_id, t, s, phase, sort_order, updated_at, dirty)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+        [
+          createId(),
+          projectId,
+          measurement.wellSourceId ? wellIds.get(measurement.wellSourceId) : null,
+          measurement.t,
+          measurement.s,
+          measurement.phase,
+          measurement.order,
+          now,
+        ]
+      );
+    }
+  });
+
+  return { id: projectId, mode };
 }

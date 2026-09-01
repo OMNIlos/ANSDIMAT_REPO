@@ -195,6 +195,27 @@ test('кривая восстановления опытной скважины 
   expect(new Set(ordinates.map((y) => y.toFixed(1))).size).toBeGreaterThan(1);
 });
 
+/**
+ * Пьезопроводность на прямой восстановления
+ *
+ * Отсечка на этом графике за a не отвечает — прямая обязана выходить из
+ * начала координат, — и в карточке годами стоял прочерк. Считается она по
+ * понижению на момент остановки насоса: табл. 3.13 АНСДИМАТ, примечание (3).
+ */
+test('на прямой восстановления пьезопроводность считается', async () => {
+  const tree = await mount();
+  await press(tree, 'Восстановление');
+  await press(tree, '1w', 'radio');
+
+  const card = tree.root
+    .findAll((node) => typeof node.props?.label === 'string' &&
+      node.props.label.startsWith('Пьезопр'), { deep: true })
+    .pop();
+  expect(card).toBeDefined();
+  expect(card.props.value).not.toBe('—');
+  expect(Number(card.props.value)).toBeGreaterThan(0);
+});
+
 test('переход на восстановление уводит с видов по расстоянию', async () => {
   // Комбинированный график читает журнал откачки: остаточное понижение по
   // Джейкобу от расстояния не зависит вовсе, и строить его по кусту нечего.
@@ -210,9 +231,8 @@ test('переход на восстановление уводит с видо�
   const after = dotsOf(tree).map((dot) => dot.props.cy);
   expect(after).not.toEqual(combined);
 
-  // Прямая по откачке возвращает выбор оси — и вида по расстоянию среди них
-  // быть не должно: фаза важнее запомненного вида графика
-  await press(tree, 'Прямая по откачке');
+  // Виды по расстоянию на восстановлении не предлагаются вовсе: остаточное
+  // понижение от r не зависит, строить по кусту нечего
   const modes = tree.root
     .findAll(
       (node) =>
@@ -221,7 +241,6 @@ test('переход на восстановление уводит с видо�
       { deep: true }
     )
     .map(textOf);
-  expect(modes.some((label) => label.includes('lg t'))).toBe(true);
   expect(modes.some((label) => label.includes('lg t/r²'))).toBe(false);
   expect(modes.some((label) => label.includes('lg r'))).toBe(false);
 });
@@ -294,17 +313,6 @@ describe('выбор кривой на графике', () => {
       (node) => node.props.accessibilityState?.selected
     );
     expect(textOf(nowChosen[0])).toContain('1w');
-  });
-
-  test('на восстановлении кривые не выбираются легендой', async () => {
-    // Там вторая кривая — фаза опыта, а не соседняя скважина: её выбирает
-    // переключатель «прямая по откачке / по восстановлению»
-    const tree = await mount();
-    await press(tree, 'Восстановление');
-    // Журнал восстановления заполнен у опытной: без него выбирать нечего
-    await press(tree, '1w', 'radio');
-    await press(tree, 'Прямая по откачке');
-    expect(legendItems(tree)).toHaveLength(0);
   });
 
   test('пустой журнал восстановления объясняется на полотне', async () => {

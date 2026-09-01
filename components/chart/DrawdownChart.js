@@ -171,6 +171,15 @@ export default function DrawdownChart({
    */
   xAxisTitle,
   /**
+   * Подпись величины у оси ординат: «s, м», «lg(s⁰/s)», «Q, л/мин»
+   *
+   * По умолчанию — понижение: на откачке по ординате отложено оно. У видов
+   * ОФР со своей схемой по этой оси лежит другое — безразмерный логарифм
+   * отношения уровней у экспресс-опробования, расход у нагнетания, — и
+   * подпись «s, м» там просто врала бы.
+   */
+  yAxisTitle,
+  /**
    * Почему на полотне пусто
    *
    * Причин у пустого графика несколько, и общая подсказка «внесите замеры»
@@ -604,7 +613,7 @@ export default function DrawdownChart({
       {scene.hasData && (
         <View style={styles.axisRow}>
           <Text style={[styles.axisText, { color: c.textSecondary }]} numberOfLines={1}>
-            {`↑ s, ${drawdownUnit}`}
+            {`↑ ${yAxisTitle ?? `s, ${drawdownUnit}`}`}
           </Text>
           <Text style={[styles.axisText, { color: c.textSecondary }]} numberOfLines={1}>
             {`→ ${

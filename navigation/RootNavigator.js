@@ -16,6 +16,9 @@ import HomeScreen from '../screens/HomeScreen';
 import CalculatorScreen from '../screens/CalculatorScreen';
 import ProjectsScreen from '../screens/PumpingTestProcessing/ProjectsScreen';
 import DataProcessingScreen from '../screens/PumpingTestProcessing/DataProcessingScreen';
+import SlugTestScreen from '../screens/PumpingTestProcessing/SlugTestScreen';
+import LugeonScreen from '../screens/PumpingTestProcessing/LugeonScreen';
+import VadoseFillScreen from '../screens/PumpingTestProcessing/VadoseFillScreen';
 import FieldDiaryScreen from '../screens/FieldDiaryScreen';
 import ExamplesAndVideos from '../screens/ExamplesAndVideos';
 import UserManualScreen from '../screens/UserManualScreen';
@@ -67,6 +70,24 @@ export default function RootNavigator() {
         name="DataProcessing"
         component={DataProcessingScreen}
         options={{ title: I18n.t('dataProcessing', { defaultValue: 'Обработка ОФР' }) }}
+      />
+      {/* Виды ОФР со своей расчётной схемой. Каждому свой экран: у одного
+          график lg(s⁰/s) — t, у другого таблица ступеней давления, у третьего
+          расчёт по одной формуле без журнала — общего интерфейса у них нет */}
+      <Stack.Screen
+        name="SlugTest"
+        component={SlugTestScreen}
+        options={{ title: I18n.t('slugTitle', { defaultValue: 'Экспресс-опробование' }) }}
+      />
+      <Stack.Screen
+        name="LugeonTest"
+        component={LugeonScreen}
+        options={{ title: I18n.t('lugeonTitle', { defaultValue: 'Поинтервальное нагнетание' }) }}
+      />
+      <Stack.Screen
+        name="VadoseFill"
+        component={VadoseFillScreen}
+        options={{ title: I18n.t('vadoseTitle', { defaultValue: 'Налив в шурф' }) }}
       />
       <Stack.Screen
         name="FieldDiary"

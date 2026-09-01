@@ -9,7 +9,7 @@
  * по разрядам, и подмену знака в списке видно сразу.
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -29,7 +29,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FieldMap from '../components/FieldMap';
 import { MENU_BAR_HEIGHT } from '../components/BottomMenuBar';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
-import { listPoints, createPoint, deletePoint, getPointStats } from '../db/points';
+import {
+  listPoints,
+  createPoint,
+  updatePoint,
+  deletePoint,
+  getPointStats,
+} from '../db/points';
 import { POINT_TYPES } from '../db/schema';
 import { spacing, radius, type, elevation, pointTypeColors, numericAt } from '../theme';
 
@@ -64,6 +70,38 @@ function formatTime(timestamp) {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
+/**
+ * Поле описания, растущее под свой текст
+ *
+ * Многострочное поле держит ту высоту, что задана стилем, и описание длиннее
+ * двух строк прокручивается внутри рамки — в списке от него видно начало и
+ * полосу прокрутки. Описание пишут, чтобы его читать, поэтому высота берётся
+ * от содержимого, а заданная в стиле остаётся нижней границей.
+ *
+ * Объявлено на уровне модуля, а не в теле экрана: описанное внутри, оно было
+ * бы новым типом компонента на каждом ре-рендере, и поле теряло бы фокус
+ * после первого же символа.
+ *
+ * @param {Object} props
+ * @param {number} props.minHeight - высота пустого поля
+ */
+function GrowingNoteInput({ minHeight, style, ...rest }) {
+  const [height, setHeight] = useState(0);
+
+  return (
+    <TextInput
+      {...rest}
+      multiline
+      textAlignVertical="top"
+      onContentSizeChange={(event) => {
+        const measured = Math.ceil(event.nativeEvent.contentSize.height);
+        setHeight((prev) => (prev === measured ? prev : measured));
+      }}
+      style={[style, { height: Math.max(minHeight, height) }]}
+    />
+  );
+}
+
 export default function FieldDiaryScreen() {
   const theme = useTheme();
   const { width } = useWindowDimensions();
@@ -77,6 +115,12 @@ export default function FieldDiaryScreen() {
   const [points, setPoints] = useState([]);
   const [stats, setStats] = useState({ total: 0, types: 0, lastRecordedAt: null });
   const [title, setTitle] = useState('');
+  // Описание новой точки. Название её только называет, а чем она отличается от
+  // соседней — глубиной, обсадкой, подходом, запахом воды — держится в
+  // описании, и без него запись в дневнике ничего не сообщает
+  const [note, setNote] = useState('');
+  // Описания уже поставленных точек: правятся прямо в списке, ключ — точка
+  const [noteDrafts, setNoteDrafts] = useState({});
   const [pointType, setPointType] = useState(POINT_TYPES.WELL);
   // Куда центрировать карту — задаётся после определения геопозиции
   const [center, setCenter] = useState(null);
@@ -89,7 +133,13 @@ export default function FieldDiaryScreen() {
   const [mapFullscreen, setMapFullscreen] = useState(false);
 
   const load = useCallback(async () => {
-    setPoints(await listPoints());
+    const loaded = await listPoints();
+    setPoints(loaded);
+    // Поля описаний наполняются тем, что лежит в базе: экран перечитывается
+    // при каждом возврате, и своё написанное геолог должен увидеть на месте
+    setNoteDrafts(
+      Object.fromEntries(loaded.map((point) => [point.id, point.note ?? '']))
+    );
     setStats(await getPointStats());
   }, []);
 
@@ -100,12 +150,75 @@ export default function FieldDiaryScreen() {
   );
 
   /**
+   * Точки, у которых описание в поле разошлось с записанным в базе
+   *
+   * Пишутся только они: иначе каждое открытие дневника метило бы весь список
+   * как правленый и гнало его в синхронизацию.
+   *
+   * @param {Array} list - точки
+   * @param {Object} drafts - описания из полей, ключ — точка
+   * @returns {Array} точки с неcохранённым описанием
+   */
+  const editedNotes = (list, drafts) =>
+    list.filter(
+      (point) =>
+        drafts[point.id] !== undefined && drafts[point.id] !== point.note
+    );
+
+  /**
+   * Автосохранение описаний
+   *
+   * Записью по onBlur описание терялось бы чаще, чем сохранялось: с
+   * клавиатуры в поле уходят кнопкой «назад», а не касанием соседнего поля,
+   * и последнее написанное никуда не попадало. Пауза в наборе — тот же
+   * приём, что в журнале замеров.
+   */
+  useEffect(() => {
+    const changed = editedNotes(points, noteDrafts);
+    if (changed.length === 0) return undefined;
+
+    const timer = setTimeout(() => {
+      for (const point of changed) {
+        updatePoint(point.id, { note: noteDrafts[point.id] }).catch(() => {});
+      }
+      // Записанное считается сохранённым: без этого следующий проход писал бы
+      // те же описания снова
+      setPoints((prev) =>
+        prev.map((point) =>
+          noteDrafts[point.id] !== undefined
+            ? { ...point, note: noteDrafts[point.id] }
+            : point
+        )
+      );
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [points, noteDrafts]);
+
+  // Уход с экрана раньше паузы в наборе снимает отложенную запись вместе с
+  // самим экраном, поэтому недописанное дожимается здесь. Ссылка, а не
+  // зависимость: эффект должен сработать один раз, при размонтировании
+  const pendingNotes = useRef({ points: [], drafts: {} });
+  pendingNotes.current = { points, drafts: noteDrafts };
+
+  useEffect(
+    () => () => {
+      const { points: last, drafts } = pendingNotes.current;
+      for (const point of editedNotes(last, drafts)) {
+        updatePoint(point.id, { note: drafts[point.id] }).catch(() => {});
+      }
+    },
+    []
+  );
+
+  /**
    * Создаёт точку с заданными координатами
    */
   const addPointAt = async (lat, lon) => {
     const name = title.trim() || `${I18n.t(`pointType_${pointType}`, { defaultValue: 'Точка' })} ${points.length + 1}`;
-    await createPoint({ title: name, lat, lon, type: pointType });
+    await createPoint({ title: name, lat, lon, type: pointType, note: note.trim() });
     setTitle('');
+    setNote('');
     await load();
   };
 
@@ -316,6 +429,25 @@ export default function FieldDiaryScreen() {
             ]}
           />
 
+          {/* Описание точки. Без него в дневнике остаются одни названия, по
+              которым через неделю не вспомнить, чем «Скважина 3» отличалась
+              от «Скважины 4» */}
+          <GrowingNoteInput
+            value={note}
+            onChangeText={setNote}
+            placeholder={I18n.t('pointNotePlaceholder', {
+              defaultValue: 'Описание: что за точка, что замерено, как подойти',
+            })}
+            placeholderTextColor={theme.colors.textSecondary}
+            minHeight={72}
+            style={[
+              styles.input,
+              styles.noteInput,
+              type.body,
+              { borderColor: theme.colors.border, color: theme.colors.text },
+            ]}
+          />
+
           <View style={styles.typeRow}>
             {TYPE_OPTIONS.map((option) => {
               const active = option.key === pointType;
@@ -390,32 +522,55 @@ export default function FieldDiaryScreen() {
           <View
             key={point.id}
             style={[
-              styles.pointRow,
+              styles.pointCard,
               { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
             ]}
           >
-            <View
+            <View style={styles.pointRow}>
+              <View
+                style={[
+                  styles.pointDot,
+                  { backgroundColor: pointTypeColors[point.type] ?? pointTypeColors.observation },
+                ]}
+              />
+              <View style={styles.pointInfo}>
+                <Text style={[type.body, { color: theme.colors.text }]} numberOfLines={1}>
+                  {point.title}
+                </Text>
+                <Text style={[styles.pointCoords, { color: theme.colors.textSecondary }]}>
+                  {formatCoordinate(point.lat)}, {formatCoordinate(point.lon)} · {formatTime(point.recordedAt)}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => handleDelete(point)}
+                style={styles.pointDelete}
+                accessibilityRole="button"
+                accessibilityLabel={I18n.t('delete')}
+              >
+                <MaterialIcons name="delete-outline" size={20} color={theme.colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Описание правится прямо в списке: в поле точку ставят одним
+                движением, а описывают её потом — иногда через час, когда
+                отошли от скважины */}
+            <GrowingNoteInput
+              value={noteDrafts[point.id] ?? ''}
+              onChangeText={(value) =>
+                setNoteDrafts((prev) => ({ ...prev, [point.id]: value }))
+              }
+              placeholder={I18n.t('addPointNote', { defaultValue: 'Добавить описание' })}
+              placeholderTextColor={theme.colors.textSecondary}
+              minHeight={44}
+              accessibilityLabel={`${I18n.t('pointNote', {
+                defaultValue: 'Описание точки',
+              })}: ${point.title}`}
               style={[
-                styles.pointDot,
-                { backgroundColor: pointTypeColors[point.type] ?? pointTypeColors.observation },
+                styles.pointNote,
+                type.body,
+                { borderColor: theme.colors.border, color: theme.colors.text },
               ]}
             />
-            <View style={styles.pointInfo}>
-              <Text style={[type.body, { color: theme.colors.text }]} numberOfLines={1}>
-                {point.title}
-              </Text>
-              <Text style={[styles.pointCoords, { color: theme.colors.textSecondary }]}>
-                {formatCoordinate(point.lat)}, {formatCoordinate(point.lon)} · {formatTime(point.recordedAt)}
-              </Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => handleDelete(point)}
-              style={styles.pointDelete}
-              accessibilityRole="button"
-              accessibilityLabel={I18n.t('delete')}
-            >
-              <MaterialIcons name="delete-outline" size={20} color={theme.colors.textSecondary} />
-            </TouchableOpacity>
           </View>
         ))}
 
@@ -556,6 +711,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
+  // Пустое поле описания открыто на две-три строки: столько в нём и пишут.
+  // Дальше высоту задаёт сам текст, см. GrowingNoteInput
+  noteInput: {
+    lineHeight: 20,
+  },
   typeRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -583,13 +743,26 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl,
     marginBottom: spacing.sm,
   },
-  pointRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  pointCard: {
     padding: spacing.md,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     marginBottom: spacing.sm,
+  },
+  pointRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  // Поле описания у поставленной точки. Ниже и с меньшими полями, чем в
+  // карточке новой точки: таких полей в списке столько же, сколько точек, и
+  // в полный рост они превратили бы список в столбец рамок
+  pointNote: {
+    marginTop: spacing.sm,
+    lineHeight: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   pointDot: {
     width: 10,

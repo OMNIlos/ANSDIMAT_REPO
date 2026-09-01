@@ -10,7 +10,7 @@
  * пересчитанной, поэтому при зуме меняется только положение элементов.
  */
 
-import React from 'react';
+import React, { useRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Path, Line, Circle, G, Rect, Defs, ClipPath } from 'react-native-svg';
 import { SERIES_ROLES } from '../../calc/chartSeries';
@@ -37,6 +37,19 @@ const REFERENCE_DOT_RADIUS = 2.6;
  *   соседние кривые уходят на второй план заметнее обычного
  * @param {Object|null} props.ghost - эскиз пустого состояния
  */
+/**
+ * Счётчик полотен на страницу
+ *
+ * Через `useId` было бы правильнее, но он появился в React 18 и в SVG-имени
+ * даёт двоеточия, которые в `url(#…)` придётся экранировать. Простой счётчик
+ * решает ту же задачу и читается без оговорок.
+ */
+let clipCounter = 0;
+const nextClipId = () => {
+  clipCounter += 1;
+  return clipCounter;
+};
+
 export default function ChartCanvas({
   scene,
   plot,
@@ -47,6 +60,15 @@ export default function ChartCanvas({
   picking = false,
   ghost,
 }) {
+  /**
+   * Свой идентификатор области отсечения у каждого полотна
+   *
+   * `url(#id)` в SVG ищет по всему документу и берёт первое совпадение. Пока
+   * полотно на экране одно, общего имени хватало; на развороте графика их
+   * оказывается два — накладка поверх списка, — и точки развёрнутого полотна
+   * обрезались по области встроенного, то есть исчезали почти целиком.
+   */
+  const clipId = useRef(`plotClip-${nextClipId()}`).current;
   // Соседние кривые рисуются раньше основных: открытая в журнале кривая
   // должна читаться первой, а порядок наложения в SVG задаётся порядком узлов
   const reference = scene.shapes.filter((one) => one.role === SERIES_ROLES.REFERENCE);
@@ -63,7 +85,7 @@ export default function ChartCanvas({
       <Svg width={width} height={height}>
         <Defs>
           {/* Данные не вылезают за область графика и не наезжают на оси */}
-          <ClipPath id="plotClip">
+          <ClipPath id={clipId}>
             <Rect x={plot.x} y={plot.y} width={plot.w} height={plot.h} />
           </ClipPath>
         </Defs>
@@ -133,7 +155,7 @@ export default function ChartCanvas({
           </G>
         )}
 
-        <G clipPath="url(#plotClip)">
+        <G clipPath={`url(#${clipId})`}>
           {/* Подписанные деления держат сетку, мелкие — только намекают на
               кратности внутри декады и не должны спорить с данными */}
           {scene.xTicks.map((tick, i) => (

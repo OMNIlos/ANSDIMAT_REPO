@@ -9,7 +9,6 @@ import {
   chartRawSeries,
   recoveryAbscissa,
   finalDrawdownAtStop,
-  FIT_SERIES,
 } from '../useChartSeries';
 import { TRACKING_KINDS } from '../../../calc/tracking';
 import { SERIES_ROLES } from '../../../calc/chartSeries';
@@ -39,7 +38,6 @@ const base = {
   wellMeasurements: {},
   moment: NaN,
   isRecovery: false,
-  fitSeries: FIT_SERIES.PUMPING,
   activeWellName: 'Скважина',
 };
 
@@ -49,11 +47,13 @@ test('на откачке кривая одна', () => {
   expect(series[0].role).toBe(SERIES_ROLES.FIT);
 });
 
-test('на восстановлении кривых две', () => {
-  // Это и есть недостающий график: журнал восстановления до полотна не доходил
+test('на восстановлении остаётся одно восстановление', () => {
+  // Фазы не смешиваются на одном полотне: по абсциссе у откачки время от её
+  // начала, у восстановления отношение t/t′, и вместе они читаются как одна
+  // зависимость, которой нет. Кривые соседних скважин добавляет экран
   const series = chartRawSeries({ ...base, isRecovery: true });
-  expect(series).toHaveLength(2);
-  expect(series.map((s) => s.id)).toEqual(['pumping', 'recovery']);
+  expect(series.map((s) => s.id)).toEqual(['recovery']);
+  expect(series[0].role).toBe(SERIES_ROLES.FIT);
 });
 
 test('кривая восстановления идёт остаточным понижением', () => {
@@ -66,46 +66,26 @@ test('кривая восстановления идёт остаточным п
   ]);
 });
 
-test('кривые названы по фазам, а не одинаково', () => {
-  // Обе кривые звались именем скважины, и в легенде стояли две одинаковые
-  // строки: понять, где откачка, а где восстановление, было невозможно
-  const series = chartRawSeries({ ...base, isRecovery: true });
-  const names = series.map((s) => s.name);
-  expect(new Set(names).size).toBe(2);
-  expect(names[0]).toMatch(/Откачка/);
-  expect(names[1]).toMatch(/Восстановление/);
-});
-
 test('имя скважины дописывается к фазе, а не заменяет её', () => {
+  // Кривая звалась просто именем скважины, и на восстановлении в легенде
+  // было не понять, какую фазу показывают
   const series = chartRawSeries({ ...base, isRecovery: true, activeWellName: '1p' });
-  expect(series[0].name).toBe('Откачка — 1p');
-  expect(series[1].name).toBe('Восстановление — 1p');
+  expect(series[0].name).toBe('Восстановление — 1p');
 });
 
-test('прямая по умолчанию идёт по откачке', () => {
-  const series = chartRawSeries({ ...base, isRecovery: true });
-  expect(series.find((s) => s.id === 'pumping').role).toBe(SERIES_ROLES.FIT);
-  expect(series.find((s) => s.id === 'recovery').role).toBe(SERIES_ROLES.REFERENCE);
-});
-
-test('выбор восстановления переводит график в координаты Тейса', () => {
+test('восстановление всегда в координатах Тейса', () => {
   // Остаточное понижение спрямляется только по lg(t/t′), и только там
-  // T = 0.183·Q/a верна: обе кривые на одной оси тут совместить нельзя
-  const series = chartRawSeries({
-    ...base,
-    isRecovery: true,
-    fitSeries: FIT_SERIES.RECOVERY,
-  });
-  expect(series).toHaveLength(1);
-  expect(series[0].id).toBe('recovery');
-  expect(series[0].role).toBe(SERIES_ROLES.FIT);
+  // T = 0.183·Q/C верна
+  const series = chartRawSeries({ ...base, isRecovery: true });
   // t/t′ для замера через 1 минуту после остановки при откачке 100 минут
   expect(series[0].measurements[0].t).toBeCloseTo(101, 10);
 });
 
 test('без понижения на остановке кривой восстановления нет', () => {
+  // И кривой откачки вместо неё тоже: полотно остаётся пустым, а экран
+  // объясняет, какого поля не хватает
   const series = chartRawSeries({ ...base, isRecovery: true, finalDrawdown: 0 });
-  expect(series.map((s) => s.id)).toEqual(['pumping']);
+  expect(series).toEqual([]);
 });
 
 test('на откачке журнал восстановления игнорируется', () => {
@@ -209,7 +189,6 @@ describe('восстановление важнее вида прослежив�
       ...cluster,
       trackingKind: TRACKING_KINDS.COMBINED,
       isRecovery: true,
-      fitSeries: FIT_SERIES.RECOVERY,
       // Журнал восстановления пуст — строить нечего, и полотно обязано
       // остаться пустым, а не показывать откачку
       recoveryMeasurements: [],
@@ -225,10 +204,9 @@ describe('восстановление важнее вида прослежив�
       isRecovery: true,
       moment: 10,
     });
-    // Кривая откачки идёт журналом времени, а не расстояниями куста
-    expect(series.find((s) => s.id === 'pumping').measurements).toEqual(
-      base.measurements
-    );
+    // На восстановлении остаётся одно восстановление: ни профиля воронки по
+    // расстояниям, ни кривой откачки рядом с ним
+    expect(series.map((s) => s.id)).toEqual(['recovery']);
   });
 });
 

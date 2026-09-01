@@ -123,6 +123,9 @@ export function useCalcUnits() {
     inCond: (text) => toBase(parseNumber(text), QUANTITIES.CONDUCTIVITY),
     inArea: (text) => toBase(parseNumber(text), QUANTITIES.AREA),
     inDiff: (text) => toBase(parseNumber(text), QUANTITIES.DIFFUSIVITY),
+    inVol: (text) => toBase(parseNumber(text), QUANTITIES.VOLUME),
+    inPress: (text) => toBase(parseNumber(text), QUANTITIES.PRESSURE),
+    inTime: (text) => toBase(parseNumber(text), QUANTITIES.TIME),
     // Прогнозные формулы считают время в сутках, базовая единица приложения —
     // минута: журналы ОФР ведутся в ней
     inDays: (text) => toBase(parseNumber(text), QUANTITIES.TIME) / MINUTES_PER_DAY,
@@ -136,6 +139,11 @@ export function useCalcUnits() {
     uArea: unitLabel(QUANTITIES.AREA),
     uDiff: unitLabel(QUANTITIES.DIFFUSIVITY),
     uTime: unitLabel(QUANTITIES.TIME),
+    uVol: unitLabel(QUANTITIES.VOLUME),
+    uPress: unitLabel(QUANTITIES.PRESSURE),
+    // Обратный перевод для полей ввода: журнал лежит в базовых единицах, а
+    // в поле стоит число в размерности пользователя
+    toBase,
   };
 }
 

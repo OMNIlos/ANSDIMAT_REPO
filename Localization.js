@@ -82,6 +82,35 @@ const i18n = new I18n({
       "Уровень восстановился не полностью: осталось %{percent} % понижения. Опыт принято считать законченным при 5 %.",
     journalPumping: "Журнал замеров: откачка",
     journalRecovery: "Журнал замеров: восстановление",
+
+    // Обмен журналами через файл .ansdimat
+    share: "Поделиться",
+    shareAsFile: "Файл проекта (.ansdimat)",
+    shareAsText: "Таблица замеров (текст)",
+    importFromFile: "Импорт",
+    importTitle: "Импорт журнала",
+    importAction: "Импортировать",
+    importReading: "Читаем файл…",
+    importExportedAt: "Выгружен",
+    importPumpingRows: "Замеры откачки",
+    importRecoveryRows: "Замеры восстановления",
+    wells: "Скважины",
+    close: "Закрыть",
+    importExistsTitle: "Такой журнал уже есть",
+    importExistsHint:
+      "Журнал «%{name}» уже заведён из этого файла. Заменить его или добавить копию?",
+    importReplace: "Заменить существующий",
+    importCopy: "Создать копию",
+    importOpenExisting: "Открыть имеющийся",
+    importFailed: "Не удалось открыть файл",
+    importErrorNotAnsdimat: "Это не файл проекта АНСДИМАТ.",
+    importErrorTooNew:
+      "Файл создан более новой версией приложения. Обновите АНСДИМАТ.",
+    importErrorCorrupted:
+      "Файл повреждён при передаче. Попросите отправить его ещё раз.",
+    importErrorInvalid: "Файл повреждён или заполнен не полностью.",
+    importErrorReadFailed: "Не удалось прочитать файл.",
+
     recoveryJournalHint:
       "Время — от остановки насоса. Ноль восстановления отвечает понижению на этот момент.",
     recoveryNotCharted: " ",
@@ -93,6 +122,12 @@ const i18n = new I18n({
     recoveryEmptyTitle: "Журнал восстановления пуст",
     recoveryEmptyHint:
       "Внесите замеры после остановки насоса — прямая Тейса строится по ним.",
+    recoveryNoStopTitle: "Не задано понижение на остановке",
+    recoveryNoStopHint:
+      "Остаточное понижение отсчитывается от него. Заполните журнал откачки этой скважины до момента остановки насоса или впишите понижение в поле выше.",
+    recoveryOvershootTitle: "Журнал не сходится с понижением на остановке",
+    recoveryOvershootHint:
+      "Подъём уровня во всех строках больше понижения на остановке, и остатка не остаётся. Проверьте, что в журнале восстановления стоит подъём уровня от момента остановки, а понижение на остановке взято у этой же скважины.",
     fitBySeries: "Прямая по кривой «%{well}»",
     recoveryNeedDuration:
       "Укажите продолжительность откачки и внесите замеры после остановки насоса — иначе восстановление не обработать.",
@@ -101,6 +136,11 @@ const i18n = new I18n({
     chartEmpty: "Добавьте замеры, чтобы построить график",
     ofr_single: "Одиночная",
     ofr_cluster: "Кустовая",
+    ofr_slug: "Экспресс-откачка",
+    ofr_lugeon: "Поинтервальные нагнетания",
+    ofr_vadose: "Налив в шурф",
+    // Виды прежних версий: новых журналов такого типа не заводят, но
+    // заведённые раньше должны показываться названием, а не ключом
     ofr_fill: "Налив",
     ofr_recovery: "Восстановление",
 
@@ -210,11 +250,13 @@ const i18n = new I18n({
       "Радиус влияния R редко замеряют — его принимают из опыта работ. Если оставить поле пустым, берётся R = 300·r₀, и в результатах появляется предупреждение: значение оценочное.",
     manualDiaryTitle: "Полевой дневник",
     manualDiaryStep1:
-      "Введите название точки и выберите тип: скважина, родник, шурф, наблюдение.",
+      "Введите название точки, опишите её и выберите тип: скважина, родник, шурф, наблюдение.",
     manualDiaryStep2:
       "Нажмите на карту в нужном месте — точка встанет по координатам нажатия.",
     manualDiaryStep3:
       "Кнопка «Отметить моё местоположение» ставит точку по координатам устройства, кружок на карте просто подводит карту к вам.",
+    manualDiaryStep4:
+      "Описание правится и потом — прямо в списке под точкой. Написанное сохраняется само, отдельной кнопки нет.",
     manualDiaryNote:
       "Карта подгружается из интернета, но уже отмеченные точки и их координаты хранятся на устройстве и доступны без связи.",
     manualAccountTitle: "Аккаунт и синхронизация",
@@ -674,6 +716,22 @@ const i18n = new I18n({
     unitHectare: "га",
     unitKm2: "км²",
     unitFt2: "фут²",
+
+    // --- Объём ---
+    quantityVolume: "Объём",
+    unitM3: "м³",
+    unitLiters: "л",
+    unitFt3: "фут³",
+    unitGallons: "гал",
+
+    // --- Давление ---
+    quantityPressure: "Давление",
+    unitPascal: "Па",
+    unitKiloPascal: "кПа",
+    unitMegaPascal: "МПа",
+    unitBar: "бар",
+    unitAtmosphere: "кгс/см²",
+    unitMeterH2O: "м вод. ст.",
     tabBarrage: "Барраж",
     tabLeakage: "Утечки",
 
@@ -739,6 +797,9 @@ const i18n = new I18n({
     lastRecord: "запись",
     observationPoints: "Точки наблюдения",
     pointTitlePlaceholder: "Название точки",
+    pointNote: "Описание точки",
+    pointNotePlaceholder: "Описание: что за точка, что замерено, как подойти",
+    addPointNote: "Добавить описание",
     markMyLocation: "Отметить моё местоположение",
     centerOnMyLocation: "Показать моё местоположение на карте",
     mapExpand: "Развернуть карту на весь экран",
@@ -1477,6 +1538,164 @@ const i18n = new I18n({
     createJournal: "Создать журнал",
     back: "Назад",
     observationJournal: "Журнал наблюдений",
+
+    // ===== ВИДЫ ОФР СО СВОЕЙ СХЕМОЙ: ОБЩЕЕ =====
+    ofrInputs: "Исходные данные",
+    ofrResult: "Результат",
+    conductivityLabel: "k, %{unit}",
+    ofrMethodTitle: "Как считается",
+    ofrChart: "График",
+
+    // ===== ЭКСПРЕСС-ОПРОБОВАНИЕ (БАУЭР — РАЙС) =====
+    slugTitle: "Экспресс-опробование",
+    slugSubtitle: "Решение Бауэра — Райса",
+    slugWellSection: "Скважина",
+    slugFilterRadius: "Радиус фильтра r_w",
+    slugCasingRadius: "Радиус обсадной трубы r_c",
+    slugFilterLength: "Длина фильтра l_w",
+    slugFilterBottom: "От УГВ до низа фильтра z",
+    slugThickness: "Обводнённая мощность m",
+    slugInitialDrawdown: "Скачок понижения s⁰",
+    slugJournalTitle: "Замеры: время и восстановление уровня",
+    slugJournalNote:
+      "В журнал идёт не остаток скачка, а насколько уровень уже вернулся: значения растут от нуля, последний замер равен s⁰.",
+    slugInfluenceRadius: "ln(R/r_w)",
+    slugBeta: "β = l_w/r_w",
+    slugSchemePartial: "Несовершенная скважина: радиус влияния по A₁ и A₂.",
+    slugSchemeFull:
+      "Фильтр достаёт до подошвы пласта: радиус влияния по A₃, как у совершенной скважины.",
+    slugThicknessCapped:
+      "Мощность велика: ln[(m−z)/r_w] взят равным 6 — верхнему пределу зависимости.",
+    slugBetaClamped:
+      "β вне графика Бауэра — Райса (1…2000): коэффициенты взяты на его границе.",
+    slugMethod:
+      "k = 2.3·r_c²/(2·l_w)·C·ln(R/r_w) — по наклону C прямой lg(s⁰/s) — t.",
+    slugLineNote:
+      "Прямая должна выходить из начала координат. Если прямолинейных участков два, обрабатывают второй: первый говорит о нарушенной зоне вокруг скважины или о перетекании.",
+    slugNeedInitialDrawdown:
+      "Укажите скачок понижения s⁰ — от него отсчитывается возврат уровня.",
+    slugNeedGeometry:
+      "Проверьте геометрию скважины: радиус и длину фильтра и расстояние от УГВ до его низа.",
+    slugNeedMeasurements:
+      "Внесите хотя бы два замера, где уровень вернулся меньше чем на скачок s⁰.",
+
+    // ===== ПОИНТЕРВАЛЬНЫЕ НАГНЕТАНИЯ (МЕТОД ЛЮЖОНА) =====
+    lugeonTitle: "Поинтервальное нагнетание",
+    lugeonSubtitle: "Метод Люжона: формулы Мойе и Тима",
+    lugeonWellRadius: "Радиус скважины r_w",
+    lugeonIntervalLength: "Длина интервала l_w",
+    lugeonReadingInterval: "Между отсчётами",
+    lugeonDensity: "Плотность жидкости ρ, кг/м³",
+    lugeonStagesTitle: "Ступени: давление и показания расходомера",
+    lugeonStage: "Ступень %{n}",
+    lugeonPressure: "Давление ΔP",
+    lugeonReadings: "Показания расходомера",
+    lugeonMeanFlow: "Средний расход",
+    lugeonStageLu: "Lu",
+    lugeonMeanK: "Среднее k",
+    lugeonMeanLu: "Среднее Lu",
+    lugeonAddStage: "Добавить ступень",
+    lugeonRemoveStage: "Убрать ступень",
+    lugeonChartTitle: "Расход — давление",
+    lugeonPatternTitle: "Вид зависимости",
+    lugeonPatternLaminar: "Ламинарный поток",
+    lugeonPatternTurbulent: "Турбулентный поток",
+    lugeonPatternDilation: "Расширение трещин",
+    lugeonPatternWashout: "Размыв",
+    lugeonPatternVoidFilling: "Заполнение трещин",
+    lugeonPatternUnknown: "Не определён",
+    lugeonHintLaminar:
+      "Водопоглощение не зависит от давления — представительно среднее по ступеням.",
+    lugeonHintTurbulent:
+      "С ростом давления поглощение падает: поток в трещинах перестал быть ламинарным. Представительно значение при наименьшем давлении.",
+    lugeonHintDilation:
+      "На пике давления трещины упруго раскрылись и сомкнулись обратно. Представительно значение при наименьшем давлении.",
+    lugeonHintWashout:
+      "Поглощение растёт от ступени к ступени и обратно не возвращается: трещины промываются, опыт меняет породу.",
+    lugeonHintVoidFilling:
+      "Поглощение падает от ступени к ступени: трещины забиваются взвесью.",
+    lugeonHintUnknown:
+      "Вид зависимости определяется по пяти ступеням: три на подъёме давления и две на спуске.",
+    lugeonRepresentative: "Представительное Lu",
+    lugeonMethod:
+      "k = Q·ρ·g/(2π·l_w·ΔP)·(1 + ln(l_w/2r_w)) — формула Мойе, g = 9.81 м/с².",
+    lugeonLuMethod:
+      "Lu = Q/l_w · P₀/ΔP при Q в л/мин и P₀ = 1 МПа. Единица Люжона — 1 л/мин на метр интервала при избыточном давлении 1 МПа.",
+    lugeonScale:
+      "Оценочно 1 Lu ≈ 0.011 м/сут. В высокопроницаемых трещиноватых породах точность метода падает.",
+    lugeonStagePlan:
+      "Стандартная схема: пять ступеней с давлениями 0.5·Pmax, 0.75·Pmax, Pmax, 0.75·Pmax, 0.5·Pmax по 10 минут каждая, расход замеряется ежеминутно.",
+
+    // --- Способ расчёта коэффициента фильтрации ---
+    lugeonFormula: "Формула",
+    lugeonFormulaMoye: "Мойе",
+    lugeonFormulaThiem: "Тим",
+    lugeonThiemMethod:
+      "k = Q/(2π·l_w·Δh)·ln(R/r_w), где Δh = ΔP/(ρ·g), а радиус влияния R принят равным длине интервала. Обе формулы дают близкие результаты.",
+
+    // --- Классификация пород по величине Люжона (табл. 13.5) ---
+    lugeonRockClass: "Трещиноватость",
+    lugeonRockVeryLow: "Весьма слаботрещиноватые",
+    lugeonRockLow: "Слаботрещиноватые",
+    lugeonRockModerate: "Трещиноватые",
+    lugeonRockMedium: "Весьма сильнотрещиноватые",
+    lugeonRockHigh: "Сильнотрещиноватые",
+    lugeonRockVeryHigh: "Полости и каверны",
+    lugeonPermeabilityVeryLow: "Очень низкая",
+    lugeonPermeabilityLow: "Низкая",
+    lugeonPermeabilityModerate: "Умеренная",
+    lugeonPermeabilityMedium: "Средняя",
+    lugeonPermeabilityHigh: "Высокая",
+    lugeonPermeabilityVeryHigh: "Очень высокая",
+    lugeonLuChart: "Люжон по ступеням",
+    lugeonNeedStages:
+      "Задайте давление ступени и хотя бы два показания расходомера.",
+    lugeonNeedGeometry:
+      "Укажите длину интервала опробования и радиус скважины.",
+
+    // ===== НАЛИВ В ШУРФ В ЗОНУ АЭРАЦИИ =====
+    vadoseTitle: "Налив в шурф",
+    vadoseSubtitle: "Зона аэрации: Болдырев и Биндеман",
+    vadosePitSection: "Шурф",
+    vadoseVolume: "Налитый объём ΔV",
+    vadoseInterval: "Интервал времени Δt",
+    vadoseFlow: "Расход Q",
+    vadoseFlowComputed: "Считается из объёма и интервала",
+    vadoseArea: "Площадь инфильтрации F",
+    vadoseHead: "Слой воды в шурфе H",
+    vadoseDepth: "Глубина просачивания z",
+    vadoseCapillary: "Капиллярное поднятие h_c",
+    vadoseUseCapillary: "Учитывать капиллярные силы",
+    vadoseNoCapillary: "Не учитывать",
+    vadoseLithology: "Порода",
+    vadoseLithologyPick: "Выбрать породу",
+    vadoseLithologyHint:
+      "Подставляется половина максимального капиллярного поднятия. Диапазоны справочные — замеренную высоту лучше вписать руками.",
+    vadoseMethod: "Биндеман: k = Q·z / (F·(H + H_c + z)), Q = ΔV/Δt.",
+    vadoseMethodBoldyrev: "Болдырев: k = Q/F = ΔV/(F·Δt).",
+    vadoseMethodName: "Метод",
+    vadoseMethodBoldyrevName: "Болдырев",
+    vadoseMethodBindemanName: "Биндеман",
+    vadoseAreaNote:
+      "Площадь кольца, через которое идёт инфильтрационное питание. Для метода Нестерова — площадь внутреннего кольца.",
+    vadoseCapillaryNote:
+      "Без учёта капиллярных сил расчёт идёт по Болдыреву: k = Q/F, вся движущая сила приписана гравитации, и результат выходит завышенным.",
+    vadoseHeadNote: "По методу слой воды в шурфе держат около 10 см.",
+    vadoseNeedDepth:
+      "Укажите глубину зоны просачивания z на конец опыта — без неё расчёт невозможен.",
+    vadoseNeedFlow:
+      "Задайте расход или налитый объём вместе с интервалом времени.",
+    vadoseNeedArea: "Укажите площадь шурфа.",
+
+    // --- Максимальное капиллярное поднятие ---
+    capillaryGravel: "Гравий, галечник",
+    capillaryCoarseSand: "Песок крупнозернистый",
+    capillaryMediumSand: "Песок среднезернистый",
+    capillaryFineSand: "Песок мелкозернистый",
+    capillarySiltySand: "Песок пылеватый",
+    capillarySandyLoam: "Супесь",
+    capillaryLoam: "Суглинок",
+    capillaryClay: "Глина",
   },
   en: {
     // Защита авторских прав
@@ -1531,6 +1750,35 @@ const i18n = new I18n({
       "The level has not fully recovered: %{percent} % of the drawdown remains. A test is considered finished at 5 %.",
     journalPumping: "Measurements log: pumping",
     journalRecovery: "Measurements log: recovery",
+
+    // Sharing tests through an .ansdimat file
+    share: "Share",
+    shareAsFile: "Project file (.ansdimat)",
+    shareAsText: "Measurements table (text)",
+    importFromFile: "Import",
+    importTitle: "Import a test",
+    importAction: "Import",
+    importReading: "Reading the file…",
+    importExportedAt: "Exported",
+    importPumpingRows: "Pumping readings",
+    importRecoveryRows: "Recovery readings",
+    wells: "Wells",
+    close: "Close",
+    importExistsTitle: "This test is already here",
+    importExistsHint:
+      "The test “%{name}” has already been imported from this file. Replace it or add a copy?",
+    importReplace: "Replace the existing one",
+    importCopy: "Add a copy",
+    importOpenExisting: "Open the existing one",
+    importFailed: "Could not open the file",
+    importErrorNotAnsdimat: "This is not an ANSDIMAT project file.",
+    importErrorTooNew:
+      "The file was created by a newer version of the app. Please update ANSDIMAT.",
+    importErrorCorrupted:
+      "The file was damaged in transit. Ask the sender to share it again.",
+    importErrorInvalid: "The file is damaged or incomplete.",
+    importErrorReadFailed: "Could not read the file.",
+
     recoveryJournalHint:
       "Time runs from the pump stop. Zero recovery matches the drawdown at that moment.",
     recoveryNotCharted:
@@ -1542,6 +1790,12 @@ const i18n = new I18n({
     recoveryEmptyTitle: "The recovery journal is empty",
     recoveryEmptyHint:
       "Add readings taken after the pump stopped — the Theis line is built from them.",
+    recoveryNoStopTitle: "Drawdown at pump-off is not set",
+    recoveryNoStopHint:
+      "Residual drawdown is measured from it. Fill in this well's pumping journal up to the moment the pump stopped, or type the drawdown in the field above.",
+    recoveryOvershootTitle: "The journal does not match the drawdown at pump-off",
+    recoveryOvershootHint:
+      "Every row shows a water level rise larger than the drawdown at pump-off, so nothing is left over. Check that the recovery journal holds the rise measured from the moment the pump stopped, and that the drawdown at pump-off belongs to this same well.",
     fitBySeries: "Line fitted to the “%{well}” curve",
     recoveryNeedDuration:
       "Enter the pumping duration and add measurements taken after the pump stopped — otherwise recovery cannot be processed.",
@@ -1550,6 +1804,11 @@ const i18n = new I18n({
     chartEmpty: "Add measurements to build the chart",
     ofr_single: "Single well",
     ofr_cluster: "Cluster",
+    ofr_slug: "Slug test",
+    ofr_lugeon: "Packer (Lugeon) test",
+    ofr_vadose: "Pit infiltration",
+    // Legacy types: no new journals of this kind are created, but the ones
+    // created earlier must still show a name rather than a raw key
     ofr_fill: "Infiltration",
     ofr_recovery: "Recovery",
 
@@ -1660,11 +1919,13 @@ const i18n = new I18n({
       "The radius of influence R is rarely measured — it is taken from experience. Leave the field empty and R = 300·r₀ is used, with a warning that the result is an estimate.",
     manualDiaryTitle: "Field diary",
     manualDiaryStep1:
-      "Enter the point name and pick its type: well, spring, pit or observation.",
+      "Enter the point name, describe it and pick its type: well, spring, pit or observation.",
     manualDiaryStep2:
       "Tap the map where you need it — the point is placed at the tapped coordinates.",
     manualDiaryStep3:
       "“Mark my location” places a point at the device coordinates; the circle on the map only centres the map on you.",
+    manualDiaryStep4:
+      "The description can be edited later, right in the list under the point. What you write is saved on its own — there is no separate button.",
     manualDiaryNote:
       "Map tiles come from the internet, but points you have already marked and their coordinates are stored on the device and available offline.",
     manualAccountTitle: "Account and sync",
@@ -2123,6 +2384,22 @@ const i18n = new I18n({
     unitHectare: "ha",
     unitKm2: "km²",
     unitFt2: "ft²",
+
+    // --- Volume ---
+    quantityVolume: "Volume",
+    unitM3: "m³",
+    unitLiters: "L",
+    unitFt3: "ft³",
+    unitGallons: "gal",
+
+    // --- Pressure ---
+    quantityPressure: "Pressure",
+    unitPascal: "Pa",
+    unitKiloPascal: "kPa",
+    unitMegaPascal: "MPa",
+    unitBar: "bar",
+    unitAtmosphere: "kgf/cm²",
+    unitMeterH2O: "m H₂O",
     tabBarrage: "Barrier",
     tabLeakage: "Leakage",
 
@@ -2189,6 +2466,9 @@ const i18n = new I18n({
     lastRecord: "record",
     observationPoints: "Observation points",
     pointTitlePlaceholder: "Point name",
+    pointNote: "Point description",
+    pointNotePlaceholder: "Description: what the point is, what was measured, how to get there",
+    addPointNote: "Add a description",
     markMyLocation: "Mark my location",
     centerOnMyLocation: "Show my location on the map",
     tapMapToMark: "Tap the map to mark a point",
@@ -2894,6 +3174,165 @@ const i18n = new I18n({
     insertMeasurement: "Insert Measurement",
     selectDate: "Select Date and Time",
     dateTimeSelection: "Date and Time Selection",
+
+    // ===== TEST TYPES WITH THEIR OWN SCHEME: SHARED =====
+    ofrInputs: "Input data",
+    ofrResult: "Result",
+    conductivityLabel: "k, %{unit}",
+    ofrMethodTitle: "How it is computed",
+    ofrChart: "Chart",
+
+    // ===== SLUG TEST (BOUWER — RICE) =====
+    slugTitle: "Slug test",
+    slugSubtitle: "Bouwer — Rice solution",
+    slugWellSection: "Well",
+    slugFilterRadius: "Screen radius r_w",
+    slugCasingRadius: "Casing radius r_c",
+    slugFilterLength: "Screen length l_w",
+    slugFilterBottom: "Water table to screen bottom z",
+    slugThickness: "Saturated thickness m",
+    slugInitialDrawdown: "Initial head change s⁰",
+    slugJournalTitle: "Readings: time and head recovery",
+    slugJournalNote:
+      "Record how far the head has already recovered, not what is left of the initial change: values grow from zero, and the last reading equals s⁰.",
+    slugInfluenceRadius: "ln(R/r_w)",
+    slugBeta: "β = l_w/r_w",
+    slugSchemePartial:
+      "Partially penetrating well: effective radius from A₁ and A₂.",
+    slugSchemeFull:
+      "Screen reaches the aquifer base: effective radius from A₃, as for a fully penetrating well.",
+    slugThicknessCapped:
+      "Thick aquifer: ln[(m−z)/r_w] is capped at 6, the upper limit of the relation.",
+    slugBetaClamped:
+      "β falls outside the Bouwer — Rice chart (1…2000): coefficients are taken at its edge.",
+    slugMethod:
+      "k = 2.3·r_c²/(2·l_w)·C·ln(R/r_w), where C is the slope of the lg(s⁰/s) — t line.",
+    slugLineNote:
+      "The line must pass through the origin. With two straight segments, use the second: the first indicates a disturbed zone around the well or leakage.",
+    slugNeedInitialDrawdown:
+      "Enter the initial head change s⁰ — the recovery is measured from it.",
+    slugNeedGeometry:
+      "Check the well geometry: screen radius and length, and the distance from the water table to the screen bottom.",
+    slugNeedMeasurements:
+      "Add at least two readings where the head recovery is smaller than s⁰.",
+
+    // ===== PACKER (LUGEON) TEST =====
+    lugeonTitle: "Packer test",
+    lugeonSubtitle: "Lugeon test: Moye and Thiem formulas",
+    lugeonWellRadius: "Borehole radius r_w",
+    lugeonIntervalLength: "Test interval length l_w",
+    lugeonReadingInterval: "Between readings",
+    lugeonDensity: "Fluid density ρ, kg/m³",
+    lugeonStagesTitle: "Stages: pressure and flowmeter readings",
+    lugeonStage: "Stage %{n}",
+    lugeonPressure: "Pressure ΔP",
+    lugeonReadings: "Flowmeter readings",
+    lugeonMeanFlow: "Mean flow rate",
+    lugeonStageLu: "Lu",
+    lugeonMeanK: "Mean k",
+    lugeonMeanLu: "Mean Lu",
+    lugeonAddStage: "Add stage",
+    lugeonRemoveStage: "Remove stage",
+    lugeonChartTitle: "Flow rate vs pressure",
+    lugeonPatternTitle: "Flow pattern",
+    lugeonPatternLaminar: "Laminar flow",
+    lugeonPatternTurbulent: "Turbulent flow",
+    lugeonPatternDilation: "Dilation",
+    lugeonPatternWashout: "Wash-out",
+    lugeonPatternVoidFilling: "Void filling",
+    lugeonPatternUnknown: "Undetermined",
+    lugeonHintLaminar:
+      "Water take does not depend on pressure — the mean across stages is representative.",
+    lugeonHintTurbulent:
+      "Water take drops as pressure rises: flow in the fractures is no longer laminar. The value at the lowest pressure is representative.",
+    lugeonHintDilation:
+      "At peak pressure the fractures opened elastically and closed again. The value at the lowest pressure is representative.",
+    lugeonHintWashout:
+      "Water take grows stage after stage and does not return: fractures are being washed out, the test alters the rock.",
+    lugeonHintVoidFilling:
+      "Water take falls stage after stage: fractures are being clogged by suspended matter.",
+    lugeonHintUnknown:
+      "The pattern is determined from five stages: three on the pressure rise and two on the way down.",
+    lugeonRepresentative: "Representative Lu",
+    lugeonMethod:
+      "k = Q·ρ·g/(2π·l_w·ΔP)·(1 + ln(l_w/2r_w)) — Moye formula, g = 9.81 m/s².",
+    lugeonLuMethod:
+      "Lu = Q/l_w · P₀/ΔP with Q in L/min and P₀ = 1 MPa. One Lugeon unit is 1 L/min per metre of interval at 1 MPa excess pressure.",
+    lugeonScale:
+      "As a rough guide 1 Lu ≈ 0.011 m/day. In highly permeable fractured rock the method loses accuracy.",
+    lugeonStagePlan:
+      "Standard procedure: five stages at 0.5·Pmax, 0.75·Pmax, Pmax, 0.75·Pmax, 0.5·Pmax, ten minutes each, with the flow rate read every minute.",
+
+    // --- Hydraulic conductivity formula ---
+    lugeonFormula: "Formula",
+    lugeonFormulaMoye: "Moye",
+    lugeonFormulaThiem: "Thiem",
+    lugeonThiemMethod:
+      "k = Q/(2π·l_w·Δh)·ln(R/r_w), where Δh = ΔP/(ρ·g) and the radius of influence R is taken equal to the interval length. Both formulas give close results.",
+
+    // --- Rock classification by Lugeon value (table 13.5) ---
+    lugeonRockClass: "Fracturing",
+    lugeonRockVeryLow: "Very slightly fractured",
+    lugeonRockLow: "Slightly fractured",
+    lugeonRockModerate: "Fractured",
+    lugeonRockMedium: "Very highly fractured",
+    lugeonRockHigh: "Highly fractured",
+    lugeonRockVeryHigh: "Voids and caverns",
+    lugeonPermeabilityVeryLow: "Very low",
+    lugeonPermeabilityLow: "Low",
+    lugeonPermeabilityModerate: "Moderate",
+    lugeonPermeabilityMedium: "Medium",
+    lugeonPermeabilityHigh: "High",
+    lugeonPermeabilityVeryHigh: "Very high",
+    lugeonLuChart: "Lugeon value by stage",
+    lugeonNeedStages:
+      "Enter the stage pressure and at least two flowmeter readings.",
+    lugeonNeedGeometry: "Enter the test interval length and the borehole radius.",
+
+    // ===== PIT INFILTRATION TEST IN THE VADOSE ZONE =====
+    vadoseTitle: "Pit infiltration",
+    vadoseSubtitle: "Vadose zone: Boldyrev and Bindeman",
+    vadosePitSection: "Pit",
+    vadoseVolume: "Water added ΔV",
+    vadoseInterval: "Time interval Δt",
+    vadoseFlow: "Flow rate Q",
+    vadoseFlowComputed: "Computed from volume and interval",
+    vadoseArea: "Infiltration area F",
+    vadoseHead: "Water depth in the pit H",
+    vadoseDepth: "Wetting front depth z",
+    vadoseCapillary: "Capillary rise h_c",
+    vadoseUseCapillary: "Account for capillary forces",
+    vadoseNoCapillary: "Ignore",
+    vadoseLithology: "Soil",
+    vadoseLithologyPick: "Pick a soil",
+    vadoseLithologyHint:
+      "Half of the maximum capillary rise is used. The ranges are indicative — a measured height is always better entered by hand.",
+    vadoseMethod: "Bindeman: k = Q·z / (F·(H + H_c + z)), Q = ΔV/Δt.",
+    vadoseMethodBoldyrev: "Boldyrev: k = Q/F = ΔV/(F·Δt).",
+    vadoseMethodName: "Method",
+    vadoseMethodBoldyrevName: "Boldyrev",
+    vadoseMethodBindemanName: "Bindeman",
+    vadoseAreaNote:
+      "Area of the ring through which infiltration takes place. For the Nesterov method, the area of the inner ring.",
+    vadoseCapillaryNote:
+      "Without capillary forces the calculation follows Boldyrev: k = Q/F, the whole driving force is credited to gravity, and the result comes out overstated.",
+    vadoseHeadNote:
+      "The method keeps the water layer in the pit at about 10 cm.",
+    vadoseNeedDepth:
+      "Enter the wetting front depth z at the end of the test — the calculation needs it.",
+    vadoseNeedFlow:
+      "Enter the flow rate, or the water added together with the time interval.",
+    vadoseNeedArea: "Enter the pit area.",
+
+    // --- Maximum capillary rise ---
+    capillaryGravel: "Gravel",
+    capillaryCoarseSand: "Coarse sand",
+    capillaryMediumSand: "Medium sand",
+    capillaryFineSand: "Fine sand",
+    capillarySiltySand: "Silty sand",
+    capillarySandyLoam: "Sandy loam",
+    capillaryLoam: "Loam",
+    capillaryClay: "Clay",
   },
 });
 

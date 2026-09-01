@@ -43,7 +43,7 @@ import { SERIES_ROLES, residualDrawdown } from "../../calc/chartSeries";
 import {
   chartRawSeries,
   finalDrawdownAtStop,
-  FIT_SERIES,
+  recoveryAbscissa,
 } from "./useChartSeries";
 import {
   X_MODES,
@@ -57,7 +57,11 @@ import {
   processAreaTracking,
   processCombinedTracking,
 } from "../../calc/tracking";
-import { processRecovery, recoveryCompleteness } from "../../calc/recovery";
+import {
+  processRecovery,
+  recoveryCompleteness,
+  diffusivityFromRecovery,
+} from "../../calc/recovery";
 import { diagnose } from "../../calc/diagnostics";
 import ValueCard from "../../components/ui/ValueCard";
 import { MENU_BAR_HEIGHT } from "../../components/BottomMenuBar";
@@ -69,7 +73,12 @@ import {
   addMeasurement,
   deleteMeasurement,
 } from "../../db/projects";
-import { OFR_TYPES, MEASUREMENT_PHASES, WELL_ROLES } from "../../db/schema";
+import {
+  OFR_TYPES,
+  LEGACY_OFR_TYPES,
+  MEASUREMENT_PHASES,
+  WELL_ROLES,
+} from "../../db/schema";
 import {
   createWell,
   deleteWell,
@@ -185,6 +194,19 @@ const SINGLE_WELL = "__single__";
  */
 const DEFAULT_SPACING = 50;
 
+/**
+ * Показывать ли карту куста
+ *
+ * Карта выключена целиком — и сама, и плашка «в Premium» вместо неё, — пока
+ * подписка не запущена: предлагать купить то, чего ещё нельзя купить, хуже,
+ * чем не предлагать вовсе. Расстояния всё это время вводятся в таблице, она
+ * и была основным способом; карта их только дублировала.
+ *
+ * Возврат — одним значением: весь код карты на месте и ходит через этот
+ * флаг, включая раскладку скважин по координатам.
+ */
+const CLUSTER_MAP_ENABLED = false;
+
 /** Масштаб карты куста: на нём полсотни метров занимают заметную часть экрана */
 const WELL_MAP_ZOOM = 18;
 
@@ -274,9 +296,18 @@ function formatStorativity(value) {
     : String(Number(value.toPrecision(3)));
 }
 
+/**
+ * Переводит строки журнала в замеры в базовых единицах
+ *
+ * Замер помнит строку, из которой взят: незаполненные строки сюда не
+ * попадают, а на восстановлении отсеиваются ещё и замеры до остановки насоса.
+ * Считать номер точки на графике по номеру строки в таблице после такого
+ * прореживания нельзя — отметка вставала бы на соседнюю точку.
+ */
 function toMeasurements(journalRows, toBase) {
   return journalRows
     .map((row) => ({
+      row: row.id,
       t: toBase(parseNumber(row.tText), QUANTITIES.TIME),
       s: toBase(parseNumber(row.sText), QUANTITIES.DRAWDOWN),
     }))
@@ -296,7 +327,9 @@ function toMeasurements(journalRows, toBase) {
  * @param {string} props.timeLabel - подпись столбца времени
  * @param {string} props.valueLabel - подпись столбца уровня
  * @param {boolean} [props.selectable] - показывать отметку выбора точки
- * @param {number[]} [props.selected] - индексы отмеченных точек
+ * @param {number[]} [props.selected] - номера отмеченных точек на графике
+ * @param {Map<string, number>} [props.pointIndexes] - номер точки на графике
+ *   по строке журнала; строки, которых на полотне нет, отмечать нечем
  */
 function MeasurementJournal({
   theme,
@@ -309,6 +342,7 @@ function MeasurementJournal({
   onDelete,
   selectable = false,
   selected = [],
+  pointIndexes,
   onToggleSelect,
 }) {
   return (
@@ -344,7 +378,14 @@ function MeasurementJournal({
         <View style={styles.deleteCell} />
       </View>
 
-      {rows.map((row, rowIndex) => (
+      {rows.map((row, rowIndex) => {
+        // Номер этой строки на полотне. Строки без него на графике нет —
+        // она пустая либо выпала из ряда, — и отметить её нечем
+        const pointIndex = pointIndexes?.get(row.id) ?? -1;
+        const onPlot = pointIndex >= 0;
+        const checked = onPlot && selected.includes(pointIndex);
+
+        return (
         <View
           key={row.id}
           style={[styles.tableRow, { borderBottomColor: theme.colors.border }]}
@@ -353,23 +394,22 @@ function MeasurementJournal({
               по графику, но попасть по строке проще, чем по кружку */}
           {selectable && (
             <TouchableOpacity
-              onPress={() => onToggleSelect(rowIndex)}
+              onPress={() => onToggleSelect(pointIndex)}
+              disabled={!onPlot}
               style={styles.pickCell}
               accessibilityRole="checkbox"
-              accessibilityState={{ checked: selected.includes(rowIndex) }}
+              accessibilityState={{ checked, disabled: !onPlot }}
               accessibilityLabel={`${I18n.t("measurement", { defaultValue: "Замер" })} ${rowIndex + 1}`}
             >
               <MaterialIcons
-                name={
-                  selected.includes(rowIndex)
-                    ? "radio-button-checked"
-                    : "radio-button-unchecked"
-                }
+                name={checked ? "radio-button-checked" : "radio-button-unchecked"}
                 size={20}
                 color={
-                  selected.includes(rowIndex)
+                  checked
                     ? theme.colors.primaryAccent
-                    : theme.colors.faint
+                    : onPlot
+                      ? theme.colors.faint
+                      : "transparent"
                 }
               />
             </TouchableOpacity>
@@ -412,7 +452,8 @@ function MeasurementJournal({
             />
           </TouchableOpacity>
         </View>
-      ))}
+        );
+      })}
 
       <TouchableOpacity
         style={styles.addRow}
@@ -522,7 +563,9 @@ export default function DataProcessingScreen({ route, navigation }) {
     setQText(show(loaded.Q, QUANTITIES.FLOW));
     setDurationText(show(loaded.pumpingDuration, QUANTITIES.TIME));
     // Журнал восстановления сразу открываем в соответствующей фазе
-    if (loaded.ofrType === OFR_TYPES.RECOVERY) setPhase(PHASES.RECOVERY);
+    // Журналов типа «восстановление уровня» больше не заводят, но
+    // заведённые прежде открываются как раньше — сразу в своей фазе
+    if (loaded.ofrType === LEGACY_OFR_TYPES.RECOVERY) setPhase(PHASES.RECOVERY);
     const toRow = (m) => ({
       id: m.id,
       tText: show(m.t, QUANTITIES.TIME),
@@ -645,7 +688,7 @@ export default function DataProcessingScreen({ route, navigation }) {
   // без входа в аккаунт карта считается закрытой — иначе премиум открывался бы
   // отсутствием связи
   const { has } = useEntitlements();
-  const mapAllowed = has("clusterMap");
+  const mapAllowed = CLUSTER_MAP_ENABLED && has("clusterMap");
 
   // Поле понижения на остановке правит открытый журнал, а не проект целиком
   const finalDrawdownText = finalDrawdownTexts[journalKey] ?? "";
@@ -669,6 +712,45 @@ export default function DataProcessingScreen({ route, navigation }) {
         stored: toBase(parseNumber(finalDrawdownText), QUANTITIES.DRAWDOWN),
       })
     : toBase(parseNumber(finalDrawdownText), QUANTITIES.DRAWDOWN);
+
+  /**
+   * Подставляет понижение на остановке из журнала откачки
+   *
+   * Раньше число стояло только подсказкой в пустом поле: расчёт его брал, а
+   * на вид поле оставалось незаполненным, и было непонятно, увидело
+   * приложение журнал или нет. Теперь оно вписывается значением — то же
+   * самое делает клавиша Ins в табл. «Окончание» настольного АНСДИМАТ.
+   *
+   * Подставляем один раз на журнал: очищенное руками поле обратно не
+   * заполняется, иначе стереть его было бы нельзя — журнал меняется от
+   * каждого нажатия, и эффект переписывал бы пустоту числом.
+   */
+  const seededStops = useRef(new Set()).current;
+  useEffect(() => {
+    if (!dualJournals || !isRecovery || loading) return;
+    if (seededStops.has(journalKey)) return;
+    const fromJournal = finalDrawdownAtStop({ measurements });
+    if (!(fromJournal > 0)) return;
+    seededStops.add(journalKey);
+    setFinalDrawdownTexts((prev) => {
+      if ((prev[journalKey] ?? "") !== "") return prev;
+      const shown = fromBase(fromJournal, QUANTITIES.DRAWDOWN);
+      return {
+        ...prev,
+        [journalKey]: isFinite(shown)
+          ? String(Number(shown.toPrecision(SHOWN_PRECISION)))
+          : "",
+      };
+    });
+  }, [
+    dualJournals,
+    isRecovery,
+    loading,
+    journalKey,
+    measurements,
+    fromBase,
+    seededStops,
+  ]);
 
   /**
    * Восстановился ли уровень
@@ -695,14 +777,6 @@ export default function DataProcessingScreen({ route, navigation }) {
   const [fitMode, setFitMode] = useState(FIT_MODES.AUTO);
   const [selectedPoints, setSelectedPoints] = useState([]);
   /**
-   * По какой кривой ведётся прямая в фазе восстановления
-   *
-   * На восстановлении на полотне две кривые, и прямую можно вести по любой.
-   * По умолчанию — по откачке: так считалось до появления второй кривой, и
-   * прежние числа не должны меняться сами собой.
-   */
-  const [fitSeries, setFitSeries] = useState(FIT_SERIES.PUMPING);
-  /**
    * Масштабы графика по ключу системы координат
    *
    * Живёт здесь, а не в графике: развёрнутый и обычный график — две разные
@@ -719,6 +793,24 @@ export default function DataProcessingScreen({ route, navigation }) {
    * размерности сдвигала бы прямую, а вместе с ней и пьезопроводность.
    */
   const [freeAnchors, setFreeAnchors] = useState(null);
+
+  /**
+   * Скважины, снятые с полотна
+   *
+   * Куст из пяти скважин даёт пять кривых, и разобрать их вместе нельзя.
+   * Скрытие не трогает ни журналы, ни расчёт: убирается только линия
+   * сравнения. Открытую скважину скрыть нечем — по ней идёт прямая, и она
+   * выбирается теми же чипами выше.
+   */
+  const [hiddenWells, setHiddenWells] = useState(() => new Set());
+  const toggleWellVisible = useCallback((wellId) => {
+    setHiddenWells((prev) => {
+      const next = new Set(prev);
+      if (next.has(wellId)) next.delete(wellId);
+      else next.add(wellId);
+      return next;
+    });
+  }, []);
 
   /**
    * Доступны ли виды с расстоянием в абсциссе
@@ -814,9 +906,10 @@ export default function DataProcessingScreen({ route, navigation }) {
    * оси абсцисс отложено отношение t/t′, а не время, и от этого зависит всё
    * остальное — от подписи оси до формулы расчёта.
    */
-  const theisPlot =
-    theisRecovery ||
-    (dualJournals && isRecovery && fitSeries === FIT_SERIES.RECOVERY);
+  // Фаза восстановления обрабатывается прямой Тейса всегда: на полотне
+  // только остаточное понижение, а оно спрямляется по lg(t/t′) и нигде
+  // больше. Кривой откачки рядом с ним теперь не бывает, см. chartRawSeries
+  const theisPlot = isRecovery;
 
   /**
    * Кривые открытого графика в базовых единицах
@@ -836,6 +929,7 @@ export default function DataProcessingScreen({ route, navigation }) {
               name: activeWell?.name,
               role: SERIES_ROLES.FIT,
               measurements: recovery.points.map((point) => ({
+                row: point.row,
                 t: point.t / point.tPrime,
                 s: point.y,
               })),
@@ -854,7 +948,6 @@ export default function DataProcessingScreen({ route, navigation }) {
       wellMeasurements,
       moment,
       isRecovery: isRecovery && dualJournals,
-      fitSeries,
       activeWellName: activeWell?.name,
       // Тем же округлением, с каким замер лёг в базу: иначе полчаса, введённые
       // как «0.5 ч» и как «30 мин», разойдутся в последнем разряде и попадут
@@ -874,7 +967,6 @@ export default function DataProcessingScreen({ route, navigation }) {
     moment,
     isRecovery,
     dualJournals,
-    fitSeries,
     activeWell,
   ]);
 
@@ -886,10 +978,28 @@ export default function DataProcessingScreen({ route, navigation }) {
     return (fitted?.measurements ?? []).map((m) => ({
       x: m.t,
       s: m.s,
+      row: m.row,
       group: m.group,
       groupName: m.groupName,
     }));
   }, [rawSeries]);
+
+  /**
+   * Номер точки на полотне по строке журнала
+   *
+   * Отметки точек нумерованы по ряду, который лежит на графике, а не по
+   * таблице: пустые строки и замеры до остановки насоса в ряд не попадают,
+   * а на площадном прослеживании точки ещё и переставлены по расстоянию.
+   * Строка, которой на полотне нет, отмечена быть не может — по ней нечего
+   * проводить прямую.
+   */
+  const pointIndexByRow = useMemo(() => {
+    const byRow = new Map();
+    basePoints.forEach((point, index) => {
+      if (point.row != null) byRow.set(point.row, index);
+    });
+    return byRow;
+  }, [basePoints]);
 
   /**
    * Обработка восстановления у одиночной и кустовой откачки
@@ -1092,9 +1202,9 @@ export default function DataProcessingScreen({ route, navigation }) {
     phase,
     trackingKind === TRACKING_KINDS.TIME ? activeWellId : "cluster",
     trackingKind === TRACKING_KINDS.AREA ? moment : "",
-    // Выбор кривой на восстановлении меняет саму ось: у прямой Тейса по
-    // абсциссе отложено отношение t/t′, а не время
-    isRecovery ? fitSeries : "",
+    // Фаза меняет саму ось: у прямой Тейса по абсциссе отложено отношение
+    // t/t′, а не время
+    isRecovery ? "recovery" : "",
     // Смена размерности растягивает оси: прежнее окно смотрело бы не туда
     abscissaFactor,
     fromBase(1, QUANTITIES.DRAWDOWN),
@@ -1134,6 +1244,30 @@ export default function DataProcessingScreen({ route, navigation }) {
         }),
       };
     }
+    // Журнал восстановления заполнен, а остатка не вышло: подъём уровня во
+    // всех строках больше понижения на остановке. Кривая раньше ложилась
+    // горизонталью по нулю и молчала о причине, см. residualDrawdown
+    if (isRecovery && dualJournals && recoveryMeasurements.length > 0) {
+      return !(finalDrawdown > 0)
+        ? {
+            title: I18n.t("recoveryNoStopTitle", {
+              defaultValue: "Не задано понижение на остановке",
+            }),
+            hint: I18n.t("recoveryNoStopHint", {
+              defaultValue:
+                "Остаточное понижение отсчитывается от него. Заполните журнал откачки этой скважины до момента остановки насоса или впишите понижение в поле выше.",
+            }),
+          }
+        : {
+            title: I18n.t("recoveryOvershootTitle", {
+              defaultValue: "Журнал не сходится с понижением на остановке",
+            }),
+            hint: I18n.t("recoveryOvershootHint", {
+              defaultValue:
+                "Подъём уровня во всех строках больше понижения на остановке, и остатка не остаётся. Проверьте, что в журнале восстановления стоит подъём уровня от момента остановки, а понижение на остановке взято у этой же скважины.",
+            }),
+          };
+    }
     if (trackingKind === TRACKING_KINDS.AREA) {
       if (wellsWithDistance.length < 2) {
         return {
@@ -1163,6 +1297,8 @@ export default function DataProcessingScreen({ route, navigation }) {
     basePoints.length,
     theisPlot,
     dualJournals,
+    isRecovery,
+    finalDrawdown,
     recoveryMeasurements.length,
     trackingKind,
     wellsWithDistance.length,
@@ -1175,26 +1311,76 @@ export default function DataProcessingScreen({ route, navigation }) {
   // Только у временнóго прослеживания: на графиках с расстоянием весь куст
   // уже лежит в основном ряду, и соседние кривые задвоили бы точки
   const extraSeries = useMemo(() => {
-    // На прямой Тейса по оси абсцисс отложено отношение t/t′, и время
-    // соседней скважины там означало бы не то
-    if (!clusterWells || trackingKind !== TRACKING_KINDS.TIME || theisPlot) {
-      return [];
+    if (!clusterWells) return [];
+
+    // Строки журналов стоят в выбранных размерностях, и кривые сравнения
+    // собираются прямо из них: `dataSeries` переводит свои ряды туда же
+    const numbers = (rowsOf) =>
+      (rowsOf ?? NO_ROWS)
+        .map((row) => ({
+          t: parseNumber(row.tText),
+          s: parseNumber(row.sText),
+        }))
+        .filter((m) => isFinite(m.t) && isFinite(m.s));
+
+    const others = wells.filter(
+      (well) => well.id !== activeWellId && !hiddenWells.has(well.id),
+    );
+
+    // Фаза восстановления: рядом с открытой скважиной идут восстановления
+    // соседей, а не их откачки. Ось общая — отношение t/t′ безразмерно, —
+    // а понижение на остановке у каждой скважины своё, поэтому остаток
+    // считается по её собственному журналу откачки
+    if (isRecovery) {
+      if (!dualJournals) return [];
+      const durationShown = parseNumber(durationText);
+      return others
+        .map((well) => ({
+          id: well.id,
+          name: well.name,
+          role: SERIES_ROLES.REFERENCE,
+          measurements: recoveryAbscissa({
+            measurements: residualDrawdown({
+              measurements: numbers(recoveryJournals[well.id]),
+              finalDrawdown: finalDrawdownAtStop({
+                measurements: numbers(journals[well.id]),
+                stored:
+                  well.finalDrawdown > 0
+                    ? fromBase(well.finalDrawdown, QUANTITIES.DRAWDOWN)
+                    : 0,
+              }),
+            }),
+            pumpingDuration: durationShown,
+          }),
+        }))
+        .filter((series) => series.measurements.length > 0);
     }
-    return wells
-      .filter((well) => well.id !== activeWellId)
+
+    // На видах с расстоянием весь куст уже лежит одним рядом: вторая кривая
+    // задвоила бы точки
+    if (trackingKind !== TRACKING_KINDS.TIME) return [];
+
+    return others
       .map((well) => ({
         id: well.id,
         name: well.name,
         role: SERIES_ROLES.REFERENCE,
-        measurements: (journals[well.id] ?? NO_ROWS)
-          .map((row) => ({
-            t: parseNumber(row.tText),
-            s: parseNumber(row.sText),
-          }))
-          .filter((m) => isFinite(m.t) && isFinite(m.s)),
+        measurements: numbers(journals[well.id]),
       }))
       .filter((series) => series.measurements.length > 0);
-  }, [clusterWells, trackingKind, theisPlot, wells, activeWellId, journals]);
+  }, [
+    clusterWells,
+    trackingKind,
+    isRecovery,
+    dualJournals,
+    durationText,
+    wells,
+    activeWellId,
+    hiddenWells,
+    journals,
+    recoveryJournals,
+    fromBase,
+  ]);
 
   // Всё, что рисуется на полотне: свои кривые и соседние скважины куста
   const chartSeries = useMemo(
@@ -1205,16 +1391,14 @@ export default function DataProcessingScreen({ route, navigation }) {
   /**
    * Есть ли на полотне выбор кривой
    *
-   * Только у куста и только на откачке в координатах s — lg t: там кривая и
-   * есть скважина, и выбрать её значит открыть её журнал вместе с её
-   * расстоянием r. На видах с расстоянием весь куст лежит одним рядом, а на
-   * восстановлении вторая кривая — это фаза опыта, и её выбирает
-   * переключатель «прямая по откачке / по восстановлению».
+   * Только у куста и только там, где кривая и есть скважина: в координатах
+   * s — lg t на откачке и на всей фазе восстановления. Выбрать кривую значит
+   * открыть её журнал вместе с её расстоянием r. На видах с расстоянием весь
+   * куст лежит одним рядом, и выбирать там нечего.
    */
   const seriesPickable =
     clusterWells &&
-    trackingKind === TRACKING_KINDS.TIME &&
-    !isRecovery &&
+    (isRecovery || trackingKind === TRACKING_KINDS.TIME) &&
     extraSeries.length > 0;
 
   // Опытная скважина — столбец таблицы расстояний: считают до неё
@@ -1394,9 +1578,13 @@ export default function DataProcessingScreen({ route, navigation }) {
    *
    * Берутся из обработки целиком, а не пересчитываются по наклону: у
    * площадного прослеживания свой множитель (0.366 вместо 0.183) и обратный
-   * знак наклона, и формула T = 0.183·Q/a к нему не подходит. Прямая Тейса
-   * обрабатывается отдельным методом и водоотдачи не даёт: расстояние в неё
-   * не входит.
+   * знак наклона, и формула T = 0.183·Q/a к нему не подходит.
+   *
+   * У прямой Тейса пересчёт свой. Отсечка на ней смысла пьезопроводности не
+   * несёт — прямая обязана выходить из начала координат, — поэтому a берётся
+   * из понижения на остановке насоса, см. diffusivityFromRecovery. Расстояние
+   * для неё есть только у куста: у одиночной откачки и у отдельного журнала
+   * восстановления скважин в проекте нет, и a там остаётся с прочерком.
    */
   const active = useMemo(() => {
     if (theisPlot) {
@@ -1404,15 +1592,33 @@ export default function DataProcessingScreen({ route, navigation }) {
       // кустовой откачки; метод один и тот же
       const source = theisRecovery ? recovery : dualRecovery;
       const slope = manualLine ? manualLine.slope : source.slope;
+      const T = transmissivityFromSlope(Q, slope);
+      const a = diffusivityFromRecovery({
+        slope,
+        finalDrawdown,
+        pumpingDuration,
+        r: activeWell?.distance,
+      });
       return {
         slope,
-        T: transmissivityFromSlope(Q, slope),
-        S: NaN,
-        a: NaN,
+        T,
+        S: isFinite(T) && a > 0 ? T / a : NaN,
+        a,
       };
     }
     return result;
-  }, [theisPlot, theisRecovery, recovery, dualRecovery, manualLine, Q, result]);
+  }, [
+    theisPlot,
+    theisRecovery,
+    recovery,
+    dualRecovery,
+    manualLine,
+    Q,
+    result,
+    finalDrawdown,
+    pumpingDuration,
+    activeWell,
+  ]);
 
   const activeSlope = active.slope;
   // На прямой Тейса ось X всегда логарифмическая, поэтому формула
@@ -1779,7 +1985,7 @@ export default function DataProcessingScreen({ route, navigation }) {
    * координаты не трогаются.
    */
   useEffect(() => {
-    if (!clusterWells || !wells.length) return;
+    if (!CLUSTER_MAP_ENABLED || !clusterWells || !wells.length) return;
     // Number.isFinite: глобальный isFinite приводит null к нулю, и скважина
     // без координат считалась бы уже расставленной — все маркеры ложились
     // в одну точку у нулевого меридиана
@@ -2013,7 +2219,7 @@ export default function DataProcessingScreen({ route, navigation }) {
   };
 
   /**
-   * Переключает фазу опыта и подставляет длительность откачки
+   * Переключает фазу опыта, сбрасывает отметки и подставляет длительность
    *
    * Длительность берётся из последней строки журнала откачки: насос работал
    * до неё. В настольном АНСДИМАТ то же самое делает клавиша Ins в табл.
@@ -2029,15 +2235,17 @@ export default function DataProcessingScreen({ route, navigation }) {
    * @param {string} next - выбранная фаза
    */
   const handlePhaseChange = (next) => {
+    if (next === phase) return;
     setPhase(next);
-    // Выбор фазы задаёт и то, по какой кривой считаются T, a, C и S: выбрал
-    // восстановление — числа идут по восстановлению. Переключатель кривой
-    // ниже остаётся, но как отступление от этого правила, а не как
-    // единственный способ его задать
-    setFitSeries(
-      next === PHASES.RECOVERY ? FIT_SERIES.RECOVERY : FIT_SERIES.PUMPING,
-    );
-
+    // Отметки и свободная прямая сбрасываются, как и при переходе к соседней
+    // скважине: на полотне теперь другая кривая — у откачки понижение по
+    // времени, у восстановления остаточное понижение по lg(t/t′), — и
+    // прежние отметки указывали бы на чужие точки
+    setSelectedPoints([]);
+    setFreeAnchors(null);
+    // Фаза задаёт и то, по какой кривой считаются T, a, C и S: выбрал
+    // восстановление — числа идут по восстановлению, и другой кривой на
+    // полотне нет
     if (next !== PHASES.RECOVERY || !dualJournals || !measurements.length)
       return;
 
@@ -2289,6 +2497,63 @@ export default function DataProcessingScreen({ route, navigation }) {
               </TouchableOpacity>
             </View>
 
+            {/* Что показывать на полотне. Отдельно от выбора открытой
+                скважины: та задаёт, чей журнал правится и по чьим точкам идёт
+                прямая, — снять её с графика нельзя. Остальные кривые нужны
+                для сравнения, и на кусте из пяти скважин их приходится
+                разгружать. Расчёт от видимости не зависит вовсе */}
+            {wells.length > 1 && (
+              <View style={styles.wellChips}>
+                {wells
+                  .filter((well) => well.id !== activeWellId)
+                  .map((well) => {
+                    const shown = !hiddenWells.has(well.id);
+                    return (
+                      <TouchableOpacity
+                        key={well.id}
+                        onPress={() => toggleWellVisible(well.id)}
+                        style={[
+                          styles.visibilityChip,
+                          {
+                            borderColor: shown
+                              ? theme.colors.secondary
+                              : theme.colors.border,
+                            backgroundColor: shown
+                              ? theme.colors.surface
+                              : theme.colors.surfaceSunken,
+                          },
+                        ]}
+                        accessibilityRole="switch"
+                        accessibilityState={{ checked: shown }}
+                      >
+                        <MaterialIcons
+                          name={shown ? "visibility" : "visibility-off"}
+                          size={15}
+                          color={
+                            shown
+                              ? theme.colors.secondary
+                              : theme.colors.textSecondary
+                          }
+                        />
+                        <Text
+                          numberOfLines={1}
+                          style={[
+                            styles.visibilityChipName,
+                            {
+                              color: shown
+                                ? theme.colors.text
+                                : theme.colors.textSecondary,
+                            },
+                          ]}
+                        >
+                          {well.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+              </View>
+            )}
+
             {addingWell && (
               <View style={styles.wellForm}>
                 <TextInput
@@ -2461,7 +2726,7 @@ export default function DataProcessingScreen({ route, navigation }) {
         {/* Карта куста под таблицей: то же расстояние, но руками. Скважину
             тащат по карте, расстояние считается по координатам и садится
             в таблицу — там его потом можно поправить и вручную */}
-        {clusterWells && mapPoints.length > 0 && !mapAllowed && (
+        {CLUSTER_MAP_ENABLED && clusterWells && mapPoints.length > 0 && !mapAllowed && (
           <PremiumLock
             style={styles.mapBlock}
             height={mapHeight}
@@ -2743,9 +3008,18 @@ export default function DataProcessingScreen({ route, navigation }) {
           valueLabel={I18n.t("columnDrawdown", {
             unit: unitLabel(QUANTITIES.DRAWDOWN),
           })}
-          selectable={fitMode === FIT_MODES.AUTO}
-          selected={selectedPoints}
-          onToggleSelect={handleToggleSelect}
+          {/* Отметки стоят в той таблице, чей ряд лежит на полотне. У
+              одиночной и кустовой откачки на восстановлении это второй
+              журнал, и здесь отмечать нечего; у видов ОФР с одним журналом
+              на полотно идут его же строки, и отметки остаются тут */
+          ...(dualJournals && isRecovery
+            ? {}
+            : {
+                selectable: fitMode === FIT_MODES.AUTO,
+                selected: selectedPoints,
+                pointIndexes: pointIndexByRow,
+                onToggleSelect: handleToggleSelect,
+              })}
         />
 
         {/* Журнал восстановления — второй таблицей под откачкой. Общей таблицы
@@ -2779,6 +3053,14 @@ export default function DataProcessingScreen({ route, navigation }) {
                 unit: unitLabel(QUANTITIES.DRAWDOWN),
                 defaultValue: "восстановление, м",
               })}
+              /* Прямую по двум точкам ведут по той кривой, что на полотне.
+                 На восстановлении это остаточное понижение, и отмечать точки
+                 нужно здесь: отметки на журнале откачки показывали бы номера
+                 строк чужого ряда */
+              selectable={fitMode === FIT_MODES.AUTO}
+              selected={selectedPoints}
+              pointIndexes={pointIndexByRow}
+              onToggleSelect={handleToggleSelect}
             />
 
             {/* Закончен ли опыт. Уровень считают восстановленным, когда
@@ -2851,63 +3133,20 @@ export default function DataProcessingScreen({ route, navigation }) {
           </View>
         )}
 
-        {/* По какой кривой ведётся прямая. На восстановлении на полотне две
-            кривые, и наклон снимают с одной из них.
-
-            Выбор восстановления переводит ось абсцисс в отношение t/t′:
-            остаточное понижение спрямляется только там, и только там формула
-            T = 0.183·Q/a верна. Обе кривые в этих координатах не совмещаются —
-            у замеров откачки нет времени от остановки насоса */}
-        {dualJournals && isRecovery && recoveryMeasurements.length > 0 && (
-          <View style={[styles.modeRow, styles.phaseRow]}>
-            {[
-              {
-                key: FIT_SERIES.PUMPING,
-                label: I18n.t("fitByPumping", {
-                  defaultValue: "Прямая по откачке",
-                }),
-              },
-              {
-                key: FIT_SERIES.RECOVERY,
-                label: I18n.t("fitByRecovery", {
-                  defaultValue: "Прямая по восстановлению",
-                }),
-              },
-            ].map((option) => {
-              const active = option.key === fitSeries;
-              return (
-                <TouchableOpacity
-                  key={option.key}
-                  onPress={() => setFitSeries(option.key)}
-                  style={[
-                    styles.phaseChip,
-                    {
-                      backgroundColor: active
-                        ? theme.colors.primary
-                        : theme.colors.surfaceSunken,
-                      borderColor: active
-                        ? theme.colors.primary
-                        : theme.colors.border,
-                    },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                >
-                  <Text
-                    numberOfLines={1}
-                    style={[
-                      styles.modeChipText,
-                      {
-                        color: active ? "#FFFFFF" : theme.colors.textSecondary,
-                      },
-                    ]}
-                  >
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+        {/* Объяснение пустого ряда. Заглушка внутри полотна показывается
+            только когда на нём нет вообще ничего, а у куста рядом лежат
+            кривые соседних скважин — и открытая скважина оставалась без
+            кривой молча */}
+        {!!chartEmpty && (
+          <Text
+            style={[
+              type.caption,
+              styles.hint,
+              { color: theme.colors.textSecondary },
+            ]}
+          >
+            {chartEmpty.title}. {chartEmpty.hint}
+          </Text>
         )}
 
         {theisPlot && (
@@ -3042,7 +3281,12 @@ export default function DataProcessingScreen({ route, navigation }) {
           {!chartFullscreen &&
             (chartView === VIEWS.DIAGNOSTIC && !theisPlot ? (
               <>
-                <DiagnosticPlot result={diagnosis} width={contentWidth} />
+                <DiagnosticPlot
+                  result={diagnosis}
+                  width={contentWidth}
+                  viewportStore={viewportStore}
+                  scrollRef={scrollRef}
+                />
                 <RegimeVerdict result={diagnosis} Q={Q} comparisonT={activeT} />
               </>
             ) : (
@@ -3629,6 +3873,20 @@ const styles = StyleSheet.create({
     maxWidth: 220,
   },
   // Урна сама несёт своё поле, поэтому справа чип ужимается
+  visibilityChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  visibilityChipName: {
+    fontSize: 13,
+    fontWeight: '600',
+    maxWidth: 96,
+  },
   wellChipDeletable: {
     paddingRight: spacing.xs,
   },

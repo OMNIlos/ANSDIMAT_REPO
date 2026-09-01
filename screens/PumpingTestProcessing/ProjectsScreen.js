@@ -35,14 +35,84 @@ import {
 import { OFR_TYPES } from "../../db/schema";
 import { useUnits } from "../../UnitsContext";
 import { QUANTITIES } from "../../calc/units";
+import { shareProjectFile } from "../../share/exportProject";
+import {
+  hasDrawdownJournal,
+  hasFlowRate,
+  ofrSummaryLines,
+} from "../../share/ofrTextSummary";
+import { processLugeon } from "../../calc/lugeon";
+import { processVadoseFill } from "../../calc/vadoseFill";
+import { formatValue } from "../calculator/shared";
+import { useImport } from "../../share/ImportContext";
 import { spacing, radius, type, elevation } from "../../theme";
 
-const OFR_OPTIONS = [
+export const OFR_OPTIONS = [
   { key: OFR_TYPES.SINGLE, labelKey: "ofr_single" },
   { key: OFR_TYPES.CLUSTER, labelKey: "ofr_cluster" },
-  { key: OFR_TYPES.FILL, labelKey: "ofr_fill" },
-  { key: OFR_TYPES.RECOVERY, labelKey: "ofr_recovery" },
+  { key: OFR_TYPES.SLUG, labelKey: "ofr_slug" },
+  { key: OFR_TYPES.LUGEON, labelKey: "ofr_lugeon" },
+  { key: OFR_TYPES.VADOSE, labelKey: "ofr_vadose" },
 ];
+
+/**
+ * Экран обработки по виду ОФР
+ *
+ * Откачки обрабатываются прямой Купера — Джейкоба на общем экране, у
+ * остальных видов схема своя: у экспресс-опробования график lg(s⁰/s) — t,
+ * у поинтервального нагнетания таблица ступеней, у налива в шурф расчёт по
+ * одной формуле без журнала. Сводить их в один экран значило бы держать три
+ * несвязанных интерфейса под общими кнопками.
+ *
+ * Виды прежних версий сюда не попадают и открываются на общем экране — там
+ * они и обрабатывались, см. LEGACY_OFR_TYPES.
+ */
+const SCREEN_BY_OFR = {
+  [OFR_TYPES.SLUG]: "SlugTest",
+  [OFR_TYPES.LUGEON]: "LugeonTest",
+  [OFR_TYPES.VADOSE]: "VadoseFill",
+};
+
+/**
+ * Куда вести журнал этого вида ОФР
+ *
+ * @param {string} ofrType - вид ОФР, см. OFR_TYPES
+ * @returns {string} имя маршрута
+ */
+export function routeFor(ofrType) {
+  return SCREEN_BY_OFR[ofrType] ?? "DataProcessing";
+}
+
+/**
+ * Коэффициент фильтрации журнала для строки списка
+ *
+ * У нагнетания и налива результат не хранится: он выводится из исходных
+ * данных и не может с ними разойтись. Считать его здесь дёшево — в списке
+ * лежат готовые `params`, и лишнего обращения к базе не нужно.
+ *
+ * Экспресс-опробование сюда не входит: его k держится наклоном прямой, а
+ * замеры в список не приходят.
+ *
+ * @param {Object} project - строка списка журналов
+ * @returns {number|null} k, м/сут; null, если у вида его нет или он не считается
+ */
+function conductivityOf(project) {
+  const params = project?.params;
+  if (!params) return null;
+  let k = NaN;
+  if (project.ofrType === OFR_TYPES.VADOSE) {
+    k = processVadoseFill(params).k;
+  } else if (project.ofrType === OFR_TYPES.LUGEON) {
+    k = processLugeon({
+      stages: params.stages,
+      interval: params.interval,
+      lw: params.lw,
+      rw: params.rw,
+      density: params.density,
+    }).meanK;
+  }
+  return isFinite(k) ? k : null;
+}
 
 /**
  * Форматирует дату создания проекта
@@ -59,13 +129,19 @@ function formatDate(timestamp) {
 
 export default function ProjectsScreen({ navigation }) {
   const theme = useTheme();
-  // Журнал уходит наружу в тех же размерностях, в каких геолог его видел
+  // Таблица замеров уходит наружу в тех же размерностях, в каких геолог её
+  // видел. К файлу проекта это не относится: там всё в базовых единицах,
+  // иначе получатель с другими настройками прочёл бы чужие числа как свои
   const { unitLabel, fromBase } = useUnits();
+  const { openFromPicker } = useImport();
 
   const [projects, setProjects] = useState([]);
   const [name, setName] = useState("");
   const [ofrType, setOfrType] = useState(null);
   const [menuVisible, setMenuVisible] = useState(false);
+  // Журнал, для которого открыто меню «поделиться». Идентификатор, а не
+  // флаг: меню своё у каждой карточки
+  const [shareMenuFor, setShareMenuFor] = useState(null);
   // Проект, для которого запрошено удаление
   const [pendingDelete, setPendingDelete] = useState(null);
   const [nameError, setNameError] = useState("");
@@ -113,7 +189,7 @@ export default function ProjectsScreen({ navigation }) {
       setPumpingWell("");
       setObservationWell("");
       await load();
-      navigation.navigate("DataProcessing", { projectId: created.id });
+      navigation.navigate(routeFor(created.ofrType), { projectId: created.id });
     } catch {
       setNameError(
         I18n.t("createFailed", {
@@ -140,33 +216,69 @@ export default function ProjectsScreen({ navigation }) {
   };
 
   /**
+   * Отправляет журнал файлом `.ansdimat`
+   *
+   * Основной способ обмена: получатель открывает файл двойным нажатием и
+   * получает рабочий журнал со скважинами, обеими фазами замеров и
+   * результатами расчёта — всё то, что в таблицу замеров не помещается.
+   */
+  const handleShareFile = async (project) => {
+    setShareMenuFor(null);
+    try {
+      await shareProjectFile(project.id);
+    } catch {
+      // Пользователь закрыл системное окно или файл не записался. Второе
+      // почти невозможно: журнал только что прочитан из той же базы
+    }
+  };
+
+  /**
    * Отправляет журнал текстом
    *
    * Раньше уходил JSON.stringify всего объекта. Получатель открывал письмо
    * и видел дамп со служебными полями — прочитать замеры в нём невозможно,
    * а вставить в отчёт тем более. Теперь это таблица, которую можно
    * скопировать хоть в Excel.
+   *
+   * Остаётся рядом с файлом намеренно: вставить замеры в отчёт — отдельная
+   * задача, и файл проекта её не решает.
    */
-  const handleShare = async (project) => {
+  const handleShareText = async (project) => {
+    setShareMenuFor(null);
     const full = await getProject(project.id);
     if (!full) return;
+
+    // Дебит и таблица «время — понижение» есть не у всех видов ОФР:
+    // нагнетание задаётся ступенями давления, налив в шурф — расходом и
+    // размерами выработки. Пустая таблица с шапкой «t, мин» была бы для них
+    // не выгрузкой, а бланком, см. share/ofrTextSummary.js
+    const journal = hasDrawdownJournal(full.ofrType);
 
     const header = [
       full.name,
       `${I18n.t(`ofr_${full.ofrType}`, { defaultValue: full.ofrType })} · ${formatDate(full.createdAt)}`,
-      `Q = ${fromBase(full.Q, QUANTITIES.FLOW)} ${unitLabel(QUANTITIES.FLOW)}`,
+      hasFlowRate(full.ofrType)
+        ? `Q = ${fromBase(full.Q, QUANTITIES.FLOW)} ${unitLabel(QUANTITIES.FLOW)}`
+        : null,
       isFinite(full.results?.T) && full.results.T !== null
         ? `T = ${fromBase(full.results.T, QUANTITIES.TRANSMISSIVITY).toFixed(2)} ${unitLabel(QUANTITIES.TRANSMISSIVITY)}`
         : null,
-      "",
-      `t, ${unitLabel(QUANTITIES.TIME)}\ts, ${unitLabel(QUANTITIES.DRAWDOWN)}`,
-    ].filter(Boolean);
+      ...ofrSummaryLines(full, { fromBase, unitLabel }),
+      ...(journal
+        ? [
+            "",
+            `t, ${unitLabel(QUANTITIES.TIME)}\ts, ${unitLabel(QUANTITIES.DRAWDOWN)}`,
+          ]
+        : []),
+    ].filter((line) => line !== null && line !== undefined);
 
     const show = (value, quantity) =>
       Number(fromBase(value, quantity).toPrecision(10));
-    const rows = full.measurements.map(
-      (m) => `${show(m.t, QUANTITIES.TIME)}\t${show(m.s, QUANTITIES.DRAWDOWN)}`,
-    );
+    const rows = journal
+      ? full.measurements.map(
+          (m) => `${show(m.t, QUANTITIES.TIME)}\t${show(m.s, QUANTITIES.DRAWDOWN)}`,
+        )
+      : [];
 
     // Восстановление уходит отдельным блоком со своей шапкой: время в нём
     // отсчитывается от остановки насоса, и подклеенное к откачке одной
@@ -364,6 +476,26 @@ export default function ProjectsScreen({ navigation }) {
           {I18n.t("previouslyCreated", { defaultValue: "Ранее созданные" })} ·{" "}
           {projects.length}
         </Text>
+
+        {/* Явный импорт — основной путь на Android: системный поставщик
+            документов прячет имя файла, и объявленный в манифесте фильтр
+            по расширению до таких ссылок не достаёт */}
+        <TouchableOpacity
+          style={[styles.importButton, { borderColor: theme.colors.border }]}
+          onPress={openFromPicker}
+          accessibilityRole="button"
+        >
+          <MaterialIcons
+            name="file-download"
+            size={16}
+            color={theme.colors.textSecondary}
+          />
+          <Text
+            style={[styles.importButtonText, { color: theme.colors.textSecondary }]}
+          >
+            {I18n.t("importFromFile", { defaultValue: "Импорт" })}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {projects.length === 0 ? (
@@ -412,7 +544,9 @@ export default function ProjectsScreen({ navigation }) {
                 место — палец же по привычке бьёт в название */}
             <TouchableOpacity
               onPress={() =>
-                navigation.navigate("DataProcessing", { projectId: project.id })
+                navigation.navigate(routeFor(project.ofrType), {
+                  projectId: project.id,
+                })
               }
               accessibilityRole="button"
               accessibilityLabel={project.name}
@@ -438,9 +572,14 @@ export default function ProjectsScreen({ navigation }) {
                 </Text>
               </View>
 
-              {/* Что внутри журнала: тип опыта, сколько замеров и получена ли
-                  водопроводимость. Без этого список — просто набор названий,
-                  и заполненный журнал не отличить от заведённого и забытого */}
+              {/* Что внутри журнала: тип опыта, сколько замеров и получен ли
+                  результат. Без этого список — просто набор названий, и
+                  заполненный журнал не отличить от заведённого и забытого.
+
+                  У нагнетания и налива замеров в этом смысле нет: данные
+                  лежат ступенями и полями формы. Писать им «замеров нет»
+                  значило бы называть заполненный журнал пустым, поэтому там
+                  сразу стоит посчитанный коэффициент фильтрации */}
               <Text
                 style={[
                   styles.projectMeta,
@@ -450,15 +589,23 @@ export default function ProjectsScreen({ navigation }) {
                 {I18n.t(`ofr_${project.ofrType}`, {
                   defaultValue: project.ofrType,
                 })}
-                {" · "}
-                {project.measurementsCount > 0
-                  ? I18n.t("measurementsCount", {
-                      count: project.measurementsCount,
-                      defaultValue: `${project.measurementsCount} замеров`,
-                    })
-                  : I18n.t("noMeasurements", { defaultValue: "замеров нет" })}
+                {hasDrawdownJournal(project.ofrType)
+                  ? ` · ${
+                      project.measurementsCount > 0
+                        ? I18n.t("measurementsCount", {
+                            count: project.measurementsCount,
+                            defaultValue: `${project.measurementsCount} замеров`,
+                          })
+                        : I18n.t("noMeasurements", {
+                            defaultValue: "замеров нет",
+                          })
+                    }`
+                  : ""}
                 {isFinite(project.results?.T) && project.results.T !== null
                   ? ` · T = ${fromBase(project.results.T, QUANTITIES.TRANSMISSIVITY).toFixed(1)} ${unitLabel(QUANTITIES.TRANSMISSIVITY)}`
+                  : ""}
+                {conductivityOf(project) !== null
+                  ? ` · k = ${formatValue(fromBase(conductivityOf(project), QUANTITIES.CONDUCTIVITY))} ${unitLabel(QUANTITIES.CONDUCTIVITY)}`
                   : ""}
               </Text>
             </TouchableOpacity>
@@ -483,17 +630,45 @@ export default function ProjectsScreen({ navigation }) {
                 />
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => handleShare(project)}
-                accessibilityRole="button"
+              {/* Способов поделиться два, и они не взаимозаменяемы: файл
+                  переносит журнал целиком, текст — таблицу замеров для
+                  отчёта. Выбор отдан меню, чтобы иконка не решала за
+                  геолога, что именно ему сейчас нужно */}
+              <Menu
+                visible={shareMenuFor === project.id}
+                onDismiss={() => setShareMenuFor(null)}
+                anchor={
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => setShareMenuFor(project.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={I18n.t("share", {
+                      defaultValue: "Поделиться",
+                    })}
+                  >
+                    <MaterialIcons
+                      name="ios-share"
+                      size={18}
+                      color={theme.colors.textSecondary}
+                    />
+                  </TouchableOpacity>
+                }
               >
-                <MaterialIcons
-                  name="ios-share"
-                  size={18}
-                  color={theme.colors.textSecondary}
+                <Menu.Item
+                  onPress={() => handleShareFile(project)}
+                  leadingIcon="file-export-outline"
+                  title={I18n.t("shareAsFile", {
+                    defaultValue: "Файл проекта (.ansdimat)",
+                  })}
                 />
-              </TouchableOpacity>
+                <Menu.Item
+                  onPress={() => handleShareText(project)}
+                  leadingIcon="table"
+                  title={I18n.t("shareAsText", {
+                    defaultValue: "Таблица замеров (текст)",
+                  })}
+                />
+              </Menu>
 
               <TouchableOpacity
                 style={styles.actionButton}
@@ -580,6 +755,23 @@ const styles = StyleSheet.create({
   listHeader: {
     marginTop: spacing.xl,
     marginBottom: spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md,
+  },
+  importButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  importButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
   },
   empty: {
     alignItems: "center",
