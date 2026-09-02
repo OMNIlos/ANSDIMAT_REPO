@@ -89,7 +89,7 @@
       [
         "expo-media-library",
         {
-          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos to save charts.",
+          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos to save charts and attach them to field diary points.",
           "savePhotosPermission": "Allow $(PRODUCT_NAME) to save charts to your photo library.",
           "isAccessMediaLocationEnabled": true
         }
@@ -103,7 +103,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow $(PRODUCT_NAME) to attach photos from your library to field diary points.",
+          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos to save charts and attach them to field diary points.",
           "cameraPermission": "Allow $(PRODUCT_NAME) to take photos of observation points."
         }
       ],
