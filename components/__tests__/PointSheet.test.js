@@ -65,6 +65,9 @@ beforeEach(() => {
   mockRecorder = { start, stop, isRecording: false, durationMillis: 0, levels: [], denied: false };
 });
 
+// React 19: renderer.create() надо оборачивать в act(), иначе тест-рендерер
+// считается размонтированным ещё до первой проверки (см. другие тесты в
+// components/__tests__ — та же обёртка везде)
 const mount = (props) => {
   let tree;
   act(() => {
