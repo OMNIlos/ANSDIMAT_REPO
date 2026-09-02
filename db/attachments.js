@@ -143,22 +143,41 @@ export async function deleteAttachment(id) {
 }
 
 /**
- * Удаляет все вложения точки вместе с файлами
+ * Удаляет строки вложений точки, возвращает файлы на зачистку
  *
- * Вызывается из deletePoint: точка удаляется мягко, DELETE по ней не идёт, и
- * ON DELETE CASCADE не срабатывает.
+ * Только строки — файлы вне зоны действия этой функции, см.
+ * removeAttachmentFiles. Рассчитана на вызов изнутри чужой транзакции:
+ * deletePoint зовёт её внутри одного withTransactionAsync вместе с мягким
+ * удалением самой точки, чтобы крах между двумя изменениями не оставил точку
+ * живой в дневнике при уже стёртых вложениях (или наоборот).
  *
  * @param {string} pointId - точка
- * @returns {Promise<void>}
+ * @returns {Promise<string[]>} значения колонки `source` удалённых строк
  */
-export async function deleteAttachmentsForPoint(pointId) {
+export async function deleteAttachmentRowsForPoint(pointId) {
   const database = await getDatabase();
   const rows = await database.getAllAsync(
     'SELECT source FROM point_attachments WHERE point_id = ?',
     [pointId]
   );
-  if (rows.length === 0) return;
+  if (rows.length === 0) return [];
 
   await database.runAsync('DELETE FROM point_attachments WHERE point_id = ?', [pointId]);
-  await attachmentStore.removeAll(rows.map((row) => row.source));
+  return rows.map((row) => row.source);
+}
+
+/**
+ * Стирает файлы вложений, чьи строки уже удалены
+ *
+ * Отдельно от deleteAttachmentRowsForPoint и обязательно после её транзакции:
+ * файловая система нетранзакционна, и если бы файлы стирались внутри
+ * withTransactionAsync, откат транзакции вернул бы строки в базу, но не
+ * стёртые байты с диска.
+ *
+ * @param {string[]} sources - значения колонки `source`, см. deleteAttachmentRowsForPoint
+ * @returns {Promise<void>}
+ */
+export async function removeAttachmentFiles(sources) {
+  if (sources.length === 0) return;
+  await attachmentStore.removeAll(sources);
 }

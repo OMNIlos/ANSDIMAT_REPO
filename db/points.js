@@ -4,7 +4,7 @@
 
 import { getDatabase, createId } from './index';
 import { POINT_TYPES } from './schema';
-import { deleteAttachmentsForPoint } from './attachments';
+import { deleteAttachmentRowsForPoint, removeAttachmentFiles } from './attachments';
 
 /**
  * Преобразует строку таблицы в точку наблюдения
@@ -109,15 +109,27 @@ export async function deletePoint(id) {
   const database = await getDatabase();
   const now = Date.now();
 
-  // Точка удаляется мягко — она синхронизируется, и без deleted_at второе
-  // устройство зальёт её обратно. Вложения удаляются насовсем: они локальные
-  // и вернуться не могут, а место в песочнице освобождать надо сразу
-  await deleteAttachmentsForPoint(id);
+  let sources = [];
 
-  await database.runAsync(
-    'UPDATE observation_points SET deleted_at = ?, updated_at = ?, dirty = 1 WHERE id = ?',
-    [now, now, id]
-  );
+  // Удаление строк вложений и мягкое удаление точки — одной транзакцией:
+  // без неё крах между двумя шагами оставлял бы точку живой в дневнике с уже
+  // стёртыми вложениями (или наоборот, при откате второго шага)
+  await database.withTransactionAsync(async () => {
+    // Точка удаляется мягко — она синхронизируется, и без deleted_at второе
+    // устройство зальёт её обратно. Вложения удаляются насовсем: они
+    // локальные и вернуться не могут, а место в песочнице освобождать надо
+    // сразу
+    sources = await deleteAttachmentRowsForPoint(id);
+
+    await database.runAsync(
+      'UPDATE observation_points SET deleted_at = ?, updated_at = ?, dirty = 1 WHERE id = ?',
+      [now, now, id]
+    );
+  });
+
+  // Файлы — только после успешного коммита: файловая система нетранзакционна,
+  // и откат транзакции не должен наткнуться на уже стёртые файлы
+  await removeAttachmentFiles(sources);
 }
 
 /**

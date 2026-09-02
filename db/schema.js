@@ -456,7 +456,8 @@ export const MIGRATIONS = [
   //
   // ON DELETE CASCADE тут не сработает никогда: точки удаляются мягко, DELETE
   // по ним не выполняется. Каскад стоит защитой от рассинхрона, а чистит
-  // вложения удалённой точки явный вызов deleteAttachmentsForPoint.
+  // вложения удалённой точки deletePoint — строки внутри своей транзакции
+  // (см. deleteAttachmentRowsForPoint), файлы отдельным шагом после неё.
   `
   CREATE TABLE IF NOT EXISTS point_attachments (
     id          TEXT PRIMARY KEY NOT NULL,
