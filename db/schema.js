@@ -440,6 +440,38 @@ export const MIGRATIONS = [
   `
   ALTER TABLE projects ADD COLUMN params TEXT;
   `,
+
+  // v13 — вложения точек полевого дневника: снимки и голосовые заметки.
+  //
+  // В `source` лежит имя файла, а не абсолютный путь. Каталог приложения на
+  // iOS содержит UUID контейнера, который меняется при переустановке: строка
+  // с абсолютным адресом пережила бы обновление, а файл по этому адресу —
+  // нет. Абсолютный адрес собирается при чтении, см. lib/attachmentStore.js.
+  //
+  // Полей синхронизации здесь нет намеренно. У остальных таблиц мягкое
+  // удаление защищает от того, что второе устройство, бывшее офлайн, зальёт
+  // удалённую строку обратно. Вложения не уезжают на сервер и вернуться не
+  // могут, поэтому защищать нечего — мягкое удаление только копило бы
+  // мегабайты мусора в песочнице, где у телефона в поле и так кончается место.
+  //
+  // ON DELETE CASCADE тут не сработает никогда: точки удаляются мягко, DELETE
+  // по ним не выполняется. Каскад стоит защитой от рассинхрона, а чистит
+  // вложения удалённой точки явный вызов deleteAttachmentsForPoint.
+  `
+  CREATE TABLE IF NOT EXISTS point_attachments (
+    id          TEXT PRIMARY KEY NOT NULL,
+    point_id    TEXT NOT NULL,
+    kind        TEXT NOT NULL,
+    source      TEXT NOT NULL,
+    duration    INTEGER,
+    waveform    TEXT,
+    recorded_at INTEGER NOT NULL,
+    FOREIGN KEY (point_id) REFERENCES observation_points (id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_attachments_point
+    ON point_attachments (point_id);
+  `,
 ];
 
 /** Значения настроек по умолчанию */

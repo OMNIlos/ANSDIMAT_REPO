@@ -4,6 +4,7 @@
 
 import { getDatabase, createId } from './index';
 import { POINT_TYPES } from './schema';
+import { deleteAttachmentsForPoint } from './attachments';
 
 /**
  * Преобразует строку таблицы в точку наблюдения
@@ -107,6 +108,12 @@ export async function updatePoint(id, patch) {
 export async function deletePoint(id) {
   const database = await getDatabase();
   const now = Date.now();
+
+  // Точка удаляется мягко — она синхронизируется, и без deleted_at второе
+  // устройство зальёт её обратно. Вложения удаляются насовсем: они локальные
+  // и вернуться не могут, а место в песочнице освобождать надо сразу
+  await deleteAttachmentsForPoint(id);
+
   await database.runAsync(
     'UPDATE observation_points SET deleted_at = ?, updated_at = ?, dirty = 1 WHERE id = ?',
     [now, now, id]

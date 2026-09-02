@@ -153,3 +153,48 @@ describeDb('v4 — перевод идентификаторов на UUID', () 
     expect(after).toEqual(before);
   });
 });
+
+describeDb('v13 — вложения точек', () => {
+  let database;
+
+  beforeAll(() => {
+    database = openAt(MIGRATIONS.length);
+
+    database.exec(`
+      INSERT INTO observation_points (id, title, lat, lon, recorded_at, updated_at, dirty)
+      VALUES ('11111111-2222-4333-8444-555555555555', 'Скважина 3', 59.7, 30.4, 3000, 3000, 1);
+    `);
+  });
+
+  afterAll(() => {
+    if (database) database.close();
+  });
+
+  test('вложение ложится в таблицу', () => {
+    database.exec(`
+      INSERT INTO point_attachments (id, point_id, kind, source, recorded_at)
+      VALUES ('a1', '11111111-2222-4333-8444-555555555555', 'photo', 'a1.jpg', 4000);
+    `);
+
+    const row = database
+      .prepare('SELECT kind, source, duration, waveform FROM point_attachments WHERE id = ?')
+      .get('a1');
+
+    expect(row.kind).toBe('photo');
+    expect(row.source).toBe('a1.jpg');
+    // У снимка нет ни длительности, ни волны
+    expect(row.duration).toBeNull();
+    expect(row.waveform).toBeNull();
+  });
+
+  test('вложение чужой точки не проходит', () => {
+    database.exec('PRAGMA foreign_keys = ON');
+
+    expect(() =>
+      database.exec(`
+        INSERT INTO point_attachments (id, point_id, kind, source, recorded_at)
+        VALUES ('a2', 'нет-такой-точки', 'audio', 'a2.m4a', 5000);
+      `)
+    ).toThrow();
+  });
+});
