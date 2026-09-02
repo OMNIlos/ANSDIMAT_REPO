@@ -46,6 +46,45 @@ function mountHook() {
   return { box, tree };
 }
 
+/**
+ * Проба для тестов, которым надо прокрутить несколько тиков рекордера
+ *
+ * Отдельно от mountHook: тем тестам хватает одного рендера, а здесь пробу
+ * приходится перерисовывать руками — useAudioRecorderState замокан и сам
+ * ничего не публикует.
+ */
+const tickBox = {};
+function TickProbe() {
+  tickBox.current = useVoiceRecorder();
+  return <Text>probe</Text>;
+}
+
+/**
+ * Поднимает пробу тиков
+ *
+ * @returns {Object} дерево react-test-renderer
+ */
+async function mountTicks() {
+  let tree;
+  await act(async () => {
+    tree = renderer.create(<TickProbe />);
+  });
+  return tree;
+}
+
+/**
+ * Проводит один тик рекордера
+ *
+ * @param {Object} tree - дерево пробы
+ * @param {Object} next - что изменилось в состоянии рекордера
+ */
+async function tick(tree, next) {
+  mockRecorderState = { ...mockRecorderState, ...next };
+  await act(async () => {
+    tree.update(<TickProbe />);
+  });
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockRecorderState = { isRecording: false, durationMillis: 0, metering: undefined };
@@ -131,4 +170,71 @@ test('рекордер без файла ничего не возвращает'
 
   expect(recorded).toBeNull();
   mockRecorder.uri = 'file:///cache/recording.m4a';
+});
+
+test('пока идёт запись, уровни копятся по тикам', async () => {
+  const tree = await mountTicks();
+
+  // -30 дБFS — середина шкалы, 0 — максимум, -60 — порог тишины
+  await tick(tree, { isRecording: true, durationMillis: 100, metering: -30 });
+  await tick(tree, { durationMillis: 200, metering: 0 });
+  await tick(tree, { durationMillis: 300, metering: -60 });
+
+  expect(tickBox.current.levels).toEqual([0.5, 1, 0]);
+
+  await act(async () => {
+    tree.unmount();
+  });
+});
+
+test('повторившийся уровень не теряется — в волне не будет провала', async () => {
+  // Это тест на durationMillis в зависимостях эффекта: metering может
+  // совпасть с прошлым значением два тика подряд, и без зависимости,
+  // которая меняется всегда, эффект бы не сработал
+  const tree = await mountTicks();
+
+  await tick(tree, { isRecording: true, durationMillis: 100, metering: -20 });
+  await tick(tree, { durationMillis: 200, metering: -20 });
+  await tick(tree, { durationMillis: 300, metering: -20 });
+
+  expect(tickBox.current.levels).toHaveLength(3);
+
+  await act(async () => {
+    tree.unmount();
+  });
+});
+
+test('до старта записи уровни не копятся', async () => {
+  // Тики идут и до нажатия на запись: складывать их в волну незачем
+  const tree = await mountTicks();
+
+  await tick(tree, { durationMillis: 100, metering: -10 });
+  await tick(tree, { durationMillis: 200, metering: -10 });
+
+  expect(tickBox.current.levels).toEqual([]);
+
+  await act(async () => {
+    tree.unmount();
+  });
+});
+
+test('остановка отдаёт накопленную волну, а не пустую', async () => {
+  const tree = await mountTicks();
+  await act(async () => {
+    await tickBox.current.start();
+  });
+
+  await tick(tree, { isRecording: true, durationMillis: 100, metering: -30 });
+  await tick(tree, { durationMillis: 200, metering: 0 });
+
+  let recorded;
+  await act(async () => {
+    recorded = await tickBox.current.stop();
+  });
+
+  expect(recorded.waveform).toEqual([0.5, 1]);
+
+  await act(async () => {
+    tree.unmount();
+  });
 });
