@@ -37,6 +37,13 @@ import {
   getPointStats,
 } from '../db/points';
 import { POINT_TYPES } from '../db/schema';
+import PointSheet from '../components/PointSheet';
+import {
+  ATTACHMENT_KINDS,
+  listAttachments,
+  addAttachment,
+  deleteAttachment,
+} from '../db/attachments';
 import { spacing, radius, type, elevation, pointTypeColors, numericAt } from '../theme';
 
 const TYPE_OPTIONS = [
@@ -102,6 +109,74 @@ function GrowingNoteInput({ minHeight, style, ...rest }) {
   );
 }
 
+/**
+ * Сколько снимков и записей у точки
+ *
+ * @param {Array} [items] - вложения точки
+ * @returns {{photos: number, records: number}} счётчики
+ */
+function countAttachments(items = []) {
+  return {
+    photos: items.filter((item) => item.kind === ATTACHMENT_KINDS.PHOTO).length,
+    records: items.filter((item) => item.kind === ATTACHMENT_KINDS.AUDIO).length,
+  };
+}
+
+/**
+ * Подпись бейджа для чтения с экрана
+ *
+ * Счётчики раздельные: искать снимок среди записей и наоборот приходится
+ * по-разному, и «три вложения» не сказало бы, чего именно три.
+ *
+ * @param {Array} [items] - вложения точки
+ * @returns {Object|undefined} значение для accessibilityValue
+ */
+function badgeValue(items) {
+  const { photos, records } = countAttachments(items);
+  if (photos === 0 && records === 0) return undefined;
+  return {
+    text: `${photos} ${I18n.t('photoCount', { defaultValue: 'снимков' })}, ${records} ${I18n.t(
+      'voiceNoteCount',
+      { defaultValue: 'записей' }
+    )}`,
+  };
+}
+
+/**
+ * Бейдж вложений в шапке карточки точки
+ *
+ * На пустой точке — одна контурная скрепка: без неё шторку нечем открыть и
+ * первое вложение некуда добавить.
+ *
+ * @param {Object} props
+ * @param {Array} [props.items] - вложения точки
+ * @param {Object} props.colors - палитра темы
+ */
+function PointBadge({ items, colors }) {
+  const { photos, records } = countAttachments(items);
+
+  if (photos === 0 && records === 0) {
+    return <MaterialIcons name="attach-file" size={18} color={colors.faint} />;
+  }
+
+  return (
+    <View style={styles.badgeRow}>
+      {photos > 0 && (
+        <View style={styles.badgeItem}>
+          <MaterialIcons name="photo-camera" size={15} color={colors.primaryAccent} />
+          <Text style={[styles.badgeCount, { color: colors.primaryAccent }]}>{photos}</Text>
+        </View>
+      )}
+      {records > 0 && (
+        <View style={styles.badgeItem}>
+          <MaterialIcons name="mic-none" size={15} color={colors.primaryAccent} />
+          <Text style={[styles.badgeCount, { color: colors.primaryAccent }]}>{records}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 export default function FieldDiaryScreen() {
   const theme = useTheme();
   const { width } = useWindowDimensions();
@@ -126,6 +201,12 @@ export default function FieldDiaryScreen() {
   const [center, setCenter] = useState(null);
   // Точка, для которой запрошено удаление
   const [pendingDelete, setPendingDelete] = useState(null);
+  // Вложения всех точек: карта «точка → вложения». Читаются одним запросом
+  // вместе со списком — запрос на точку дал бы столько обращений к базе,
+  // сколько в дневнике точек
+  const [attachments, setAttachments] = useState({});
+  // Точка, чья шторка вложений открыта
+  const [sheetPointId, setSheetPointId] = useState(null);
   // Сообщение о проблеме с геопозицией и признак ожидания координат
   const [notice, setNotice] = useState('');
   const [locating, setLocating] = useState(false);
@@ -140,6 +221,7 @@ export default function FieldDiaryScreen() {
     setNoteDrafts(
       Object.fromEntries(loaded.map((point) => [point.id, point.note ?? '']))
     );
+    setAttachments(await listAttachments(loaded.map((point) => point.id)));
     setStats(await getPointStats());
   }, []);
 
@@ -292,6 +374,30 @@ export default function FieldDiaryScreen() {
     if (!pendingDelete) return;
     await deletePoint(pendingDelete.id);
     setPendingDelete(null);
+    await load();
+  };
+
+  /**
+   * Записывает новое вложение открытой точки
+   *
+   * Список перечитывается целиком: без этого счётчик в карточке остался бы
+   * прежним, и снятое выглядело бы потерянным.
+   *
+   * @param {Object} attachment - {kind, uri, durationMillis?, waveform?}
+   */
+  const handleAddAttachment = async (attachment) => {
+    if (!sheetPointId) return;
+    await addAttachment({ pointId: sheetPointId, ...attachment });
+    await load();
+  };
+
+  /**
+   * Удаляет вложение вместе с файлом
+   *
+   * @param {Object} attachment - удаляемое вложение
+   */
+  const handleDeleteAttachment = async (attachment) => {
+    await deleteAttachment(attachment.id);
     await load();
   };
 
@@ -541,6 +647,21 @@ export default function FieldDiaryScreen() {
                   {formatCoordinate(point.lat)}, {formatCoordinate(point.lon)} · {formatTime(point.recordedAt)}
                 </Text>
               </View>
+              {/* Вложения. Нажимается именно шапка, а не карточка целиком:
+                  под ней лежит поле описания, и тап по нему должен ставить
+                  курсор, а не открывать шторку */}
+              <TouchableOpacity
+                onPress={() => setSheetPointId(point.id)}
+                style={styles.pointBadge}
+                accessibilityRole="button"
+                accessibilityLabel={`${I18n.t('openAttachments', {
+                  defaultValue: 'Вложения точки',
+                })}: ${point.title}`}
+                accessibilityValue={badgeValue(attachments[point.id])}
+              >
+                <PointBadge items={attachments[point.id]} colors={theme.colors} />
+              </TouchableOpacity>
+
               <TouchableOpacity
                 onPress={() => handleDelete(point)}
                 style={styles.pointDelete}
@@ -597,6 +718,15 @@ export default function FieldDiaryScreen() {
         <View style={{ height: 160 }} />
       </ScrollView>
       )}
+
+      <PointSheet
+        point={points.find((item) => item.id === sheetPointId) ?? null}
+        attachments={attachments[sheetPointId] ?? []}
+        visible={sheetPointId !== null}
+        onClose={() => setSheetPointId(null)}
+        onAdd={handleAddAttachment}
+        onDelete={handleDeleteAttachment}
+      />
 
       <ConfirmDialog
         visible={!!pendingDelete}
@@ -780,6 +910,23 @@ const styles = StyleSheet.create({
   },
   pointDelete: {
     padding: spacing.sm,
+  },
+  pointBadge: {
+    padding: spacing.sm,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  badgeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  badgeCount: {
+    ...numericAt(12),
+    fontWeight: '600',
   },
   empty: {
     alignItems: 'center',

@@ -53,6 +53,19 @@ jest.mock('../../db/points', () => ({
     lastRecordedAt: 1_700_000_100_000,
   })),
 }));
+jest.mock('../../db/attachments', () => ({
+  ATTACHMENT_KINDS: { PHOTO: 'photo', AUDIO: 'audio' },
+  listAttachments: jest.fn(async () => ({
+    p1: [
+      { id: 'a1', pointId: 'p1', kind: 'photo', source: 'a1.jpg', uri: 'file:///d/a1.jpg', durationMillis: 0, waveform: [], recordedAt: 1 },
+      { id: 'a2', pointId: 'p1', kind: 'photo', source: 'a2.jpg', uri: 'file:///d/a2.jpg', durationMillis: 0, waveform: [], recordedAt: 2 },
+      { id: 'a3', pointId: 'p1', kind: 'audio', source: 'a3.m4a', uri: 'file:///d/a3.m4a', durationMillis: 14000, waveform: [0.2], recordedAt: 3 },
+    ],
+  })),
+  addAttachment: jest.fn(async () => ({ id: 'new' })),
+  deleteAttachment: jest.fn(async () => {}),
+}));
+jest.mock('../../components/PointSheet', () => 'PointSheet');
 jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('@react-navigation/native'),
   useFocusEffect: (cb) => {
@@ -237,4 +250,96 @@ test('после постановки точки поле описания оч�
 
   // Иначе описание прошлой точки досталось бы следующей
   expect(newNoteInput(tree).props.value).toBe('');
+});
+
+/** Бейдж вложений точки по её названию */
+const badge = (tree, title) =>
+  tree.root.find(
+    (node) => node.props?.accessibilityLabel === `Вложения точки: ${title}`
+  );
+
+test('карточка точки показывает, сколько к ней прикреплено', async () => {
+  const tree = await mount();
+
+  // Два снимка и одна запись — счётчики раздельные: искать фото среди
+  // записей и наоборот приходится по-разному
+  expect(badge(tree, 'Скважина 3').props.accessibilityValue).toEqual({
+    text: '2 снимков, 1 записей',
+  });
+});
+
+test('пустая точка всё равно открывает вложения', async () => {
+  // Иначе первое вложение некуда добавить: шторку нечем вызвать
+  const tree = await mount();
+
+  expect(badge(tree, 'Родник у брода')).toBeDefined();
+  // У пустой точки счётчиков нет — только скрепка
+  expect(badge(tree, 'Родник у брода').props.accessibilityValue).toBeUndefined();
+});
+
+test('нажатие на бейдж открывает шторку этой точки', async () => {
+  const tree = await mount();
+
+  expect(tree.root.findByType('PointSheet').props.visible).toBe(false);
+
+  await act(async () => {
+    badge(tree, 'Скважина 3').props.onPress();
+  });
+
+  const sheet = tree.root.findByType('PointSheet');
+  expect(sheet.props.visible).toBe(true);
+  expect(sheet.props.point.id).toBe('p1');
+  expect(sheet.props.attachments).toHaveLength(3);
+});
+
+test('у точки без вложений шторка получает пустой список, а не undefined', async () => {
+  // listAttachments не кладёт ключ для точки без вложений
+  const tree = await mount();
+
+  await act(async () => {
+    badge(tree, 'Родник у брода').props.onPress();
+  });
+
+  expect(tree.root.findByType('PointSheet').props.attachments).toEqual([]);
+});
+
+test('снятое в шторке пишется в базу и список перечитывается', async () => {
+  const { listAttachments, addAttachment } = require('../../db/attachments');
+  const tree = await mount();
+
+  // Шторку надо открыть: вложение пишется той точке, чья шторка на экране
+  await act(async () => {
+    badge(tree, 'Скважина 3').props.onPress();
+  });
+  listAttachments.mockClear();
+
+  await act(async () => {
+    await tree.root
+      .findByType('PointSheet')
+      .props.onAdd({ kind: 'photo', uri: 'file:///cache/IMG_0001.jpg' });
+  });
+
+  expect(addAttachment).toHaveBeenCalledWith({
+    pointId: 'p1',
+    kind: 'photo',
+    uri: 'file:///cache/IMG_0001.jpg',
+  });
+  // Без перечитывания счётчик в карточке остался бы прежним
+  expect(listAttachments).toHaveBeenCalled();
+});
+
+test('удалённое в шторке уходит из базы вместе с файлом', async () => {
+  const { deleteAttachment } = require('../../db/attachments');
+  const tree = await mount();
+
+  await act(async () => {
+    badge(tree, 'Скважина 3').props.onPress();
+  });
+  await act(async () => {
+    await tree.root
+      .findByType('PointSheet')
+      .props.onDelete({ id: 'a1', kind: 'photo' });
+  });
+
+  expect(deleteAttachment).toHaveBeenCalledWith('a1');
 });
