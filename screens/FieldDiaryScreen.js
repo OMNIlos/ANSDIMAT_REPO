@@ -22,6 +22,7 @@ import {
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import I18n from '../Localization';
@@ -408,7 +409,16 @@ export default function FieldDiaryScreen() {
       {/* Карта вынесена из прокрутки: пока она была внутри списка, движение
           пальцем по ней доставалось прокрутке, и карта под пальцем стояла.
           Отдельным блоком такого конфликта нет в принципе */}
-      <View style={[styles.mapBlock, mapFullscreen ? styles.mapBlockFull : styles.mapBlockInline]}>
+      <View
+        style={[
+          styles.mapBlock,
+          mapFullscreen ? styles.mapBlockFull : styles.mapBlockInline,
+          // Непрозрачный фон обязателен: без него в вырезах, которые оставляют
+          // скруглённые углы карты, просвечивала уезжающая под неё карточка —
+          // и стык карты с экраном читался как брак вёрстки
+          !mapFullscreen && { backgroundColor: theme.colors.background },
+        ]}
+      >
         {/* Накладки позиционируются относительно этого контейнера, а он точно
             повторяет границы карты. Иначе на полях блока кнопки съезжали
             за её край */}
@@ -474,6 +484,15 @@ export default function FieldDiaryScreen() {
       </View>
 
       {mapFullscreen ? null : (
+      <View style={styles.scrollArea}>
+      {/* Содержимое уходит под карту срезом по границе прокрутки. Градиент
+          растворяет этот срез: сплошной цвет дал бы ту же ступеньку, поэтому
+          второй край прозрачный — см. backgroundClear в theme.js */}
+      <LinearGradient
+        colors={[theme.colors.background, theme.colors.backgroundClear]}
+        style={styles.scrollFade}
+        pointerEvents="none"
+      />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
 
         {/* Статистика */}
@@ -717,6 +736,7 @@ export default function FieldDiaryScreen() {
 
         <View style={{ height: 160 }} />
       </ScrollView>
+      </View>
       )}
 
       <PointSheet
@@ -754,6 +774,25 @@ const styles = StyleSheet.create({
   mapBlockInline: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
+    // Отступ снизу отодвигает границу прокрутки от скруглённых углов карты:
+    // содержимое срезается по чистому фону, а не по краю самой карты
+    paddingBottom: spacing.sm,
+    // Карта лежит поверх ленты, иначе градиент растворения окажется над ней
+    zIndex: 2,
+  },
+  scrollArea: {
+    flex: 1,
+    position: 'relative',
+  },
+  // Высота подобрана под скругление карточек: меньше — ступенька всё ещё
+  // видна, больше — верх ленты кажется выцветшим
+  scrollFade: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 20,
+    zIndex: 1,
   },
   // Границы самой карты: к ним привязаны подсказка и круглые кнопки
   mapArea: {

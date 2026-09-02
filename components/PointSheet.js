@@ -326,7 +326,10 @@ const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(20, 7, 14, 0.45)',
+    // Нейтральный чёрный, а не бордовый из ConfirmDialog: тот затемняет
+    // маленькое окно посреди экрана, и подтон там незаметен, а здесь
+    // подложка накрывает экран целиком и читается как красный налёт
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   sheet: {
     borderTopLeftRadius: radius.lg,
