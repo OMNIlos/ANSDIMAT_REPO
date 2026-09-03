@@ -323,18 +323,21 @@ function SheetButton({ icon, label, colors, onPress }) {
 }
 
 const styles = StyleSheet.create({
+  // Затемнения нет вовсе. Шторка выезжает вместе с подложкой, поэтому любая
+  // заливка появлялась бы разом на полной непрозрачности — резкий тёмный
+  // прямоугольник поверх экрана. Слой читается тенью и границей самой шторки,
+  // а прозрачная область всё так же ловит нажатие мимо и закрывает её
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',
-    // Нейтральный чёрный, а не бордовый из ConfirmDialog: тот затемняет
-    // маленькое окно посреди экрана, и подтон там незаметен, а здесь
-    // подложка накрывает экран целиком и читается как красный налёт
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'transparent',
   },
   sheet: {
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    // Волосяной границы мало, когда за шторкой не затемнённый, а обычный
+    // экран: край должен читаться сам по себе
+    borderTopWidth: 1,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     maxHeight: '80%',
