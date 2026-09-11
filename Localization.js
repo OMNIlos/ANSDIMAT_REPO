@@ -232,8 +232,6 @@ const i18n = new I18n({
       "Приток воды в котлован: контур заменяется «большим колодцем» эквивалентного радиуса.",
     manualCalcBarrage:
       "Пласт с границей: непроницаемый контакт углубляет воронку, река — выполаживает. Плюс подпор уровня перед стеной в грунте.",
-    manualCalcLeakage:
-      "Пласт с перетеканием: понижение по Хантушу — Джейкобу, фактор перетекания B и расход утечки через кровлю.",
     manualRecoveryTitle: "Восстановление уровня",
     manualRecoveryIntro:
       "Вторая половина опыта: насос остановлен, уровень поднимается. Обрабатывать её выгодно — насос не работает, и колебания дебита уже ничего не портят.",
@@ -733,7 +731,6 @@ const i18n = new I18n({
     unitAtmosphere: "кгс/см²",
     unitMeterH2O: "м вод. ст.",
     tabBarrage: "Барраж",
-    tabLeakage: "Утечки",
 
     // ===== БАРРАЖ И ГРАНИЧНЫЕ УСЛОВИЯ =====
     distanceToBoundary: "Расстояние до границы",
@@ -1944,8 +1941,6 @@ const i18n = new I18n({
       "Inflow into an excavation pit: the contour is replaced by a “big well” of equivalent radius.",
     manualCalcBarrage:
       "Aquifer with a boundary: an impermeable contact deepens the cone of depression, a river flattens it. Plus head build-up upstream of a cutoff wall.",
-    manualCalcLeakage:
-      "Leaky aquifer: drawdown after Hantush–Jacob, the leakage factor B and the leakage rate through the aquitard.",
     manualRecoveryTitle: "Level recovery",
     manualRecoveryIntro:
       "The second half of the test: the pump is off and the level rises. Processing it pays off — with the pump stopped, discharge fluctuations no longer spoil the data.",
@@ -2444,7 +2439,6 @@ const i18n = new I18n({
     unitAtmosphere: "kgf/cm²",
     unitMeterH2O: "m H₂O",
     tabBarrage: "Barrier",
-    tabLeakage: "Leakage",
 
     // ===== BARRIER AND BOUNDARY CONDITIONS =====
     distanceToBoundary: "Distance to boundary",

@@ -10,6 +10,7 @@ import React from 'react';
 import renderer, { act } from 'react-test-renderer';
 import { Provider as PaperProvider } from 'react-native-paper';
 import CalculatorScreen from '../../CalculatorScreen';
+import I18n from '../../../Localization';
 import { UnitsProvider } from '../../../UnitsContext';
 import { lightTheme, darkTheme } from '../../../theme';
 
@@ -106,12 +107,12 @@ function selectTab(tree, index) {
 }
 
 describe('CalculatorScreen', () => {
-  it('открывается и показывает все семь вкладок', () => {
+  it('открывается и показывает все шесть вкладок', () => {
     const tree = renderScreen();
-    expect(tabButtons(tree).length).toBe(7);
+    expect(tabButtons(tree).length).toBe(6);
   });
 
-  [0, 1, 2, 3, 4, 5, 6].forEach((index) => {
+  [0, 1, 2, 3, 4, 5].forEach((index) => {
     it(`вкладка ${index + 1} отрисовывается без ошибок`, () => {
       const tree = renderScreen();
       selectTab(tree, index);
@@ -143,6 +144,13 @@ describe('CalculatorScreen', () => {
     const text = screenText(tree);
     // Значения по умолчанию совпадают с эталоном веб-версии: s(r₀) = 4.656 м
     expect(text).toContain('4.65');
+  });
+
+  it('вкладки «Утечки» нет: перетекание считает прогноз понижения', () => {
+    // Схема Хантуша–Джейкоба живёт переключателем в «Прогнозе понижения»
+    // рядом с Тейсом, Болтоном и границей питания. Отдельная вкладка
+    // дублировала ввод и уводила от сравнения схем
+    expect(screenText(renderScreen())).not.toContain('Утечки');
   });
 
   it('экран работает и в тёмной теме', () => {

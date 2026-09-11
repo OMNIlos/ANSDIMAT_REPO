@@ -8,7 +8,6 @@
  * 5. Зона санитарной охраны — три пояса по времени добегания загрязнения.
  * 6. Барраж — граничные условия пласта методом отображений и подпор
  *    уровня перед непроницаемым сооружением.
- * 7. Инфильтрационные утечки — пласт с перетеканием (Хантуш — Джейкоб).
  *
  * Экран — только каркас: он держит выбор вкладки и ширину содержимого, а сами
  * вкладки лежат в `screens/calculator/`. Вся математика вынесена в `calc/` и
@@ -45,7 +44,6 @@ import ForecastTab from './calculator/ForecastTab';
 import PitTab from './calculator/PitTab';
 import WhpaTab from './calculator/WhpaTab';
 import BarrageTab from './calculator/BarrageTab';
-import LeakageTab from './calculator/LeakageTab';
 import { styles as shared } from './calculator/shared';
 import useReduceMotion from '../hooks/useReduceMotion';
 import { spacing, radius, fontFamily, MENU_BAR_HEIGHT } from '../theme';
@@ -57,7 +55,6 @@ const TABS = [
   { key: 'pit', labelKey: 'tabPit', Component: PitTab },
   { key: 'whpa', labelKey: 'tabWhpa', Component: WhpaTab },
   { key: 'barrage', labelKey: 'tabBarrage', Component: BarrageTab },
-  { key: 'leakage', labelKey: 'tabLeakage', Component: LeakageTab },
 ];
 
 /** Длительность перекраски вкладки, мс */
