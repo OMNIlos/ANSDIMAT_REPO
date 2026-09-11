@@ -107,12 +107,12 @@ function selectTab(tree, index) {
 }
 
 describe('CalculatorScreen', () => {
-  it('открывается и показывает все шесть вкладок', () => {
+  it('открывается и показывает все семь вкладок', () => {
     const tree = renderScreen();
-    expect(tabButtons(tree).length).toBe(6);
+    expect(tabButtons(tree).length).toBe(7);
   });
 
-  [0, 1, 2, 3, 4, 5].forEach((index) => {
+  [0, 1, 2, 3, 4, 5, 6].forEach((index) => {
     it(`вкладка ${index + 1} отрисовывается без ошибок`, () => {
       const tree = renderScreen();
       selectTab(tree, index);
@@ -122,7 +122,7 @@ describe('CalculatorScreen', () => {
 
   it('вкладка притока считает и показывает результат', () => {
     const tree = renderScreen();
-    selectTab(tree, 3);
+    selectTab(tree, 4);
     const text = screenText(tree);
     // Значения по умолчанию совпадают с примером веб-версии: безнапорный
     // пласт, F = 44000 м², k = 5 м/сут, s = 10 м даёт Q ≈ 2698 м³/сут
@@ -131,7 +131,7 @@ describe('CalculatorScreen', () => {
 
   it('вкладка ЗСО считает пояса по примеру веб-версии', () => {
     const tree = renderScreen();
-    selectTab(tree, 4);
+    selectTab(tree, 5);
     const text = screenText(tree);
     // Значения по умолчанию совпадают с примером веб-версии: III пояс
     // уходит вверх по потоку на 547.8 м
@@ -140,7 +140,7 @@ describe('CalculatorScreen', () => {
 
   it('вкладка прогноза считает понижение по Тейсу', () => {
     const tree = renderScreen();
-    selectTab(tree, 2);
+    selectTab(tree, 3);
     const text = screenText(tree);
     // Значения по умолчанию совпадают с эталоном веб-версии: s(r₀) = 4.656 м
     expect(text).toContain('4.65');
@@ -153,9 +153,19 @@ describe('CalculatorScreen', () => {
     expect(screenText(renderScreen())).not.toContain('Утечки');
   });
 
+  it('пересчёт расхода стоит первой вкладкой и открыт при входе', () => {
+    const tree = renderScreen();
+    // Самый востребованный расчёт в поле: дебит из чужого отчёта приводят
+    // к своим единицам чаще, чем считают что бы то ни было ещё
+    const first = collectText(tabButtons(tree)[0].props.children).join(' ');
+    expect(first).toContain(I18n.t('tabFlow'));
+    // Открыт сразу: содержимое вкладки на экране без единого нажатия
+    expect(screenText(tree)).toContain(I18n.t('flowGroupMetric'));
+  });
+
   it('экран работает и в тёмной теме', () => {
     const tree = renderScreen(darkTheme);
-    selectTab(tree, 4);
+    selectTab(tree, 5);
     expect(screenText(tree).length).toBeGreaterThan(50);
   });
 });

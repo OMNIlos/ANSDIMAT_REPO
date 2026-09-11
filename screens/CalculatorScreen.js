@@ -1,12 +1,13 @@
 /**
  * Калькулятор гидрогеолога — расчёты, нужные в поле
  *
- * 1. Коэффициент фильтрации — пересчёт значения по всем единицам сразу.
- * 2. Оценка параметров — k по данным опытной откачки.
- * 3. Прогноз понижения — понижение от водозаборной скважины по четырём схемам.
- * 4. Приток в котлован — водоприток по формулам Дюпюи и Дюпюи–Тима.
- * 5. Зона санитарной охраны — три пояса по времени добегания загрязнения.
- * 6. Барраж — граничные условия пласта методом отображений и подпор
+ * 1. Пересчёт расхода — значение по всем размерностям сразу.
+ * 2. Коэффициент фильтрации — пересчёт значения по всем единицам сразу.
+ * 3. Оценка параметров — k по данным опытной откачки.
+ * 4. Прогноз понижения — понижение от водозаборной скважины по четырём схемам.
+ * 5. Приток в котлован — водоприток по формулам Дюпюи и Дюпюи–Тима.
+ * 6. Зона санитарной охраны — три пояса по времени добегания загрязнения.
+ * 7. Барраж — граничные условия пласта методом отображений и подпор
  *    уровня перед непроницаемым сооружением.
  *
  * Экран — только каркас: он держит выбор вкладки и ширину содержимого, а сами
@@ -38,6 +39,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import I18n from '../Localization';
+import FlowTab from './calculator/FlowTab';
 import FiltrationTab from './calculator/FiltrationTab';
 import ParamsTab from './calculator/ParamsTab';
 import ForecastTab from './calculator/ForecastTab';
@@ -49,6 +51,7 @@ import useReduceMotion from '../hooks/useReduceMotion';
 import { spacing, radius, fontFamily, MENU_BAR_HEIGHT } from '../theme';
 
 const TABS = [
+  { key: 'flow', labelKey: 'tabFlow', Component: FlowTab },
   { key: 'filtration', labelKey: 'tabFiltration', Component: FiltrationTab },
   { key: 'params', labelKey: 'tabParams', Component: ParamsTab },
   { key: 'forecast', labelKey: 'tabForecast', Component: ForecastTab },
@@ -118,7 +121,7 @@ export default function CalculatorScreen() {
   // и экран нельзя было бы отрисовать в тесте отдельно от приложения
   const insets = useContext(SafeAreaInsetsContext) ?? { bottom: 0 };
   const reduceMotion = useReduceMotion();
-  const [tab, setTab] = useState('filtration');
+  const [tab, setTab] = useState('flow');
 
   const content = useRef(null);
   const fade = useSharedValue(1);
