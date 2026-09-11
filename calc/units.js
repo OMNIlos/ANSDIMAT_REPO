@@ -36,6 +36,19 @@ const L_PER_M3 = 1000;
 /** Кубических футов в кубометре */
 const CUFT_PER_CUM = FT_PER_M * FT_PER_M * FT_PER_M;
 /**
+ * Американских галлонов в жидкостном барреле
+ *
+ * Тот баррель, что в настольном АНСДИМАТ подписан просто «баррель».
+ * Нефтяной больше — см. GAL_PER_OIL_BARREL, — и путать их нельзя:
+ * расхождение в треть.
+ */
+const GAL_PER_BARREL = 31.5;
+/** Американских галлонов в нефтяном барреле — «баррель(н)» */
+const GAL_PER_OIL_BARREL = 42;
+/** Кубометров в акр-футе */
+const CUM_PER_ACRE_FT = 1233.48183754752;
+
+/**
  * Паскалей в метре водяного столба
  *
  * Ровно ρg при ρ = 1000 кг/м³ и g = 9.80665 м/с² — то же произведение, что
@@ -55,6 +68,9 @@ const PA_PER_AT = 98066.5;
  * чтобы не заводить второй набор размерностей.
  */
 export const MINUTES_PER_DAY = MIN_PER_DAY;
+
+/** Плотность воды по умолчанию, кг/м³ — как в настольном АНСДИМАТ */
+export const DEFAULT_DENSITY = 1000;
 
 /** Величины, для которых пользователь выбирает размерность */
 export const QUANTITIES = {
@@ -356,5 +372,143 @@ export function convertToAllUnits(value, unitKey) {
     key: unit.key,
     labelKey: unit.labelKey,
     value: isFinite(baseValue) ? baseValue * unit.factor : NaN,
+  }));
+}
+
+/**
+ * Единицы расхода для вкладки-конвертера, тремя группами
+ *
+ * Повторяют вкладку «Расход» диалога «Пересчёт единиц измерения» настольного
+ * АНСДИМАТ. Группы — не украшение: двадцать девять строк подряд не
+ * прочитываются, а массовые единицы вдобавок ведут себя иначе остальных.
+ *
+ * Базовая единица — м³/сут, фактор переводит из базовой в целевую. У массовых
+ * единиц фактор дан для плотности 1 кг/м³ и домножается на неё в flowFactor:
+ * так таблица остаётся таблицей чисел, а не набором функций.
+ */
+export const FLOW_GROUPS = [
+  {
+    labelKey: 'flowGroupMetric',
+    units: [
+      { key: 'm3_day', labelKey: 'flowUnitM3Day', factor: 1 },
+      { key: 'm3_hour', labelKey: 'flowUnitM3Hour', factor: 1 / 24 },
+      { key: 'm3_min', labelKey: 'flowUnitM3Min', factor: 1 / MIN_PER_DAY },
+      { key: 'm3_sec', labelKey: 'flowUnitM3Sec', factor: 1 / SEC_PER_DAY },
+      { key: 'l_day', labelKey: 'flowUnitLDay', factor: L_PER_M3 },
+      { key: 'l_hour', labelKey: 'flowUnitLHour', factor: L_PER_M3 / 24 },
+      { key: 'l_min', labelKey: 'flowUnitLMin', factor: L_PER_M3 / MIN_PER_DAY },
+      { key: 'l_sec', labelKey: 'flowUnitLSec', factor: L_PER_M3 / SEC_PER_DAY },
+    ],
+  },
+  {
+    labelKey: 'flowGroupMass',
+    units: [
+      { key: 'kg_day', labelKey: 'flowUnitKgDay', factor: 1, mass: true },
+      { key: 'kg_hour', labelKey: 'flowUnitKgHour', factor: 1 / 24, mass: true },
+      { key: 'kg_min', labelKey: 'flowUnitKgMin', factor: 1 / MIN_PER_DAY, mass: true },
+      { key: 'kg_sec', labelKey: 'flowUnitKgSec', factor: 1 / SEC_PER_DAY, mass: true },
+    ],
+  },
+  {
+    labelKey: 'flowGroupImperial',
+    units: [
+      { key: 'bbl_day', labelKey: 'flowUnitBblDay', factor: GAL_PER_M3 / GAL_PER_BARREL },
+      { key: 'bbl_hour', labelKey: 'flowUnitBblHour', factor: GAL_PER_M3 / GAL_PER_BARREL / 24 },
+      { key: 'bbl_min', labelKey: 'flowUnitBblMin', factor: GAL_PER_M3 / GAL_PER_BARREL / MIN_PER_DAY },
+      { key: 'bbl_sec', labelKey: 'flowUnitBblSec', factor: GAL_PER_M3 / GAL_PER_BARREL / SEC_PER_DAY },
+      { key: 'ft3_day', labelKey: 'flowUnitFt3Day', factor: CUFT_PER_CUM },
+      { key: 'ft3_hour', labelKey: 'flowUnitFt3Hour', factor: CUFT_PER_CUM / 24 },
+      { key: 'ft3_min', labelKey: 'flowUnitFt3Min', factor: CUFT_PER_CUM / MIN_PER_DAY },
+      { key: 'ft3_sec', labelKey: 'flowUnitFt3Sec', factor: CUFT_PER_CUM / SEC_PER_DAY },
+      { key: 'gal_day', labelKey: 'flowUnitGalDay', factor: GAL_PER_M3 },
+      { key: 'gal_hour', labelKey: 'flowUnitGalHour', factor: GAL_PER_M3 / 24 },
+      { key: 'gal_min', labelKey: 'flowUnitGalMin', factor: GAL_PER_M3 / MIN_PER_DAY },
+      { key: 'gal_sec', labelKey: 'flowUnitGalSec', factor: GAL_PER_M3 / SEC_PER_DAY },
+      { key: 'oil_bbl_day', labelKey: 'flowUnitOilBblDay', factor: GAL_PER_M3 / GAL_PER_OIL_BARREL },
+      { key: 'oil_bbl_hour', labelKey: 'flowUnitOilBblHour', factor: GAL_PER_M3 / GAL_PER_OIL_BARREL / 24 },
+      { key: 'oil_bbl_min', labelKey: 'flowUnitOilBblMin', factor: GAL_PER_M3 / GAL_PER_OIL_BARREL / MIN_PER_DAY },
+      { key: 'oil_bbl_sec', labelKey: 'flowUnitOilBblSec', factor: GAL_PER_M3 / GAL_PER_OIL_BARREL / SEC_PER_DAY },
+      { key: 'acre_ft_day', labelKey: 'flowUnitAcreFtDay', factor: 1 / CUM_PER_ACRE_FT },
+    ],
+  },
+];
+
+/** Все единицы расхода одним списком, в порядке групп */
+export const FLOW_UNITS = FLOW_GROUPS.flatMap((group) => group.units);
+
+/**
+ * Находит единицу расхода по ключу
+ *
+ * @param {string} key - ключ единицы
+ * @returns {Object|undefined} описание единицы
+ */
+export function getFlowUnit(key) {
+  return FLOW_UNITS.find((unit) => unit.key === key);
+}
+
+/**
+ * Множитель перевода из м³/сут в единицу при заданной плотности
+ *
+ * Массовые единицы — единственные, кому плотность нужна. Непригодная
+ * плотность гасит их в NaN, а не подставляет тысячу молча: массовый расход,
+ * посчитанный по выдуманной плотности, выглядит как настоящий.
+ *
+ * @param {Object} unit - описание единицы
+ * @param {number} density - плотность, кг/м³
+ * @returns {number} множитель; NaN, если единице нужна непригодная плотность
+ */
+function flowFactor(unit, density) {
+  if (!unit.mass) return unit.factor;
+  if (!isFinite(density) || density <= 0) return NaN;
+  return unit.factor * density;
+}
+
+/**
+ * Переводит расход из указанной единицы в м³/сут
+ *
+ * @param {number} value - значение в исходной единице
+ * @param {string} unitKey - ключ исходной единицы
+ * @param {number} [density] - плотность, кг/м³
+ * @returns {number} значение в м³/сут; NaN при неизвестной единице
+ */
+export function flowToBase(value, unitKey, density = DEFAULT_DENSITY) {
+  const unit = getFlowUnit(unitKey);
+  if (!unit || !isFinite(value)) return NaN;
+  const factor = flowFactor(unit, density);
+  return isFinite(factor) ? value / factor : NaN;
+}
+
+/**
+ * Переводит расход из м³/сут в указанную единицу
+ *
+ * @param {number} valueM3Day - значение в м³/сут
+ * @param {string} unitKey - ключ целевой единицы
+ * @param {number} [density] - плотность, кг/м³
+ * @returns {number} значение в целевой единице; NaN при неизвестной единице
+ */
+export function flowFromBase(valueM3Day, unitKey, density = DEFAULT_DENSITY) {
+  const unit = getFlowUnit(unitKey);
+  if (!unit || !isFinite(valueM3Day)) return NaN;
+  const factor = flowFactor(unit, density);
+  return isFinite(factor) ? valueM3Day * factor : NaN;
+}
+
+/**
+ * Пересчитывает расход по всем единицам сразу
+ *
+ * Ввод в массовой единице при непригодной плотности обнуляет весь пересчёт:
+ * привести килограммы к кубометрам без плотности нечем.
+ *
+ * @param {number} value - введённое значение
+ * @param {string} unitKey - ключ единицы введённого значения
+ * @param {number} [density] - плотность, кг/м³
+ * @returns {Array<{key: string, labelKey: string, value: number}>} значения по всем единицам
+ */
+export function convertFlowToAllUnits(value, unitKey, density = DEFAULT_DENSITY) {
+  const base = flowToBase(value, unitKey, density);
+  return FLOW_UNITS.map((unit) => ({
+    key: unit.key,
+    labelKey: unit.labelKey,
+    value: flowFromBase(base, unit.key, density),
   }));
 }

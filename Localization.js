@@ -417,6 +417,7 @@ const i18n = new I18n({
     total: "Всего",
 
     // ===== КАЛЬКУЛЯТОР: вкладки и поля =====
+    tabFlow: "Пересчёт Q",
     tabFiltration: "Пересчёт k",
     tabParams: "Параметры",
     tabForecast: "Прогноз s",
@@ -779,6 +780,47 @@ const i18n = new I18n({
     unitFtDay: "фт/сут",
     unitFtSec: "фт/сек",
     unitMeinzer: "мейнцер",
+
+    // ===== КАЛЬКУЛЯТОР: пересчёт расхода =====
+    // Подписи свои, а не общие с настройками размерностей: там пять единиц
+    // расхода и сокращения «м³/ч», здесь двадцать девять и «м³/час» —
+    // в столбце из двадцати девяти строк разнобой сокращений мешает читать
+    flowGroupMetric: "Метрические",
+    flowGroupMass: "Массовый расход",
+    flowGroupImperial: "Британские и американские",
+    flowDensity: "Плотность",
+    unitKgM3: "кг/м³",
+    flowUnitPickHint: "Нажмите строку, чтобы вводить в этой единице",
+
+    flowUnitM3Day: "м³/сут",
+    flowUnitM3Hour: "м³/час",
+    flowUnitM3Min: "м³/мин",
+    flowUnitM3Sec: "м³/сек",
+    flowUnitLDay: "л/сут",
+    flowUnitLHour: "л/час",
+    flowUnitLMin: "л/мин",
+    flowUnitLSec: "л/сек",
+    flowUnitKgDay: "кг/сут",
+    flowUnitKgHour: "кг/час",
+    flowUnitKgMin: "кг/мин",
+    flowUnitKgSec: "кг/сек",
+    flowUnitBblDay: "баррель/сут",
+    flowUnitBblHour: "баррель/час",
+    flowUnitBblMin: "баррель/мин",
+    flowUnitBblSec: "баррель/сек",
+    flowUnitFt3Day: "фут³/сут",
+    flowUnitFt3Hour: "фут³/час",
+    flowUnitFt3Min: "фут³/мин",
+    flowUnitFt3Sec: "фут³/сек",
+    flowUnitGalDay: "галлон/сут",
+    flowUnitGalHour: "галлон/час",
+    flowUnitGalMin: "галлон/мин",
+    flowUnitGalSec: "галлон/сек",
+    flowUnitOilBblDay: "баррель(н)/сут",
+    flowUnitOilBblHour: "баррель(н)/час",
+    flowUnitOilBblMin: "баррель(н)/мин",
+    flowUnitOilBblSec: "баррель(н)/сек",
+    flowUnitAcreFtDay: "акр-фут/сут",
 
     // ===== ПОЛЕВОЙ ДНЕВНИК: карта и точки =====
     pointTypeWell: "Скважина",
@@ -2127,6 +2169,7 @@ const i18n = new I18n({
     total: "Total",
 
     // ===== CALCULATOR: tabs and fields =====
+    tabFlow: "Convert Q",
     tabFiltration: "Convert k",
     tabParams: "Parameters",
     tabForecast: "Drawdown s",
@@ -2488,6 +2531,44 @@ const i18n = new I18n({
     unitFtDay: "ft/day",
     unitFtSec: "ft/sec",
     unitMeinzer: "meinzer",
+
+    // ===== CALCULATOR: flow rate conversion =====
+    flowGroupMetric: "Metric",
+    flowGroupMass: "Mass flow",
+    flowGroupImperial: "Imperial and US",
+    flowDensity: "Density",
+    unitKgM3: "kg/m³",
+    flowUnitPickHint: "Tap a row to enter the value in that unit",
+
+    flowUnitM3Day: "m³/day",
+    flowUnitM3Hour: "m³/hour",
+    flowUnitM3Min: "m³/min",
+    flowUnitM3Sec: "m³/sec",
+    flowUnitLDay: "L/day",
+    flowUnitLHour: "L/hour",
+    flowUnitLMin: "L/min",
+    flowUnitLSec: "L/sec",
+    flowUnitKgDay: "kg/day",
+    flowUnitKgHour: "kg/hour",
+    flowUnitKgMin: "kg/min",
+    flowUnitKgSec: "kg/sec",
+    flowUnitBblDay: "bbl/day",
+    flowUnitBblHour: "bbl/hour",
+    flowUnitBblMin: "bbl/min",
+    flowUnitBblSec: "bbl/sec",
+    flowUnitFt3Day: "ft³/day",
+    flowUnitFt3Hour: "ft³/hour",
+    flowUnitFt3Min: "ft³/min",
+    flowUnitFt3Sec: "ft³/sec",
+    flowUnitGalDay: "gal/day",
+    flowUnitGalHour: "gal/hour",
+    flowUnitGalMin: "gal/min",
+    flowUnitGalSec: "gal/sec",
+    flowUnitOilBblDay: "oil bbl/day",
+    flowUnitOilBblHour: "oil bbl/hour",
+    flowUnitOilBblMin: "oil bbl/min",
+    flowUnitOilBblSec: "oil bbl/sec",
+    flowUnitAcreFtDay: "acre-ft/day",
 
     // ===== FIELD DIARY: map and points =====
     pointTypeWell: "Well",
