@@ -61,6 +61,8 @@ export default function PointSheet({ point, attachments, visible, onClose, onAdd
   const [viewerIndex, setViewerIndex] = useState(null);
   // Вложение, для которого запрошено удаление
   const [pendingDelete, setPendingDelete] = useState(null);
+  // Сбой записи: отказ микрофона, занятое устройство, отказ хранилища
+  const [recordFailed, setRecordFailed] = useState(false);
 
   const photos = attachments.filter((item) => item.kind === ATTACHMENT_KINDS.PHOTO);
   const records = attachments.filter((item) => item.kind === ATTACHMENT_KINDS.AUDIO);
@@ -79,21 +81,30 @@ export default function PointSheet({ point, attachments, visible, onClose, onAdd
 
   /**
    * Начинает или останавливает запись
+   *
+   * Сбой ловится и показывается строкой на шторке. Без этого отказ уходил
+   * в несопровождаемое отклонение промиса: кнопка не срабатывала, и понять,
+   * почему, было нельзя ни в поле, ни по логам.
    */
   const toggleRecording = async () => {
-    if (!recorder.isRecording) {
-      await recorder.start();
-      return;
-    }
+    try {
+      if (!recorder.isRecording) {
+        setRecordFailed(false);
+        await recorder.start();
+        return;
+      }
 
-    const recorded = await recorder.stop();
-    if (!recorded) return;
-    await onAdd({
-      kind: ATTACHMENT_KINDS.AUDIO,
-      uri: recorded.uri,
-      durationMillis: recorded.durationMillis,
-      waveform: recorded.waveform,
-    });
+      const recorded = await recorder.stop();
+      if (!recorded) return;
+      await onAdd({
+        kind: ATTACHMENT_KINDS.AUDIO,
+        uri: recorded.uri,
+        durationMillis: recorded.durationMillis,
+        waveform: recorded.waveform,
+      });
+    } catch {
+      setRecordFailed(true);
+    }
   };
 
   const confirmDelete = async () => {
@@ -107,6 +118,7 @@ export default function PointSheet({ point, attachments, visible, onClose, onAdd
     (photoDenied === 'camera' && I18n.t('cameraDenied')) ||
     (photoDenied === 'library' && I18n.t('galleryDenied')) ||
     (recorder.denied && I18n.t('microphoneDenied')) ||
+    (recordFailed && I18n.t('recordingFailed')) ||
     '';
 
   if (!point) return null;

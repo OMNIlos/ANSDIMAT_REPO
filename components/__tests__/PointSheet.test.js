@@ -241,3 +241,46 @@ test('без точки шторка не показывается', () => {
 
   expect(buttons(tree, 'Фото')).toHaveLength(0);
 });
+
+test('сорвавшийся запуск записи виден на экране', async () => {
+  // Отказ микрофона, занятое устройство, сорвавшийся prepare: без обработки
+  // это уходило в несопровождаемое отклонение промиса, и на экране
+  // не появлялось ничего — кнопка просто не срабатывала
+  start.mockRejectedValueOnce(new Error('recorder busy'));
+  const tree = mount();
+
+  await act(async () => {
+    button(tree, 'Запись').props.onPress();
+  });
+
+  expect(texts(tree)).toContain(I18n.t('recordingFailed'));
+});
+
+test('сорвавшееся сохранение заметки видно на экране', async () => {
+  mockRecorder = { ...mockRecorder, isRecording: true };
+  const onAdd = jest.fn(async () => {
+    throw new Error('нет места на диске');
+  });
+  const tree = mount({ onAdd });
+
+  await act(async () => {
+    button(tree, 'Остановить запись').props.onPress();
+  });
+
+  expect(texts(tree)).toContain(I18n.t('recordingFailed'));
+});
+
+test('удачная запись сообщения о сбое не показывает', async () => {
+  mockRecorder = { ...mockRecorder, isRecording: true };
+  const onAdd = jest.fn(async () => {});
+  const tree = mount({ onAdd });
+
+  await act(async () => {
+    button(tree, 'Остановить запись').props.onPress();
+  });
+
+  expect(onAdd).toHaveBeenCalledWith(
+    expect.objectContaining({ kind: 'audio', uri: 'file:///cache/recording.m4a' })
+  );
+  expect(texts(tree)).not.toContain(I18n.t('recordingFailed'));
+});
