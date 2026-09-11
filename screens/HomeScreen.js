@@ -59,12 +59,21 @@ export default function HomeScreen({ navigation }) {
       onPress: () => navigation.navigate('FieldDiary'),
     },
     {
+      id: 'maps',
+      title: I18n.t('maps', { defaultValue: 'Карты гидроизогипс' }),
+      subtitle: I18n.t('mapsDesc', { defaultValue: 'Построение по скважинам' }),
+      icon: 'layers',
+      family: 'material',
+      tone: c.secondary,
+      onPress: () => navigation.navigate('Maps'),
+    },
+    {
       id: 'examples',
       title: I18n.t('examples', { defaultValue: 'Примеры и видео' }),
       subtitle: I18n.t('examplesDesc', { defaultValue: 'Обучающие материалы' }),
       icon: 'play-circle-outline',
       family: 'material',
-      tone: c.secondary,
+      tone: c.primary,
       onPress: () => navigation.navigate('ExamplesAndVideos'),
     },
   ];

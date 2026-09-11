@@ -986,6 +986,13 @@ const i18n = new I18n({
     calculatorDesc: "Гидрогеологические расчеты",
     pumpingTestDesc: "Заполнение журнала и обработка ОФР",
     examplesDesc: "Обучающие материалы",
+
+    // ===== КАРТЫ ГИДРОИЗОГИПС (AnsSurf) =====
+    maps: "Карты гидроизогипс",
+    mapsDesc: "Построение по скважинам",
+    mapsExportShared: "Готово: файлов — %{count}. Окно «Поделиться» откроется на каждый.",
+    mapsExportSaved: "Сохранено файлов: %{count}.",
+    mapsFailed: "Не удалось. Попробуйте ещё раз.",
     subscriptionDesc: "Управление подпиской",
     settingsDesc: "Настройки приложения",
     fieldDesc: "Точки наблюдения с координатами",
@@ -1401,6 +1408,9 @@ const i18n = new I18n({
     quantityFlow: "Расход",
     quantityTransmissivity: "Проводимость (T)",
     quantityConductivity: "Коэффициент фильтрации (k)",
+    // Без обозначения: в карточке результата его ставит сама карточка, и
+    // «Коэффициент фильтрации (k) k» читалось бы как опечатка
+    resultConductivity: "Коэффициент фильтрации",
     quantityDiffusivity: "Пьезопроводность (a)",
     quantityDrawdown: "Понижение (s)",
     unitFlowRate: "м³/сут",
@@ -1573,7 +1583,8 @@ const i18n = new I18n({
     slugFilterRadius: "Радиус фильтра r_w",
     slugCasingRadius: "Радиус обсадной трубы r_c",
     slugFilterLength: "Длина фильтра l_w",
-    slugFilterBottom: "От УГВ до низа фильтра z",
+    slugFilterMiddle: "От УГВ до середины фильтра LT_w",
+    slugFilterBottom: "Низ фильтра z = LT_w + l_w/2",
     slugThickness: "Обводнённая мощность m",
     slugInitialDrawdown: "Скачок понижения s⁰",
     slugJournalTitle: "Замеры: время и восстановление уровня",
@@ -1590,12 +1601,15 @@ const i18n = new I18n({
       "β вне графика Бауэра — Райса (1…2000): коэффициенты взяты на его границе.",
     slugMethod:
       "k = 2.3·r_c²/(2·l_w)·C·ln(R/r_w) — по наклону C прямой lg(s⁰/s) — t.",
+    slugTwoSegments:
+      "На графике два прямолинейных участка: расчёт идёт по второму, как велит книга — первый говорит о нарушенной зоне вокруг скважины или о перетекании. Отметьте точки руками, если нужен другой отрезок.",
+    slugFirstSegmentK: "k по первому участку",
     slugLineNote:
       "Прямая должна выходить из начала координат. Если прямолинейных участков два, обрабатывают второй: первый говорит о нарушенной зоне вокруг скважины или о перетекании.",
     slugNeedInitialDrawdown:
       "Укажите скачок понижения s⁰ — от него отсчитывается возврат уровня.",
     slugNeedGeometry:
-      "Проверьте геометрию скважины: радиус и длину фильтра и расстояние от УГВ до его низа.",
+      "Проверьте геометрию скважины: радиус и длину фильтра и расстояние от УГВ до его середины.",
     slugNeedMeasurements:
       "Внесите хотя бы два замера, где уровень вернулся меньше чем на скачок s⁰.",
 
@@ -1605,11 +1619,16 @@ const i18n = new I18n({
     lugeonWellRadius: "Радиус скважины r_w",
     lugeonIntervalLength: "Длина интервала l_w",
     lugeonReadingInterval: "Между отсчётами",
-    lugeonDensity: "Плотность жидкости ρ, кг/м³",
-    lugeonStagesTitle: "Ступени: давление и показания расходомера",
+    lugeonDensity: "Плотность жидкости",
+    unitDensity: "кг/м³",
+    lugeonStagesTitle: "Ступени",
     lugeonStage: "Ступень %{n}",
     lugeonPressure: "Давление ΔP",
-    lugeonReadings: "Показания расходомера",
+    lugeonReadings: "Накопленные показания расходомера",
+    lugeonReadingsHint:
+      "Вносите нарастающий итог, а не прирост за промежуток: 120, 138, 157.",
+    lugeonReadingsFalling:
+      "Показания убывают: внесён прирост, а не нарастающий итог.",
     lugeonMeanFlow: "Средний расход",
     lugeonStageLu: "Lu",
     lugeonMeanK: "Среднее k",
@@ -1617,6 +1636,8 @@ const i18n = new I18n({
     lugeonAddStage: "Добавить ступень",
     lugeonRemoveStage: "Убрать ступень",
     lugeonChartTitle: "Расход — давление",
+    lugeonBranchRise: "Подъём давления",
+    lugeonBranchFall: "Спуск давления",
     lugeonPatternTitle: "Вид зависимости",
     lugeonPatternLaminar: "Ламинарный поток",
     lugeonPatternTurbulent: "Турбулентный поток",
@@ -1654,7 +1675,8 @@ const i18n = new I18n({
       "k = Q/(2π·l_w·Δh)·ln(R/r_w), где Δh = ΔP/(ρ·g), а радиус влияния R принят равным длине интервала. Обе формулы дают близкие результаты.",
 
     // --- Классификация пород по величине Люжона (табл. 13.5) ---
-    lugeonRockClass: "Трещиноватость",
+    lugeonRockClass: "Порода",
+    lugeonPermeabilityTitle: "Проницаемость",
     lugeonRockVeryLow: "Весьма слаботрещиноватые",
     lugeonRockLow: "Слаботрещиноватые",
     lugeonRockModerate: "Трещиноватые",
@@ -1680,26 +1702,27 @@ const i18n = new I18n({
     vadoseVolume: "Налитый объём ΔV",
     vadoseInterval: "Интервал времени Δt",
     vadoseFlow: "Расход Q",
-    vadoseFlowComputed: "Считается из объёма и интервала",
+    vadoseFlowComputed: "Из объёма и интервала",
+    vadoseFlowManual: "Задан вручную",
     vadoseArea: "Площадь инфильтрации F",
     vadoseHead: "Слой воды в шурфе H",
     vadoseDepth: "Глубина просачивания z",
     vadoseCapillary: "Капиллярное поднятие h_c",
+    vadoseCapillarySection: "Капиллярные силы",
     vadoseUseCapillary: "Учитывать капиллярные силы",
     vadoseNoCapillary: "Не учитывать",
     vadoseLithology: "Порода",
     vadoseLithologyPick: "Выбрать породу",
     vadoseLithologyHint:
-      "Подставляется половина максимального капиллярного поднятия. Диапазоны справочные — замеренную высоту лучше вписать руками.",
+      "Половина максимального поднятия по справочнику; замеренную лучше вписать руками.",
     vadoseMethod: "Биндеман: k = Q·z / (F·(H + H_c + z)), Q = ΔV/Δt.",
     vadoseMethodBoldyrev: "Болдырев: k = Q/F = ΔV/(F·Δt).",
     vadoseMethodName: "Метод",
     vadoseMethodBoldyrevName: "Болдырев",
     vadoseMethodBindemanName: "Биндеман",
-    vadoseAreaNote:
-      "Площадь кольца, через которое идёт инфильтрационное питание. Для метода Нестерова — площадь внутреннего кольца.",
+    vadoseAreaNote: "Для метода Нестерова — площадь внутреннего кольца.",
     vadoseCapillaryNote:
-      "Без учёта капиллярных сил расчёт идёт по Болдыреву: k = Q/F, вся движущая сила приписана гравитации, и результат выходит завышенным.",
+      "Без капиллярных сил результат завышен: вся движущая сила приписана гравитации.",
     vadoseHeadNote: "По методу слой воды в шурфе держат около 10 см.",
     vadoseNeedDepth:
       "Укажите глубину зоны просачивания z на конец опыта — без неё расчёт невозможен.",
@@ -2675,6 +2698,13 @@ const i18n = new I18n({
     calculatorDesc: "Hydrogeological calculations",
     pumpingTestDesc: "Filling out the log and processing the OFR",
     examplesDesc: "Training materials",
+
+    // ===== HYDROISOHYPSE MAPS (AnsSurf) =====
+    maps: "Hydroisohypse maps",
+    mapsDesc: "Built from observation wells",
+    mapsExportShared: "Done: %{count} file(s). The share sheet opens for each one.",
+    mapsExportSaved: "Files saved: %{count}.",
+    mapsFailed: "That didn't work. Try again.",
     subscriptionDesc: "Subscription management",
     settingsDesc: "Application settings",
     field: "Field diary",
@@ -2997,6 +3027,7 @@ const i18n = new I18n({
     quantityFlow: "Discharge",
     quantityTransmissivity: "Transmissivity (T)",
     quantityConductivity: "Hydraulic conductivity (k)",
+    resultConductivity: "Hydraulic conductivity",
     quantityDiffusivity: "Diffusivity (a)",
     quantityDrawdown: "Drawdown (s)",
     unitFlowRate: "m³/day",
@@ -3229,7 +3260,8 @@ const i18n = new I18n({
     slugFilterRadius: "Screen radius r_w",
     slugCasingRadius: "Casing radius r_c",
     slugFilterLength: "Screen length l_w",
-    slugFilterBottom: "Water table to screen bottom z",
+    slugFilterMiddle: "Water table to screen midpoint LT_w",
+    slugFilterBottom: "Screen bottom z = LT_w + l_w/2",
     slugThickness: "Saturated thickness m",
     slugInitialDrawdown: "Initial head change s⁰",
     slugJournalTitle: "Readings: time and head recovery",
@@ -3247,12 +3279,15 @@ const i18n = new I18n({
       "β falls outside the Bouwer — Rice chart (1…2000): coefficients are taken at its edge.",
     slugMethod:
       "k = 2.3·r_c²/(2·l_w)·C·ln(R/r_w), where C is the slope of the lg(s⁰/s) — t line.",
+    slugTwoSegments:
+      "The plot has two straight segments: the fit uses the second one, as the book prescribes — the first indicates a disturbed zone around the well or leakage. Pick the points by hand for a different interval.",
+    slugFirstSegmentK: "k from the first segment",
     slugLineNote:
       "The line must pass through the origin. With two straight segments, use the second: the first indicates a disturbed zone around the well or leakage.",
     slugNeedInitialDrawdown:
       "Enter the initial head change s⁰ — the recovery is measured from it.",
     slugNeedGeometry:
-      "Check the well geometry: screen radius and length, and the distance from the water table to the screen bottom.",
+      "Check the well geometry: screen radius and length, and the distance from the water table to the screen midpoint.",
     slugNeedMeasurements:
       "Add at least two readings where the head recovery is smaller than s⁰.",
 
@@ -3262,11 +3297,16 @@ const i18n = new I18n({
     lugeonWellRadius: "Borehole radius r_w",
     lugeonIntervalLength: "Test interval length l_w",
     lugeonReadingInterval: "Between readings",
-    lugeonDensity: "Fluid density ρ, kg/m³",
-    lugeonStagesTitle: "Stages: pressure and flowmeter readings",
+    lugeonDensity: "Fluid density",
+    unitDensity: "kg/m³",
+    lugeonStagesTitle: "Stages",
     lugeonStage: "Stage %{n}",
     lugeonPressure: "Pressure ΔP",
-    lugeonReadings: "Flowmeter readings",
+    lugeonReadings: "Cumulative flowmeter readings",
+    lugeonReadingsHint:
+      "Enter the running total, not the increment per interval: 120, 138, 157.",
+    lugeonReadingsFalling:
+      "The readings decrease: an increment was entered instead of the running total.",
     lugeonMeanFlow: "Mean flow rate",
     lugeonStageLu: "Lu",
     lugeonMeanK: "Mean k",
@@ -3274,6 +3314,8 @@ const i18n = new I18n({
     lugeonAddStage: "Add stage",
     lugeonRemoveStage: "Remove stage",
     lugeonChartTitle: "Flow rate vs pressure",
+    lugeonBranchRise: "Pressure rise",
+    lugeonBranchFall: "Pressure fall",
     lugeonPatternTitle: "Flow pattern",
     lugeonPatternLaminar: "Laminar flow",
     lugeonPatternTurbulent: "Turbulent flow",
@@ -3311,7 +3353,8 @@ const i18n = new I18n({
       "k = Q/(2π·l_w·Δh)·ln(R/r_w), where Δh = ΔP/(ρ·g) and the radius of influence R is taken equal to the interval length. Both formulas give close results.",
 
     // --- Rock classification by Lugeon value (table 13.5) ---
-    lugeonRockClass: "Fracturing",
+    lugeonRockClass: "Rock",
+    lugeonPermeabilityTitle: "Permeability",
     lugeonRockVeryLow: "Very slightly fractured",
     lugeonRockLow: "Slightly fractured",
     lugeonRockModerate: "Fractured",
@@ -3336,26 +3379,27 @@ const i18n = new I18n({
     vadoseVolume: "Water added ΔV",
     vadoseInterval: "Time interval Δt",
     vadoseFlow: "Flow rate Q",
-    vadoseFlowComputed: "Computed from volume and interval",
+    vadoseFlowComputed: "From volume and interval",
+    vadoseFlowManual: "Entered by hand",
     vadoseArea: "Infiltration area F",
     vadoseHead: "Water depth in the pit H",
     vadoseDepth: "Wetting front depth z",
     vadoseCapillary: "Capillary rise h_c",
+    vadoseCapillarySection: "Capillary forces",
     vadoseUseCapillary: "Account for capillary forces",
     vadoseNoCapillary: "Ignore",
     vadoseLithology: "Soil",
     vadoseLithologyPick: "Pick a soil",
     vadoseLithologyHint:
-      "Half of the maximum capillary rise is used. The ranges are indicative — a measured height is always better entered by hand.",
+      "Half of the maximum rise from the reference table; a measured one is better entered by hand.",
     vadoseMethod: "Bindeman: k = Q·z / (F·(H + H_c + z)), Q = ΔV/Δt.",
     vadoseMethodBoldyrev: "Boldyrev: k = Q/F = ΔV/(F·Δt).",
     vadoseMethodName: "Method",
     vadoseMethodBoldyrevName: "Boldyrev",
     vadoseMethodBindemanName: "Bindeman",
-    vadoseAreaNote:
-      "Area of the ring through which infiltration takes place. For the Nesterov method, the area of the inner ring.",
+    vadoseAreaNote: "For the Nesterov method, the area of the inner ring.",
     vadoseCapillaryNote:
-      "Without capillary forces the calculation follows Boldyrev: k = Q/F, the whole driving force is credited to gravity, and the result comes out overstated.",
+      "Without capillary forces the result is overstated: the whole driving force is credited to gravity.",
     vadoseHeadNote:
       "The method keeps the water layer in the pit at about 10 cm.",
     vadoseNeedDepth:

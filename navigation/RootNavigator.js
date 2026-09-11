@@ -20,6 +20,7 @@ import SlugTestScreen from '../screens/PumpingTestProcessing/SlugTestScreen';
 import LugeonScreen from '../screens/PumpingTestProcessing/LugeonScreen';
 import VadoseFillScreen from '../screens/PumpingTestProcessing/VadoseFillScreen';
 import FieldDiaryScreen from '../screens/FieldDiaryScreen';
+import MapsScreen from '../screens/MapsScreen';
 import ExamplesAndVideos from '../screens/ExamplesAndVideos';
 import UserManualScreen from '../screens/UserManualScreen';
 import AboutScreen from '../screens/AboutScreen';
@@ -93,6 +94,14 @@ export default function RootNavigator() {
         name="FieldDiary"
         component={FieldDiaryScreen}
         options={{ title: I18n.t('field', { defaultValue: 'Полевой дневник' }) }}
+      />
+      {/* Построитель карт гидроизогипс. Отдельным маршрутом, а не вкладкой
+          калькулятора: он занимает экран целиком и держит своё состояние —
+          построенную карту нельзя терять при переключении вкладок */}
+      <Stack.Screen
+        name="Maps"
+        component={MapsScreen}
+        options={{ title: I18n.t('maps', { defaultValue: 'Карты гидроизогипс' }) }}
       />
       <Stack.Screen
         name="ExamplesAndVideos"
