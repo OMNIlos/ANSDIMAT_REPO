@@ -101,6 +101,51 @@ const mount = async (Screen) => {
 /** Текст всего экрана одной строкой */
 const screenText = (tree) => textOf(tree.toJSON());
 
+/**
+ * Поле ввода по обозначению величины
+ *
+ * По обозначению, а не по подписи: подпись величины встречается на экране и
+ * заголовком раздела, и строкой результата
+ *
+ * @param {Object} tree - дерево рендера
+ * @param {string} symbol - обозначение в формуле: Q, h_c, F
+ * @returns {Object} узел поля
+ */
+const field = (tree, symbol) =>
+  tree.root.findAll(
+    (node) =>
+      node.props?.symbol === symbol && typeof node.props?.onChange === 'function',
+    { deep: true }
+  )[0];
+
+/** Первый переключатель вариантов на экране */
+const optionRow = (tree) =>
+  tree.root.findAll(
+    (node) =>
+      Array.isArray(node.props?.options) &&
+      typeof node.props?.onChange === 'function',
+    { deep: true }
+  )[0];
+
+/** Лента справочных значений */
+const presetRow = (tree) =>
+  tree.root.findAll((node) => typeof node.props?.onPick === 'function', {
+    deep: true,
+  })[0];
+
+/** Цвета ломаных на графике: RNSVG отдаёт их числом в props.stroke.payload */
+const pathStrokes = (tree) => {
+  const walk = (node, seen = []) => {
+    if (!node || typeof node !== 'object') return seen;
+    if (node.type === 'RNSVGPath' && node.props?.stroke?.payload != null) {
+      seen.push(node.props.stroke.payload);
+    }
+    for (const child of node.children ?? []) walk(child, seen);
+    return seen;
+  };
+  return walk(tree.toJSON());
+};
+
 /** Сколько точек на графике */
 const countCircles = (tree) => {
   const walk = (node, seen = []) => {
@@ -176,6 +221,86 @@ describe('Налив в шурф', () => {
     const tree = await mount(VadoseFillScreen);
     expect(screenText(tree)).not.toContain(I18n.t('vadoseNeedDepth'));
   });
+
+  test('у Болдырева нет ни капиллярного поднятия, ни справочника пород', async () => {
+    mockProject.params.useCapillary = false;
+    const tree = await mount(VadoseFillScreen);
+    const text = screenText(tree);
+    expect(text).not.toContain(I18n.t('vadoseCapillary'));
+    expect(text).not.toContain(I18n.t('capillarySandyLoam'));
+  });
+
+  test('выбор метода стоит выше полей', async () => {
+    // От метода зависит, сколько на экране полей вообще, и выбирать его
+    // после того, как половина заполнена, поздно
+    const text = screenText(await mount(VadoseFillScreen));
+    expect(text.indexOf(I18n.t('vadoseMethodName'))).toBeLessThan(
+      text.indexOf(I18n.t('vadoseVolume'))
+    );
+  });
+
+  test('переключение на Биндемана открывает его поля', async () => {
+    mockProject.params.useCapillary = false;
+    const tree = await mount(VadoseFillScreen);
+    await act(async () => {
+      optionRow(tree).props.onChange(true);
+    });
+    const text = screenText(tree);
+    expect(text).toContain(I18n.t('vadoseHead'));
+    expect(text).toContain(I18n.t('vadoseDepth'));
+    expect(text).toContain(I18n.t('vadoseCapillary'));
+  });
+
+  test('расход считается по объёму с интервалом и стоит прямо в поле', async () => {
+    // 3 л за 10 мин — это 0.432 м³/сут; набивать его руками незачем
+    const tree = await mount(VadoseFillScreen);
+    expect(field(tree, 'Q').props.value).toBe('0.432');
+    expect(screenText(tree)).toContain(I18n.t('vadoseFlowComputed'));
+  });
+
+  test('заданный руками расход поле не подменяет', async () => {
+    mockProject.params.flow = 0.864;
+    const tree = await mount(VadoseFillScreen);
+    expect(field(tree, 'Q').props.value).toBe('0.864');
+    expect(screenText(tree)).toContain(I18n.t('vadoseFlowManual'));
+    // И в расчёт идёт он же, а не 0.432 из объёма
+    expect(screenText(tree)).toContain('0.3323');
+  });
+
+  test('стёртое поле расхода не заполняется посчитанным на полуслове', async () => {
+    // Иначе стереть посчитанное число, чтобы вписать своё, было бы нельзя
+    const tree = await mount(VadoseFillScreen);
+    await act(async () => {
+      field(tree, 'Q').props.onChange('');
+    });
+    expect(field(tree, 'Q').props.value).toBe('');
+  });
+
+  test('справочная порода подставляется поверх набранного вручную', async () => {
+    // Набранный текст живёт, пока поле правят, и перекрывал подставленное:
+    // порода «вставлялась» только со второго раза
+    const tree = await mount(VadoseFillScreen);
+    await act(async () => {
+      field(tree, 'h_c').props.onChange('0.55');
+    });
+    expect(field(tree, 'h_c').props.value).toBe('0.55');
+    await act(async () => {
+      presetRow(tree).props.onPick('sandyLoam');
+    });
+    // Супесь: половина середины диапазона 1.5—3.0 м
+    expect(field(tree, 'h_c').props.value).toBe('1.125');
+  });
+
+  test('лента пород не отдаёт первое нажатие клавиатуре', async () => {
+    // Вложенная прокрутка берёт своё умолчание, и первый тап уходил на
+    // закрытие клавиатуры вместо подстановки
+    const tree = await mount(VadoseFillScreen);
+    const scroll = presetRow(tree).findAll(
+      (node) => node.props?.keyboardShouldPersistTaps !== undefined,
+      { deep: true }
+    )[0];
+    expect(scroll.props.keyboardShouldPersistTaps).toBe('handled');
+  });
 });
 
 describe('Поинтервальное нагнетание', () => {
@@ -228,9 +353,57 @@ describe('Поинтервальное нагнетание', () => {
     expect(screenText(tree)).toContain(I18n.t('lugeonPatternTurbulent'));
   });
 
-  test('на графике по точке на ступень', async () => {
+  test('петля «расход — давление» замыкается в нуле', async () => {
     const tree = await mount(LugeonScreen);
-    expect(countCircles(tree)).toBe(5);
+    // Ноль и три ступени подъёма, затем пик, две ступени спуска и возврат в
+    // ноль: пик у ветвей общий, поэтому точек восемь, а не десять
+    expect(countCircles(tree)).toBe(8);
+  });
+
+  test('подъём и спуск давления разведены по цвету и подписаны', async () => {
+    const tree = await mount(LugeonScreen);
+    const text = screenText(tree);
+    expect(text).toContain(I18n.t('lugeonBranchRise'));
+    expect(text).toContain(I18n.t('lugeonBranchFall'));
+    // Две ломаные разного цвета: по расхождению ветвей и читается опыт
+    expect(new Set(pathStrokes(tree)).size).toBe(2);
+  });
+
+  test('пока обратного хода нет, спуск не дорисовывается', async () => {
+    mockProject.params.stages = mockProject.params.stages.slice(0, 3);
+    const tree = await mount(LugeonScreen);
+    expect(screenText(tree)).not.toContain(I18n.t('lugeonBranchFall'));
+    // Ноль и три ступени подъёма
+    expect(countCircles(tree)).toBe(4);
+  });
+
+  test('способ построения прямой на петле не предлагается', async () => {
+    // Прямую по петле не ведут, и переключатели «По всем точкам» и
+    // «Свободная прямая» здесь обещали бы работу, которой нет
+    const text = screenText(await mount(LugeonScreen));
+    expect(text).not.toContain(I18n.t('fitAuto'));
+    expect(text).not.toContain(I18n.t('fitFreedom'));
+  });
+
+  test('объясняет, что показания расходомера накопленные', async () => {
+    const text = screenText(await mount(LugeonScreen));
+    expect(text).toContain(I18n.t('lugeonReadings'));
+    expect(text).toContain(I18n.t('lugeonReadingsHint'));
+  });
+
+  test('убывающие показания названы ошибкой ввода', async () => {
+    // Внесён прирост за минуту, а не нарастающий итог: расход выходит
+    // отрицательным, и молчать об этом нельзя
+    mockProject.params.stages = [
+      { pressure: 286132.4, readings: [10, 20, 30, 40, 5] },
+    ];
+    const text = screenText(await mount(LugeonScreen));
+    expect(text).toContain(I18n.t('lugeonReadingsFalling'));
+  });
+
+  test('исправные показания об ошибке не сообщают', async () => {
+    const text = screenText(await mount(LugeonScreen));
+    expect(text).not.toContain(I18n.t('lugeonReadingsFalling'));
   });
 
   test('пустой опыт не роняет экран', async () => {
@@ -256,6 +429,109 @@ describe('Поинтервальное нагнетание', () => {
     expect(moye).toContain('0.05431');
     expect(thiem).not.toContain('0.05431');
   });
+
+  /**
+   * Поле по testID
+   *
+   * По testID, а не по подписи: подпись «Давление ΔP» одна на пять ступеней
+   *
+   * @param {Object} tree - дерево рендера
+   * @param {string} testID - метка поля
+   * @returns {Object} узел поля
+   */
+  const input = (tree, testID) =>
+    tree.root.findAll(
+      (node) =>
+        node.props?.testID === testID && typeof node.props?.onChangeText === 'function',
+      { deep: true }
+    )[0];
+
+  test('в давление ступени вводится значение меньше единицы', async () => {
+    // Ноль в базе значит «не задано», и первый же символ «0,» обнулял поле:
+    // значение меньше единицы было не набрать в принципе
+    const tree = await mount(LugeonScreen);
+    await act(async () => {
+      input(tree, 'lugeon-pressure-0').props.onChangeText('0,');
+    });
+    expect(input(tree, 'lugeon-pressure-0').props.value).toBe('0,');
+
+    await act(async () => {
+      input(tree, 'lugeon-pressure-0').props.onChangeText('0,5');
+    });
+    expect(input(tree, 'lugeon-pressure-0').props.value).toBe('0,5');
+  });
+
+  test('разделитель в давлении не съедается', async () => {
+    const tree = await mount(LugeonScreen);
+    await act(async () => {
+      input(tree, 'lugeon-pressure-1').props.onChangeText('1,');
+    });
+    expect(input(tree, 'lugeon-pressure-1').props.value).toBe('1,');
+
+    await act(async () => {
+      input(tree, 'lugeon-pressure-1').props.onChangeText('1,3');
+    });
+    expect(input(tree, 'lugeon-pressure-1').props.value).toBe('1,3');
+  });
+
+  test('набранное давление доходит до расчёта', async () => {
+    const tree = await mount(LugeonScreen);
+    // Контрольный средний параметр Люжона исходных ступеней
+    expect(screenText(tree)).toContain('4.918');
+
+    await act(async () => {
+      input(tree, 'lugeon-pressure-0').props.onChangeText('0,5');
+    });
+    // Давление первой ступени упало впятеро — среднее обязано измениться
+    expect(screenText(tree)).not.toContain('4.918');
+  });
+
+  test('в показание расходомера вводится дробное значение', async () => {
+    const tree = await mount(LugeonScreen);
+    await act(async () => {
+      input(tree, 'lugeon-reading-0-0').props.onChangeText('8,');
+    });
+    expect(input(tree, 'lugeon-reading-0-0').props.value).toBe('8,');
+
+    await act(async () => {
+      input(tree, 'lugeon-reading-0-0').props.onChangeText('8,84');
+    });
+    expect(input(tree, 'lugeon-reading-0-0').props.value).toBe('8,84');
+  });
+
+  test('стёртое показание остаётся пропуском, а не нулём', async () => {
+    const tree = await mount(LugeonScreen);
+    await act(async () => {
+      input(tree, 'lugeon-reading-0-3').props.onChangeText('');
+    });
+    expect(input(tree, 'lugeon-reading-0-3').props.value).toBe('');
+    // Ноль на расходомере означал бы обнуление прибора, а не пропуск отсчёта:
+    // расчёт по-прежнему берёт крайние достоверные отсчёты
+    expect(screenText(tree)).not.toContain(I18n.t('lugeonReadingsFalling'));
+  });
+
+  test('удаление ступени не переносит набранное на соседнюю', async () => {
+    const tree = await mount(LugeonScreen);
+    await act(async () => {
+      input(tree, 'lugeon-pressure-4').props.onChangeText('9,');
+    });
+
+    // Крестик ступени — Pressable с одной меткой доступности, без роли:
+    // отбираем по обработчику, первый в списке относится к первой ступени
+    const remove = tree.root.findAll(
+      (node) =>
+        typeof node.props?.onPress === 'function' &&
+        node.props?.accessibilityLabel === I18n.t('lugeonRemoveStage'),
+      { deep: true }
+    )[0];
+    await act(async () => {
+      remove.props.onPress();
+    });
+
+    // Черновики привязаны к номеру ступени: после удаления первой номера
+    // съезжают, и набранный текст пятой ступени оказался бы в четвёртой
+    expect(input(tree, 'lugeon-pressure-3').props.value).not.toBe('9,');
+  });
 });
 
 describe('Экспресс-опробование', () => {
@@ -274,7 +550,8 @@ describe('Экспресс-опробование', () => {
         { id: 'm3', t: 3, s: 0.271 },
         { id: 'm4', t: 4, s: 0.3439 },
       ],
-      params: { rw: 0.05, rc: 0.05, lw: 2, z: 5, m: 10, s0: 1 },
+      // Фильтр задан серединой: LT_w = 4 при длине 2 м — это низ на z = 5 м
+      params: { rw: 0.05, rc: 0.05, lw: 2, lt: 4, m: 10, s0: 1 },
     };
   });
 
@@ -383,6 +660,30 @@ describe('Экспресс-опробование', () => {
     // Результат показывается четырьмя значащими цифрами
     expect(expected).toBeCloseTo(0.5895, 4);
     expect(screenText(tree)).toContain('0.5895');
+  });
+
+  test('опыт из настольного АНСДИМАТ считается по его же геометрии', async () => {
+    // Проект «Экспресс» настольной программы: «Верх/Низ» 4 м, фильтр 7.9 м,
+    // обсадка и фильтр по 0.05 м, мощность 8 м, скачок 3.45 м. Низ фильтра
+    // выходит на 7.95 м — фильтр отцентрован в пласте, как его и задавали
+    mockProject.params = { rw: 0.05, rc: 0.05, lw: 7.9, lt: 4, m: 8, s0: 3.45 };
+    mockProject.measurements = [
+      [1, 0.07], [4, 0.2], [10, 0.34], [20, 0.65], [50, 1.2], [100, 1.8],
+      [240, 2.8], [540, 3.27], [900, 3.32], [1920, 3.37], [3000, 3.4],
+      [5160, 3.43], [6600, 3.44],
+    ].map(([t, s], i) => ({ id: `m${i}`, t, s }));
+
+    const text = screenText(await mount(SlugTestScreen));
+    // Низ фильтра посчитан из середины и показан числом
+    expect(text).toContain('7.950');
+    // Скважина несовершенная: ln(R/r_w) по A₁ и A₂
+    expect(text).toContain('3.9758177');
+    // Излом найден, и об этом сказано
+    expect(text).toContain('два прямолинейных участка');
+    // Ответ — по второму участку; k первого показан рядом. На чертеже
+    // настольного АНСДИМАТ подписано 4.275847E-04 и 6.420426E-03
+    expect(text).toContain('4.1582e-4');
+    expect(text).toContain('0.006422');
   });
 
   test('коэффициент фильтрации показан числом, а не прочерком', async () => {

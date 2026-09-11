@@ -37,8 +37,8 @@ import AppearIn from '../../components/ui/AppearIn';
 import DrawdownChart from '../../components/DrawdownChart';
 import { QUANTITIES, MINUTES_PER_DAY } from '../../calc/units';
 import { X_MODES } from '../../calc/cooperJacob';
-import { SERIES_ROLES } from '../../calc/chartSeries';
-import { processLugeon, LUGEON_FORMULAS } from '../../calc/lugeon';
+import { SERIES_ROLES, SERIES_COLORS } from '../../calc/chartSeries';
+import { processLugeon, lugeonLoop, LUGEON_FORMULAS } from '../../calc/lugeon';
 import { OFR_TYPES } from '../../db/schema';
 import { emptyStage } from '../../db/params';
 import {
@@ -61,6 +61,57 @@ import { spacing, radius, type, numericAt } from '../../theme';
 
 /** Литров в кубометре: средний расход показывается в л/мин, как в отчёте */
 const L_PER_M3 = 1000;
+
+/**
+ * Цвета ветвей петли «расход — давление»
+ *
+ * Прямой и обратный ход — половины одного опыта, и вся суть графика в том,
+ * насколько они разошлись: по расхождению видно, раскрылись трещины упруго
+ * или порода изменилась. Одним цветом петля читается как случайная загогулина.
+ */
+const BRANCH_COLORS = { rise: SERIES_COLORS[0], fall: SERIES_COLORS[1] };
+
+/**
+ * Исходный масштаб полотна под петлю
+ *
+ * Ноль стоит в углу, а не с отступом: петля из него выходит и в него
+ * возвращается, и сдвинутое начало отсчёта выглядит так, будто график
+ * обрезали. Поля по остальным краям узкие — петля должна занимать плоскость
+ * целиком, чтобы форму её ветвей было видно без приближения.
+ *
+ * Ссылка общая на весь модуль: объект уходит в расчёт базовой области, и
+ * новый на каждый рендер увёл бы экран в бесконечную перерисовку.
+ */
+const CHART_VIEWPORT = { fromOrigin: true, padX: 0.06, padY: 0.08 };
+
+/**
+ * Ключ черновика поля давления ступени
+ *
+ * @param {number} index - номер ступени
+ * @returns {string} ключ
+ */
+const pressureKey = (index) => `stage.${index}.pressure`;
+
+/**
+ * Ключ черновика поля показания расходомера
+ *
+ * @param {number} index - номер ступени
+ * @param {number} position - номер отсчёта
+ * @returns {string} ключ
+ */
+const readingKey = (index, position) => `stage.${index}.reading.${position}`;
+
+/**
+ * Все ключи черновиков ступеней
+ *
+ * @param {Array<Object>} stages - ступени
+ * @returns {Array<string>} ключи
+ */
+const stageDraftKeys = (stages) =>
+  stages.flatMap((stage, index) => [
+    pressureKey(index),
+    ...(stage.readings ?? []).map((_, position) => readingKey(index, position)),
+  ]);
 
 /**
  * Одна ступень нагнетания
@@ -109,8 +160,9 @@ function StageCard({
           {`${I18n.t('lugeonPressure')}, ${pressureUnit}`}
         </Text>
         <TextInput
+          testID={`lugeon-pressure-${index}`}
           value={pressureText}
-          onChangeText={(text) => onPressure(index, text)}
+          onChangeText={onPressure}
           keyboardType="decimal-pad"
           selectTextOnFocus
           placeholder="—"
@@ -135,22 +187,31 @@ function StageCard({
         contentContainerStyle={styles.readings}
       >
         {stage.readings.map((_, position) => (
-          <TextInput
-            key={position}
-            value={readingText(index, position)}
-            onChangeText={(text) => onReading(index, position, text)}
-            keyboardType="decimal-pad"
-            selectTextOnFocus
-            placeholder="—"
-            placeholderTextColor={theme.colors.faint}
-            selectionColor={theme.colors.primary}
-            underlineColorAndroid="transparent"
-            style={[
-              styles.reading,
-              numericAt(13),
-              { color: theme.colors.text, borderColor: theme.colors.border },
-            ]}
-          />
+          <View key={position} style={styles.readingCell}>
+            {/* Номер отсчёта над полем. Без него ряд одинаковых клеток не
+                говорит, что в них вносят: это показание расходомера в конце
+                первого промежутка Δt, второго, третьего — а не расход за
+                каждый из них */}
+            <Text style={[numericAt(10), styles.readingIndex, { color: theme.colors.faint }]}>
+              {position + 1}
+            </Text>
+            <TextInput
+              testID={`lugeon-reading-${index}-${position}`}
+              value={readingText(position)}
+              onChangeText={onReading(position)}
+              keyboardType="decimal-pad"
+              selectTextOnFocus
+              placeholder="—"
+              placeholderTextColor={theme.colors.faint}
+              selectionColor={theme.colors.primary}
+              underlineColorAndroid="transparent"
+              style={[
+                styles.reading,
+                numericAt(13),
+                { color: theme.colors.text, borderColor: theme.colors.border },
+              ]}
+            />
+          </View>
         ))}
       </ScrollView>
 
@@ -166,6 +227,17 @@ function StageCard({
         <Stat label={`k, ${conductivityUnit}`} value={conductivityOut(row?.k)} />
         <Stat label={I18n.t('lugeonStageLu')} value={formatValue(row?.lu)} />
       </View>
+
+      {/* Расход вышел отрицательным — показания убывают. Так выглядит самая
+          частая ошибка ввода: вместо нарастающего итога вносят прирост за
+          каждый промежуток, и последний отсчёт оказывается меньше первого.
+          Сказать об этом надо здесь, у самих полей: в подвале ступени
+          «—1.250» ничего не объясняет */}
+      {isFinite(row?.flow) && row.flow < 0 ? (
+        <Text style={[type.caption, styles.stageWarning, { color: theme.colors.error }]}>
+          {I18n.t('lugeonReadingsFalling')}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -262,7 +334,12 @@ export default function LugeonScreen({ route }) {
   );
   const { out, uCond, uLen, uTime, uVol, uPress, fromBase, toBase } =
     useCalcUnits();
-  const { text, change } = useParamFields(params, setParams, fromBase, toBase);
+  const { text, change, forget, draftOr, draftChange } = useParamFields(
+    params,
+    setParams,
+    fromBase,
+    toBase
+  );
 
   const stages = params?.stages ?? [];
 
@@ -297,29 +374,45 @@ export default function LugeonScreen({ route }) {
     [fromBase]
   );
 
+  /**
+   * Пишет давление ступени
+   *
+   * Принимает число в размерности пользователя, а не текст: разбор строки
+   * лежит на черновике в `useParamFields`, здесь остаётся перевод в базовую
+   * единицу. Пустое поле — ноль: ступень без давления не задана.
+   *
+   * @param {number} index - номер ступени
+   * @param {number|null} value - давление в размерности пользователя
+   */
   const setPressure = useCallback(
-    (index, input) => {
-      const parsed = parseNumber(input);
-      const value = isFinite(parsed) ? toBase(parsed, QUANTITIES.PRESSURE) : 0;
+    (index, value) => {
+      const base = value === null ? 0 : toBase(value, QUANTITIES.PRESSURE);
       setParams((previous) => ({
         ...previous,
         stages: previous.stages.map((stage, position) =>
-          position === index ? { ...stage, pressure: value } : stage
+          position === index
+            ? { ...stage, pressure: isFinite(base) ? base : 0 }
+            : stage
         ),
       }));
     },
     [setParams, toBase]
   );
 
+  /**
+   * Пишет показание расходомера
+   *
+   * Стёртое поле — это пропуск отсчёта, а не ноль на расходомере: ноль
+   * означал бы, что прибор обнулился.
+   *
+   * @param {number} index - номер ступени
+   * @param {number} position - номер отсчёта
+   * @param {number|null} input - показание в размерности пользователя
+   */
   const setReading = useCallback(
     (index, position, input) => {
-      const trimmed = String(input).replace(',', '.').trim();
-      // Стёртое поле — это пропуск отсчёта, а не ноль на расходомере
-      const parsed = trimmed === '' ? null : Number(trimmed);
-      const value =
-        parsed === null || !isFinite(parsed)
-          ? null
-          : toBase(parsed, QUANTITIES.VOLUME);
+      const base = input === null ? null : toBase(input, QUANTITIES.VOLUME);
+      const value = base === null || !isFinite(base) ? null : base;
       setParams((previous) => ({
         ...previous,
         stages: previous.stages.map((stage, stageIndex) =>
@@ -346,55 +439,78 @@ export default function LugeonScreen({ route }) {
 
   const removeStage = useCallback(
     (index) => {
+      // Черновики привязаны к номеру ступени, а номера после удаления
+      // съезжают: набранный текст пятой ступени оказался бы в четвёртой.
+      // Числа уже в наборе величин, так что сброс черновиков не теряет ничего
+      forget(...stageDraftKeys(stages));
       setParams((previous) => ({
         ...previous,
         stages: previous.stages.filter((_, position) => position !== index),
       }));
     },
-    [setParams]
+    [setParams, forget, stages]
   );
 
   const pressureText = useCallback(
-    (index) => show(stages[index]?.pressure, QUANTITIES.PRESSURE),
-    [stages, show]
+    (index) =>
+      draftOr(pressureKey(index), show(stages[index]?.pressure, QUANTITIES.PRESSURE)),
+    [stages, show, draftOr]
   );
 
   const readingText = useCallback(
     (index, position) => {
       const value = stages[index]?.readings?.[position];
-      if (value === null || value === undefined) return '';
-      const converted = fromBase(value, QUANTITIES.VOLUME);
-      return isFinite(converted) ? String(Number(converted.toPrecision(6))) : '';
+      const converted =
+        value === null || value === undefined ? NaN : fromBase(value, QUANTITIES.VOLUME);
+      const ready = isFinite(converted) ? String(Number(converted.toPrecision(6))) : '';
+      return draftOr(readingKey(index, position), ready);
     },
-    [stages, fromBase]
+    [stages, fromBase, draftOr]
   );
 
   /**
-   * Серия «расход — давление» для полотна
+   * Ветви петли «расход — давление» для полотна
    *
-   * Ломаная идёт по ступеням в их порядке: прямой ход и обратный дают петлю,
-   * по форме которой и читается вид зависимости (рис. 13.10, б). Прямую по
-   * ней не ведут — роль `reference`, — поэтому подбора участка на этом
-   * графике нет, только масштаб и разворот.
+   * Ломаная идёт по ступеням в их порядке и замыкается в нуле: без
+   * избыточного давления нагнетания нет, и петля из этой точки выходит и в
+   * неё возвращается (рис. 13.10, б). Подъём и спуск давления — две серии
+   * разного цвета: по форме их расхождения и читается вид зависимости, а
+   * одним цветом видно только, что линия куда-то сходила и вернулась.
+   * Геометрия петли — в [`calc/lugeon.js`](../../calc/lugeon.js).
+   *
+   * Обе ветви — серии сравнения: прямую по ним не ведут, поэтому подбора
+   * участка на этом графике нет, только масштаб и разворот. Сплошными они
+   * идут потому, что других данных на полотне нет — пунктир отличает кривую
+   * сравнения от кривой подбора, а сравнивать здесь не с чем.
    *
    * Расход в л/мин против давления в единице пользователя: так же, как в
    * таблице ступеней и в отчёте настольного АНСДИМАТ.
    */
-  const chartSeries = useMemo(
-    () => [
-      {
-        id: 'lugeon',
+  const loop = useMemo(() => lugeonLoop(result.stages), [result.stages]);
+
+  const chartSeries = useMemo(() => {
+    /** Точка петли в координатах полотна */
+    const toPoint = (point) => ({
+      t: fromBase(point.pressure, QUANTITIES.PRESSURE),
+      s: (point.flow * L_PER_M3) / MINUTES_PER_DAY,
+    });
+
+    return [
+      { id: 'rise', label: 'lugeonBranchRise', color: BRANCH_COLORS.rise, points: loop.rise },
+      { id: 'fall', label: 'lugeonBranchFall', color: BRANCH_COLORS.fall, points: loop.fall },
+    ]
+      // Ветвь из одной точки линией не станет, а её ноль на полотне
+      // выглядел бы замером, которого не было
+      .filter((branch) => branch.points.length > 1)
+      .map((branch) => ({
+        id: branch.id,
+        name: I18n.t(branch.label),
+        color: branch.color,
         role: SERIES_ROLES.REFERENCE,
-        measurements: result.stages
-          .filter((row) => isFinite(row.pressure) && isFinite(row.flow))
-          .map((row) => ({
-            t: fromBase(row.pressure, QUANTITIES.PRESSURE),
-            s: (row.flow * L_PER_M3) / MINUTES_PER_DAY,
-          })),
-      },
-    ],
-    [result.stages, fromBase]
-  );
+        dashed: false,
+        measurements: branch.points.map(toPoint),
+      }));
+  }, [loop, fromBase]);
 
   // Масштабы по системам координат: живут в экране, потому что обычное и
   // развёрнутое полотно — два разных монтирования графика
@@ -403,6 +519,11 @@ export default function LugeonScreen({ route }) {
   const problems = [];
   if (!(params?.lw > 0) || !(params?.rw > 0)) problems.push('lugeonNeedGeometry');
   if (!isFinite(result.meanLu)) problems.push('lugeonNeedStages');
+
+  /** Класс трещиноватости в виде суффикса ключа перевода: veryLow → VeryLow */
+  const rockKey = result.rockClass
+    ? `${result.rockClass.id.charAt(0).toUpperCase()}${result.rockClass.id.slice(1)}`
+    : '';
 
   const patternKey = `lugeonPattern${result.pattern
     .charAt(0)
@@ -441,6 +562,7 @@ export default function LugeonScreen({ route }) {
               height={windowHeight}
               caption={I18n.t('lugeonChartTitle')}
               viewKey={`lugeon:${uPress}`}
+              viewport={CHART_VIEWPORT}
               xAxisTitle={`${I18n.t('lugeonPressure')}, ${uPress}`}
               yAxisTitle={`Q, ${I18n.t('unitLiters')}/${I18n.t('unitMinutes')}`}
               emptyTitle={I18n.t('chartEmpty')}
@@ -484,9 +606,12 @@ export default function LugeonScreen({ route }) {
               onChange={change('interval', QUANTITIES.TIME)}
               error={!(params?.interval > 0)}
             />
+            {/* Размерность — в строке под подписью, как у остальных полей:
+                в самой подписи она обрезалась на узком экране */}
             <Field
               label={I18n.t('lugeonDensity')}
               symbol="ρ"
+              unit={I18n.t('unitDensity')}
               value={text('density')}
               onChange={change('density')}
             />
@@ -509,6 +634,9 @@ export default function LugeonScreen({ route }) {
 
         <AppearIn index={1}>
           <SectionLabel>{I18n.t('lugeonStagesTitle')}</SectionLabel>
+          {/* Пояснение стоит до карточек, а не после: читают его перед тем,
+              как заполнять поля, а не разбираясь, почему расход отрицательный */}
+          <Note>{I18n.t('lugeonReadingsHint')}</Note>
           {stages.map((stage, index) => (
             <StageCard
               key={index}
@@ -516,9 +644,15 @@ export default function LugeonScreen({ route }) {
               stage={stage}
               row={result.stages[index]}
               pressureText={pressureText(index)}
-              onPressure={setPressure}
-              readingText={readingText}
-              onReading={setReading}
+              onPressure={draftChange(pressureKey(index), (value) =>
+                setPressure(index, value)
+              )}
+              readingText={(position) => readingText(index, position)}
+              onReading={(position) =>
+                draftChange(readingKey(index, position), (value) =>
+                  setReading(index, position, value)
+                )
+              }
               onRemove={removeStage}
               pressureUnit={uPress}
               volumeUnit={uVol}
@@ -543,9 +677,9 @@ export default function LugeonScreen({ route }) {
         <AppearIn index={2}>
           <SectionLabel>{I18n.t('lugeonLuChart')}</SectionLabel>
           <LugeonBars stages={result.stages} />
-          <Note>{I18n.t('lugeonStagePlan')}</Note>
 
-          <SectionLabel>{I18n.t('lugeonChartTitle')}</SectionLabel>
+          {/* Заголовка над полотном нет: график подписан своей строкой
+              управления, и вторая подпись повторяла бы её слово в слово */}
           <DrawdownChart
             series={chartSeries}
             mode={X_MODES.LINEAR}
@@ -555,6 +689,7 @@ export default function LugeonScreen({ route }) {
             onToggleFullscreen={() => setChartFullscreen(true)}
             caption={I18n.t('lugeonChartTitle')}
             viewKey={`lugeon:${uPress}`}
+            viewport={CHART_VIEWPORT}
             xAxisTitle={`${I18n.t('lugeonPressure')}, ${uPress}`}
             yAxisTitle={`Q, ${I18n.t('unitLiters')}/${I18n.t('unitMinutes')}`}
             emptyTitle={I18n.t('chartEmpty')}
@@ -566,16 +701,14 @@ export default function LugeonScreen({ route }) {
         <AppearIn index={3}>
           <Notices codes={problems} tone="error" />
           <ResultCard
-            title={I18n.t('quantityConductivity')}
+            title={I18n.t('resultConductivity')}
             label="k"
             value={out(result.meanK, QUANTITIES.CONDUCTIVITY)}
             unit={uCond}
             rows={[
-              {
-                label: I18n.t('lugeonMeanLu'),
-                value: formatValue(result.meanLu),
-                unit: 'Lu',
-              },
+              // Единица не подписывается: она уже стоит в названии величины,
+              // и «Среднее Lu — 4.918 Lu» читалось бы как опечатка
+              { label: I18n.t('lugeonMeanLu'), value: formatValue(result.meanLu) },
             ]}
           />
           <Card>
@@ -588,16 +721,22 @@ export default function LugeonScreen({ route }) {
               value={formatValue(result.representativeLu)}
             />
             {/* Табл. 13.5: класс берётся по представительному Lu, а не по
-                среднему — среднее по петле породу характеризует хуже */}
+                среднему — среднее по петле породу характеризует хуже.
+
+                Порода и проницаемость — двумя строками, а не одной через
+                точку: под общей подписью «Трещиноватость» значение
+                «Умеренная · Трещиноватые» читалось как одно слово дважды */}
             {result.rockClass ? (
-              <StatRow
-                label={I18n.t('lugeonRockClass')}
-                value={`${I18n.t(
-                  `lugeonPermeability${result.rockClass.id.charAt(0).toUpperCase()}${result.rockClass.id.slice(1)}`
-                )} · ${I18n.t(
-                  `lugeonRock${result.rockClass.id.charAt(0).toUpperCase()}${result.rockClass.id.slice(1)}`
-                )}`}
-              />
+              <>
+                <StatRow
+                  label={I18n.t('lugeonRockClass')}
+                  value={I18n.t(`lugeonRock${rockKey}`)}
+                />
+                <StatRow
+                  label={I18n.t('lugeonPermeabilityTitle')}
+                  value={I18n.t(`lugeonPermeability${rockKey}`)}
+                />
+              </>
             ) : null}
           </Card>
           <Note>{I18n.t(hintKey)}</Note>
@@ -610,6 +749,7 @@ export default function LugeonScreen({ route }) {
             </Formula>
             <Formula>{I18n.t('lugeonLuMethod')}</Formula>
             <Note>{I18n.t('lugeonScale')}</Note>
+            <Note>{I18n.t('lugeonStagePlan')}</Note>
           </Collapsible>
         </AppearIn>
         </>
@@ -653,6 +793,13 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     paddingRight: spacing.md,
   },
+  readingCell: {
+    alignItems: 'center',
+    gap: 2,
+  },
+  readingIndex: {
+    textAlign: 'center',
+  },
   reading: {
     width: 66,
     borderWidth: StyleSheet.hairlineWidth,
@@ -671,6 +818,10 @@ const styles = StyleSheet.create({
   stat: {
     flex: 1,
     gap: 2,
+  },
+  stageWarning: {
+    marginTop: spacing.sm,
+    lineHeight: 18,
   },
   bars: {
     borderWidth: StyleSheet.hairlineWidth,

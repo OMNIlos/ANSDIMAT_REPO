@@ -145,7 +145,10 @@ export function useOfrParams(projectId, ofrType) {
  * @param {Function} setParams - запись набора
  * @param {Function} fromBase - перевод из базовой единицы
  * @param {Function} toBase - перевод в базовую единицу
- * @returns {{text: Function, change: Function}} чтение и запись поля
+ * @returns {{text: Function, change: Function, editing: Function,
+ *   forget: Function, draftOr: Function, draftChange: Function}} чтение поля,
+ *   запись, признак незаконченного ввода, сброс набранного текста и та же
+ *   пара для полей, лежащих глубже `params`
  */
 export function useParamFields(params, setParams, fromBase, toBase) {
   // Ключ → набранный текст. Живёт, пока поле правят: как только правка ушла
@@ -183,7 +186,83 @@ export function useParamFields(params, setParams, fromBase, toBase) {
     [setParams, toBase]
   );
 
-  return { text, change };
+  /**
+   * Правят ли поле прямо сейчас
+   *
+   * Пока в поле лежит незаконченный ввод, показывать вместо него посчитанное
+   * значение нельзя: расход выводится из объёма и интервала, и подстановка
+   * посреди набора стирала бы набранное на полуслове.
+   *
+   * @param {string} key - ключ величины
+   * @returns {boolean} есть ли набранный текст
+   */
+  const editing = useCallback((key) => drafts[key] !== undefined, [drafts]);
+
+  /**
+   * Забывает набранный в поле текст
+   *
+   * Нужно, когда число приходит не из поля, а со стороны — подстановкой из
+   * справочника пород. Черновик живёт, пока поле правят, и без сброса он
+   * перекрыл бы подставленное значение: геолог жмёт «Супесь», а в поле
+   * остаётся то, что он набрал руками до этого.
+   *
+   * @param {...string} keys - ключи величин
+   */
+  const forget = useCallback((...keys) => {
+    setDrafts((previous) => {
+      if (!keys.some((key) => previous[key] !== undefined)) return previous;
+      const next = { ...previous };
+      for (const key of keys) delete next[key];
+      return next;
+    });
+  }, []);
+
+  /**
+   * Набранный текст поля, если его правят, иначе готовое значение
+   *
+   * Нужно полям, число которых лежит не в `params` по ключу, а глубже —
+   * в ступенях поинтервального нагнетания. Круг «текст → число → текст» у них
+   * тот же самый, и спасает от него тот же черновик: без него «0,» уходило
+   * в ноль и возвращалось пустотой, а значение меньше единицы было не набрать.
+   *
+   * @param {string} key - ключ черновика, уникальный в пределах экрана
+   * @param {string} ready - что показать, когда поле не правят
+   * @returns {string} текст поля
+   */
+  const draftOr = useCallback(
+    (key, ready) => (drafts[key] !== undefined ? drafts[key] : ready),
+    [drafts]
+  );
+
+  /**
+   * Обработчик правки поля, число которого лежит глубже `params`
+   *
+   * Число отдаётся наружу в размерности пользователя: куда его писать и как
+   * переводить в базовую, знает экран, а не обвязка. Пустое поле отдаётся
+   * как `null` — «не задано» и «ноль» на разных экранах значат разное.
+   *
+   * @param {string} key - ключ черновика
+   * @param {Function} onValue - (value: number|null) => void
+   * @returns {Function} обработчик onChangeText
+   */
+  const draftChange = useCallback(
+    (key, onValue) => (input) => {
+      setDrafts((previous) => ({ ...previous, [key]: input }));
+      const normalized = String(input).replace(',', '.').trim();
+      if (normalized === '') {
+        onValue(null);
+        return;
+      }
+      const parsed = Number(normalized);
+      // Незаконченный ввод — «1,» разбирается в 1, «-» ни во что — оставляем
+      // в поле как есть и в набор величин не пишем
+      if (!isFinite(parsed)) return;
+      onValue(parsed);
+    },
+    []
+  );
+
+  return { text, change, editing, forget, draftOr, draftChange };
 }
 
 /**
