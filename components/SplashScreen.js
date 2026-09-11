@@ -17,7 +17,7 @@
  * @param {Function} onFinish - Вызывается по истечении таймера показа
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useContext, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -30,6 +30,7 @@ import {
 } from 'react-native';
 import * as NativeSplash from 'expo-splash-screen';
 import I18n from '../Localization';
+import { LanguageContext } from '../LanguageContext';
 import DrawdownCurve from './DrawdownCurve';
 import { palette, spacing, type } from '../theme';
 
@@ -37,6 +38,25 @@ const SPLASH_DURATION = 2200;
 
 export default function SplashScreen({ onFinish }) {
   const currentYear = new Date().getFullYear();
+
+  // Подписка на язык, а не просто вызов I18n.t: заставка — единственный экран,
+  // который успевает отрисоваться раньше, чем выбранный язык прочитан из
+  // хранилища. Без подписки она застывала на языке первого рендера — на
+  // системном, — и выбранный в настройках английский появлялся только после
+  // заставки. Остальные экраны монтируются позже и берут готовую локаль
+  const { locale } = useContext(LanguageContext);
+
+  // Пересобираются вместе с языком: I18n.t читает глобальную локаль, и без
+  // зависимости от неё связь подписей с языком нигде не была бы записана
+  const strings = useMemo(
+    () => ({
+      title: I18n.t('homeTitle', { defaultValue: 'АНСДИМАТ' }),
+      subtitle: I18n.t('appSubtitle', {
+        defaultValue: 'полевой калькулятор гидрогеолога',
+      }),
+    }),
+    [locale]
+  );
 
   const logoAnim = useRef(new Animated.Value(0)).current;
   const textAnim = useRef(new Animated.Value(0)).current;
@@ -122,27 +142,23 @@ export default function SplashScreen({ onFinish }) {
             style={styles.logo}
             resizeMode="contain"
             accessibilityRole="image"
-            accessibilityLabel={I18n.t('homeTitle', { defaultValue: 'АНСДИМАТ' })}
+            accessibilityLabel={strings.title}
           />
         </Animated.View>
 
         <Animated.View style={[styles.titleBlock, rise(textAnim)]}>
-          <Text style={styles.appName}>
-            {I18n.t('homeTitle', { defaultValue: 'АНСДИМАТ' })}
-          </Text>
+          <Text style={styles.appName}>{strings.title}</Text>
 
           <View style={styles.rule} />
 
-          <Text style={styles.subtitle}>
-            {I18n.t('appSubtitle', { defaultValue: 'полевой калькулятор гидрогеолога' })}
-          </Text>
+          <Text style={styles.subtitle}>{strings.subtitle}</Text>
         </Animated.View>
       </View>
 
       <View style={styles.footer}>
         <Text style={styles.website}>ansdimat.com</Text>
         <Text style={styles.copyright}>
-          © {currentYear} {I18n.t('homeTitle', { defaultValue: 'АНСДИМАТ' })}
+          © {currentYear} {strings.title}
         </Text>
       </View>
     </View>
