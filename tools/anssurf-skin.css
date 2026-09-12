@@ -1,0 +1,286 @@
+/*
+ * Приведение AnsSurf к виду приложения
+ *
+ * Построитель карт приходит собранным веб-приложением со своей палитрой
+ * (коралловый акцент), своими радиусами и десктопной вёрсткой. Внутри
+ * приложения он должен читаться как его раздел, а не как вставленный сайт.
+ *
+ * Работа идёт через токены, а не через перебивание классов: страница собрана
+ * на Tailwind с переменными (`--color-*`, `--radius-*`, `--font-sans`), и
+ * подмена значений перекрашивает её целиком. Это переживает обновление
+ * поставки — точечные правки по классам не пережили бы, классы там
+ * сгенерированы сборщиком.
+ *
+ * Правил «по месту» здесь ровно столько, сколько нужно на две вещи, которые
+ * токенами не чинятся: ошибку в CSS поставки и мобильную эргономику.
+ *
+ * Подключается сборкой `tools/build-anssurf.js`, шрифты — из
+ * `tools/anssurf-fonts.css`.
+ */
+
+/* ── Типографика ───────────────────────────────────────────────────────
+ * Сама поставка уже просит Manrope — ей просто неоткуда её взять в WebView.
+ * Шрифты встроены рядом, остаётся снять десктопную подмену на Segoe UI
+ * и увести моноширинный на гарнитуру приложения: числа, координаты и
+ * уровни в приложении набраны JetBrains Mono, и разнобой здесь заметнее
+ * всего — именно числа человек и сверяет глазами.
+ */
+:root,
+:host {
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+html.hydro-desktop,
+html.hydro-desktop body {
+  font-family: var(--font-sans);
+}
+
+/* ── Палитра, светлая тема ─────────────────────────────────────────────
+ * Бордовый вместо кораллового, тёплая «бумага» вместо холодного серого:
+ * в приложении цвет несёт смысл, и бордовый означает бренд и ввод данных.
+ */
+:root {
+  --color-bg: #fbfafa;
+  --color-paper: #ffffff;
+  --color-surface: #ffffff;
+  --color-surface-2: #ffffff;
+  --color-surface-3: #f4f1f2;
+  --color-fg: #1a0710;
+  --color-ink: #1a0710;
+  --color-muted: #6b6169;
+  --color-subtle: #8a8087;
+  --color-primary: #72002f;
+  --color-primary-fg: #ffffff;
+  --color-primary-soft: #fbf0f4;
+  --color-border: #e8e4e6;
+  --color-border-strong: #d6cfd2;
+  --color-danger: #b3261e;
+
+  /* Скругления приложения: 12 — поля и кнопки, 16–18 — карточки */
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 18px;
+  --radius-xl: 22px;
+}
+
+/* ── Палитра, тёмная тема ──────────────────────────────────────────────
+ * Тёплый чёрный, а не холодный: тёмная тема приложения уведена в бордовый
+ * подтон, и нейтрально-серая вставка в ней читается как чужая.
+ *
+ * Акцент — осветлённый бордовый: глубокий #72002F на тёмном фоне
+ * перестаёт быть виден как акцент.
+ */
+html.dark {
+  --color-bg: #121013;
+  --color-paper: #1c191c;
+  --color-surface: #1c191c;
+  --color-surface-2: #252126;
+  --color-surface-3: #2e2930;
+  --color-fg: #f5f2f4;
+  --color-ink: #f5f2f4;
+  --color-muted: #a79fa4;
+  --color-subtle: #8e858b;
+  --color-primary: #a8446a;
+  --color-primary-fg: #ffffff;
+  --color-primary-soft: #33121f;
+  --color-border: #332d31;
+  --color-border-strong: #4a4248;
+  --color-danger: #e0736c;
+}
+
+/* ── Ошибка в CSS поставки ─────────────────────────────────────────────
+ * Десктопная тема задаёт фон рабочей области как `var(--bg, #f4f6f8)`,
+ * а токен называется `--color-bg`. Переменной `--bg` не существует, поэтому
+ * всегда берётся запасное светло-серое значение: в тёмной теме получалась
+ * светлая подложка под светлым текстом, и заголовок шага было не прочесть.
+ */
+html.hydro-desktop #root > div > main {
+  background: var(--color-bg);
+}
+
+/* ── Лента шагов ───────────────────────────────────────────────────────
+ * Модуль рисует её как нижнюю панель вкладок; десктопная тема поднимает
+ * её наверх и красит в #252525. Внутри приложения она оказывается второй
+ * полосой сразу под его собственной шапкой, да ещё чужого цвета.
+ *
+ * Приводим к сегментам калькулятора: подпись в строку со значком, выбранный
+ * шаг — заливкой бренда, недоступный — приглушён. Полоса становится частью
+ * шапки приложения, а не отдельной панелью.
+ */
+html.hydro-desktop #root > div > nav.sticky {
+  background: var(--color-surface) !important;
+  border-bottom: 1px solid var(--color-border);
+  border-top: 0;
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+html.hydro-desktop #root > div > nav.sticky::-webkit-scrollbar {
+  display: none;
+}
+
+html.hydro-desktop #root > div > nav.sticky > button {
+  flex: 1 1 0 !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  min-width: 0 !important;
+  white-space: nowrap !important;
+  padding: 9px 10px !important;
+  border-radius: 20px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  line-height: 18px !important;
+  color: var(--color-muted);
+}
+
+/* Значок шага — только на широком экране. На телефоне три подписи и без
+   значков занимают полосу целиком, а с ними сегменты не влезают и лента
+   уезжает в горизонтальную прокрутку, обрезая выбранный шаг */
+@media (max-width: 767px) {
+  html.hydro-desktop #root > div > nav.sticky > button svg {
+    display: none !important;
+  }
+}
+
+/* Выбранный шаг — заливка бренда. Отличать его цветом подписи, как в
+   поставке, на бордовой шапке приложения уже нечем: бордовый на бордовом */
+html.hydro-desktop #root > div > nav.sticky > button.text-primary {
+  background: var(--color-primary) !important;
+  color: var(--color-primary-fg) !important;
+}
+
+/* ── Шаг «Печать» убран ────────────────────────────────────────────────
+ * Четвёртый шаг поставки — вывод на печать и выгрузка. Убран по решению
+ * заказчика; других входов на него нет, лента была единственным.
+ *
+ * Скрытием, а не вырезанием из разметки: шаги рисует React, и удалённый
+ * узел вернулся бы на первой же перерисовке.
+ *
+ * Правило опирается на порядок шагов — их в поставке ровно четыре. Придёт
+ * сборка с другим числом шагов, и правило начнёт прятать не тот: это
+ * первое, что надо проверить при обновлении поставки.
+ */
+html.hydro-desktop #root > div > nav.sticky > button:nth-child(4) {
+  display: none !important;
+}
+
+html.hydro-desktop #root > div > nav.sticky > button:disabled {
+  opacity: 0.4;
+}
+
+/* ── Управляющие элементы ──────────────────────────────────────────────
+ * Кнопки и поля приложения выше и мягче: палец в перчатке промахивается
+ * по сорока четырём пикселям, и на этом экране данные вводят именно в поле.
+ */
+html.hydro-desktop button:not(nav.sticky > button),
+html.hydro-desktop select,
+html.hydro-desktop input[type="text"],
+html.hydro-desktop input[type="number"],
+html.hydro-desktop input:not([type]) {
+  font-family: var(--font-sans);
+}
+
+html.hydro-desktop input[type="number"],
+html.hydro-desktop input[type="text"],
+html.hydro-desktop input:not([type]) {
+  font-family: var(--font-mono);
+}
+
+/* ── Полотно карты ─────────────────────────────────────────────────────
+ * Рычаги масштаба и слоёв — поверхности приложения, а не белые квадраты
+ * Leaflet со скруглением в четыре пикселя.
+ */
+html.hydro-desktop .leaflet-bar,
+html.hydro-desktop .leaflet-control-layers {
+  border: 1px solid var(--color-border) !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(26, 7, 16, 0.12) !important;
+}
+
+html.hydro-desktop .leaflet-bar a {
+  background: var(--color-surface) !important;
+  color: var(--color-fg) !important;
+  border-bottom-color: var(--color-border) !important;
+}
+
+html.hydro-desktop .leaflet-bar a:hover {
+  background: var(--color-surface-3) !important;
+}
+
+/* ── Телефон: карта и панель шага ──────────────────────────────────────
+ * Здесь была не косметика, а неработающий экран.
+ *
+ * Десктопная тема поставки задаёт рабочей области `height:100%` и
+ * `overflow:hidden` — это вёрстка «карта слева, панель настроек справа», и
+ * на широком экране она верна. На телефоне те же правила достаются колонке:
+ * карта забирает всю высоту как `flex-1`, панель сжимается до полусотни
+ * пикселей, а `overflow:hidden` обрезает остаток. Список скважин, настройки
+ * интерполяции и кнопки выгрузки становятся недостижимы — не «неудобны»,
+ * а недостижимы: прокручивать нечего, всё обрезано.
+ *
+ * Ниже порога, на котором сама поставка переключается на колонку (768 px),
+ * возвращаем нормальный поток: карта получает предсказуемую высоту, панель
+ * встаёт под ней, прокручивается рабочая область целиком.
+ */
+@media (max-width: 767px) {
+  html.hydro-desktop .hydro-stage {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Чуть больше половины экрана: карта остаётся главным, но под ней видно
+     начало панели — иначе непонятно, что там вообще что-то есть.
+     Высота задаётся жёстко: у полотна стоит `flex-1`, и без своей высоты
+     в колонке с автоматической высотой оно схлопывается в ноль */
+  html.hydro-desktop .hydro-stage > .hydro-map-pane {
+    flex: 0 0 auto !important;
+    height: 56vh !important;
+    min-height: 260px !important;
+  }
+
+  html.hydro-desktop .hydro-stage > aside {
+    flex: 0 0 auto !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+}
+
+/* ── Место под плавающее меню ──────────────────────────────────────────
+ * Нижнее меню приложения висит поверх экрана. Содержимое прокручивается
+ * под ним, и последняя строка — как правило кнопка выгрузки — оказывалась
+ * под кнопкой «Справка».
+ *
+ * Отступ задаётся переменной: её выставляет приложение при загрузке, потому
+ * что высота меню зависит от системного отступа снизу и известна только ему.
+ */
+html.hydro-desktop #root > div > main {
+  padding-bottom: var(--ansd-menu-inset, 0px);
+}
+
+/* На карте отступ снимается: полотну лучше уходить под плавающее меню
+   целиком, чем обрываться полосой фона. Панель под картой своё место
+   под меню получает отдельно */
+html.hydro-desktop .hydro-stage {
+  margin-bottom: calc(-1 * var(--ansd-menu-inset, 0px));
+}
+
+html.hydro-desktop .hydro-stage > aside {
+  padding-bottom: calc(2rem + var(--ansd-menu-inset, 0px));
+}
+
+/* ── Мелочи, которые выдают вставку ────────────────────────────────────
+ * Подсказки и рамки поставки нарисованы холодным серым; здесь они уже
+ * взяты из токенов, но пунктир задан отдельным цветом мимо них.
+ */
+html.hydro-desktop [class*="border-dashed"] {
+  border-color: var(--color-border-strong);
+}

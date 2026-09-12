@@ -29,12 +29,20 @@ const THEME_KEY = 'hydro-theme';
  * @param {Object} options
  * @param {boolean} options.dark - тёмная тема
  * @param {boolean} options.native - внедряется в WebView, а не в iframe
+ * @param {number} options.menuInset - высота плавающего меню приложения, px
  * @returns {string} текст скрипта
  */
-export function beforeContentScript({ dark, native }) {
+export function beforeContentScript({ dark, native, menuInset = 0 }) {
   return `
 (function(){
   try { localStorage.setItem(${JSON.stringify(THEME_KEY)}, ${JSON.stringify(dark ? 'dark' : 'light')}); } catch (e) {}
+
+  // Высота плавающего меню приложения: страница отводит под него место в
+  // панели шага. Сама она этой высоты не знает — та зависит от системного
+  // отступа снизу, а его видит только приложение
+  document.documentElement.style.setProperty('--ansd-menu-inset', ${JSON.stringify(
+    `${Math.round(menuInset)}px`
+  )});
 
   var pending = {};
   var seq = 0;
@@ -100,6 +108,18 @@ export function replyScript(id, error) {
   return `window.__ansdHostReply(${JSON.stringify(id)}, ${
     error ? JSON.stringify(String(error)) : 'null'
   }); true;`;
+}
+
+/**
+ * Скрипт, задающий странице высоту плавающего меню
+ *
+ * @param {number} menuInset - высота меню, px
+ * @returns {string} текст скрипта
+ */
+export function menuInsetScript(menuInset) {
+  return `document.documentElement.style.setProperty('--ansd-menu-inset', ${JSON.stringify(
+    `${Math.round(menuInset)}px`
+  )}); true;`;
 }
 
 /**

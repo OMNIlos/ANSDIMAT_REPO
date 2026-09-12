@@ -16,6 +16,11 @@
  *    третьей стороне, которую пользователю никто не объявлял.
  * 3. Иконки вкладки (`<link rel=icon>` с data-URI на 110 КБ) выбрасываются:
  *    WebView их не показывает, а вес они занимают.
+ * 4. В конец `<head>` добавляется скин — `tools/anssurf-skin.css` вместе со
+ *    встроенными шрифтами из `tools/anssurf-fonts.css`. Поставка приходит со
+ *    своей палитрой и десктопной вёрсткой, а внутри приложения раздел обязан
+ *    читаться как его часть, а не как вставленный сайт. Скин идёт последним
+ *    в `<head>`, поэтому переопределяет токены поставки без `!important`.
  *
  * Имена файлов сохраняются. Внутри сборки есть ссылки вида
  * `gidroizogipsy-en.html` и определение языка по `location.pathname` —
@@ -41,6 +46,9 @@ const EXPORT_SCRIPT = 'ansdimat-export.js';
 
 /** Куда складывается собранное */
 const OUT_DIR = path.join(__dirname, '..', 'assets', 'anssurf');
+
+/** Скин и шрифты: собираются в один <style> в конце <head> */
+const SKIN_FILES = ['anssurf-fonts.css', 'anssurf-skin.css'];
 
 /**
  * Вырезает кусок между двумя метками вместе с ними
@@ -106,13 +114,36 @@ function inlineExport(html, code) {
 const kb = (bytes) => `${Math.round(bytes / 1024)} КБ`;
 
 /**
+ * Дописывает скин в конец <head>
+ *
+ * Именно в конец: правила поставки лежат выше, и одинаковая по весу
+ * селекторов подмена токена побеждает порядком, а не `!important`.
+ *
+ * @param {string} html - разметка страницы
+ * @param {string} skin - содержимое скина
+ * @returns {string} разметка со скином
+ */
+function addSkin(html, skin) {
+  const head = html.lastIndexOf('</head>');
+  if (head < 0) {
+    throw new Error('Не найден </head>: поставка AnsSurf изменилась');
+  }
+  return (
+    html.slice(0, head) +
+    `<style data-ansdimat-skin>\n${skin}\n</style>\n` +
+    html.slice(head)
+  );
+}
+
+/**
  * Собирает одну страницу
  *
  * @param {string} srcDir - каталог поставки
  * @param {string} name - имя файла страницы
  * @param {string} exportCode - содержимое встраиваемого скрипта
+ * @param {string} skin - содержимое скина
  */
-function buildPage(srcDir, name, exportCode) {
+function buildPage(srcDir, name, exportCode, skin) {
   const source = fs.readFileSync(path.join(srcDir, name), 'utf8');
 
   let html = source;
@@ -124,6 +155,7 @@ function buildPage(srcDir, name, exportCode) {
   );
   html = dropIcons(html);
   html = inlineExport(html, exportCode);
+  html = addSkin(html, skin);
 
   if (/mc\.yandex\.ru|metrika/i.test(html)) {
     throw new Error(`В ${name} остались следы Метрики после вырезания`);
@@ -155,7 +187,11 @@ function main() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const exportCode = fs.readFileSync(path.join(srcDir, EXPORT_SCRIPT), 'utf8');
 
-  for (const name of PAGES) buildPage(srcDir, name, exportCode);
+  const skin = SKIN_FILES.map((file) =>
+    fs.readFileSync(path.join(__dirname, file), 'utf8')
+  ).join('\n');
+
+  for (const name of PAGES) buildPage(srcDir, name, exportCode, skin);
 
   console.log(`Готово: ${OUT_DIR}`);
 }

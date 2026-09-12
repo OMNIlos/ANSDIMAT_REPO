@@ -15,6 +15,7 @@
  *
  * @param {'ru'|'en'} locale - язык страницы
  * @param {boolean} dark - тёмная тема
+ * @param {number} [menuInset] - высота плавающего меню приложения, px
  * @param {Function} [onError] - что-то не получилось: (текст)
  */
 
@@ -43,7 +44,7 @@ function rememberTheme(dark) {
   }
 }
 
-export default function AnsSurf({ locale, dark, onError }) {
+export default function AnsSurf({ locale, dark, menuInset = 0, onError }) {
   const theme = useTheme();
   const frameRef = useRef(null);
 
@@ -84,6 +85,19 @@ export default function AnsSurf({ locale, dark, onError }) {
       // Окно ещё не готово — тема встанет при следующем открытии
     }
   }, [dark, loading]);
+
+  // Высота плавающего меню: страница отводит под него место в панели шага
+  useEffect(() => {
+    const frame = frameRef.current?.contentWindow;
+    try {
+      frame?.document?.documentElement?.style?.setProperty(
+        '--ansd-menu-inset',
+        `${Math.round(menuInset)}px`
+      );
+    } catch {
+      // Окно ещё не готово — отступ встанет на onLoad
+    }
+  }, [menuInset, loading]);
 
   const onLoad = useCallback(() => setLoading(false), []);
 

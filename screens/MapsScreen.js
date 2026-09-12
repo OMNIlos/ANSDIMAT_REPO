@@ -67,23 +67,20 @@ export default function MapsScreen() {
         </Text>
       ) : null}
 
+      {/* Плавающее меню перекрывает низ экрана. Место под него отводит сама
+          страница, а не подложка снаружи: подложка обрезала бы карту полосой
+          фона, а так полотно уходит под меню целиком, и отступ получает
+          только прокручиваемая панель шага */}
       <AnsSurf
         locale={locale}
         dark={!!theme.dark}
+        menuInset={
+          Platform.OS === 'web'
+            ? MENU_BAR_HEIGHT + spacing.md
+            : Math.max(insets.bottom, 26) + MENU_BAR_HEIGHT
+        }
         onSaved={handleSaved}
         onError={handleError}
-      />
-
-      {/* Плавающее меню перекрывает низ экрана: без этой подложки под ним
-          прячется нижний край панели инструментов построителя */}
-      <View
-        style={{
-          height:
-            Platform.OS === 'web'
-              ? MENU_BAR_HEIGHT + spacing.md
-              : Math.max(insets.bottom, 26) + MENU_BAR_HEIGHT,
-          backgroundColor: theme.colors.background,
-        }}
       />
     </View>
   );

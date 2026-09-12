@@ -16,6 +16,7 @@
  *
  * @param {'ru'|'en'} locale - язык страницы
  * @param {boolean} dark - тёмная тема
+ * @param {number} [menuInset] - высота плавающего меню приложения, px
  * @param {Function} [onSaved] - выгрузка удалась: ({saved, names})
  * @param {Function} [onError] - что-то не получилось: (текст)
  */
@@ -27,13 +28,14 @@ import { WebView } from 'react-native-webview';
 import { anssurfPageUri } from './anssurfAsset';
 import {
   beforeContentScript,
+  menuInsetScript,
   parseMessage,
   replyScript,
   themeScript,
 } from './anssurfBridge';
 import { saveAnsSurfExport } from '../share/anssurfExport';
 
-export default function AnsSurf({ locale, dark, onSaved, onError }) {
+export default function AnsSurf({ locale, dark, menuInset = 0, onSaved, onError }) {
   const theme = useTheme();
   const webRef = useRef(null);
 
@@ -61,6 +63,13 @@ export default function AnsSurf({ locale, dark, onSaved, onError }) {
     if (loading) return;
     webRef.current?.injectJavaScript(themeScript(dark));
   }, [dark, loading]);
+
+  // Высота меню зависит от системного отступа снизу и приезжает не сразу:
+  // на первом рендере safe-area ещё не измерена
+  useEffect(() => {
+    if (loading) return;
+    webRef.current?.injectJavaScript(menuInsetScript(menuInset));
+  }, [menuInset, loading]);
 
   const handleMessage = useCallback(
     async (event) => {
@@ -111,6 +120,7 @@ export default function AnsSurf({ locale, dark, onSaved, onError }) {
           injectedJavaScriptBeforeContentLoaded={beforeContentScript({
             dark,
             native: true,
+            menuInset,
           })}
           onError={(event) =>
             onError?.(event?.nativeEvent?.description || 'WebView error')
