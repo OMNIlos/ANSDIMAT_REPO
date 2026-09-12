@@ -16,7 +16,12 @@
  *    третьей стороне, которую пользователю никто не объявлял.
  * 3. Иконки вкладки (`<link rel=icon>` с data-URI на 110 КБ) выбрасываются:
  *    WebView их не показывает, а вес они занимают.
- * 4. В конец `<head>` добавляется скин — `tools/anssurf-skin.css` вместе со
+ * 4. Четвёртый шаг переименовывается из «Печати» в «Выгрузку». Печати в нём
+ *    нет вовсе — `window.print` в поставке не вызывается ни разу, а внутри
+ *    лежат PDF, JPG с файлом привязки, GeoTIFF, DXF, Shapefile и сеточный
+ *    `.grd`. На телефоне печатать некуда, и подпись обещала бы то, чего нет;
+ *    выгрузка же — ровно то, ради чего сюда и приходят.
+ * 5. В конец `<head>` добавляется скин — `tools/anssurf-skin.css` вместе со
  *    встроенными шрифтами из `tools/anssurf-fonts.css`. Поставка приходит со
  *    своей палитрой и десктопной вёрсткой, а внутри приложения раздел обязан
  *    читаться как его часть, а не как вставленный сайт. Скин идёт последним
@@ -49,6 +54,17 @@ const OUT_DIR = path.join(__dirname, '..', 'assets', 'anssurf');
 
 /** Скин и шрифты: собираются в один <style> в конце <head> */
 const SKIN_FILES = ['anssurf-fonts.css', 'anssurf-skin.css'];
+
+/**
+ * Новое название четвёртого шага по языку страницы
+ *
+ * Ключ — имя файла поставки. Подпись живёт в объявлении шагов внутри
+ * бандла: `{id:4,label:`Печать`,short:`Печать`,icon:…}`.
+ */
+const STEP_RENAME = {
+  'gidroizogipsy.html': 'Выгрузка',
+  'gidroizogipsy-en.html': 'Export',
+};
 
 /**
  * Вырезает кусок между двумя метками вместе с ними
@@ -114,6 +130,29 @@ function inlineExport(html, code) {
 const kb = (bytes) => `${Math.round(bytes / 1024)} КБ`;
 
 /**
+ * Переименовывает четвёртый шаг
+ *
+ * Значок шага не трогаем: его имя в бандле минифицировано и меняется от
+ * сборки к сборке, поэтому в образце оно не закреплено.
+ *
+ * @param {string} html - разметка страницы
+ * @param {string} label - новая подпись
+ * @returns {string} разметка с переименованным шагом
+ */
+function renameFourthStep(html, label) {
+  const pattern = /(\{id:4,label:`)[^`]+(`,short:`)[^`]+(`)/g;
+  const found = html.match(pattern);
+  if (!found || found.length !== 1) {
+    throw new Error(
+      `Объявление четвёртого шага не найдено или не одно (${
+        found ? found.length : 0
+      }): поставка AnsSurf изменилась`
+    );
+  }
+  return html.replace(pattern, `$1${label}$2${label}$3`);
+}
+
+/**
  * Дописывает скин в конец <head>
  *
  * Именно в конец: правила поставки лежат выше, и одинаковая по весу
@@ -155,6 +194,7 @@ function buildPage(srcDir, name, exportCode, skin) {
   );
   html = dropIcons(html);
   html = inlineExport(html, exportCode);
+  html = renameFourthStep(html, STEP_RENAME[name]);
   html = addSkin(html, skin);
 
   if (/mc\.yandex\.ru|metrika/i.test(html)) {

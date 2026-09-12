@@ -132,7 +132,7 @@ html.hydro-desktop #root > div > nav.sticky > button {
   gap: 6px !important;
   min-width: 0 !important;
   white-space: nowrap !important;
-  padding: 9px 10px !important;
+  padding: 9px 6px !important;
   border-radius: 20px !important;
   font-size: 13px !important;
   font-weight: 600 !important;
@@ -140,12 +140,22 @@ html.hydro-desktop #root > div > nav.sticky > button {
   color: var(--color-muted);
 }
 
-/* Значок шага — только на широком экране. На телефоне три подписи и без
-   значков занимают полосу целиком, а с ними сегменты не влезают и лента
+/* Значок шага — только на широком экране. На телефоне четыре подписи и без
+   значков занимают полосу целиком, а со значками сегменты не влезают и лента
    уезжает в горизонтальную прокрутку, обрезая выбранный шаг */
 @media (max-width: 767px) {
   html.hydro-desktop #root > div > nav.sticky > button svg {
     display: none !important;
+  }
+
+  html.hydro-desktop #root > div > nav.sticky {
+    gap: 4px !important;
+    padding: 8px 8px !important;
+  }
+
+  html.hydro-desktop #root > div > nav.sticky > button {
+    font-size: 12px !important;
+    padding: 9px 4px !important;
   }
 }
 
@@ -156,20 +166,6 @@ html.hydro-desktop #root > div > nav.sticky > button.text-primary {
   color: var(--color-primary-fg) !important;
 }
 
-/* ── Шаг «Печать» убран ────────────────────────────────────────────────
- * Четвёртый шаг поставки — вывод на печать и выгрузка. Убран по решению
- * заказчика; других входов на него нет, лента была единственным.
- *
- * Скрытием, а не вырезанием из разметки: шаги рисует React, и удалённый
- * узел вернулся бы на первой же перерисовке.
- *
- * Правило опирается на порядок шагов — их в поставке ровно четыре. Придёт
- * сборка с другим числом шагов, и правило начнёт прятать не тот: это
- * первое, что надо проверить при обновлении поставки.
- */
-html.hydro-desktop #root > div > nav.sticky > button:nth-child(4) {
-  display: none !important;
-}
 
 html.hydro-desktop #root > div > nav.sticky > button:disabled {
   opacity: 0.4;
