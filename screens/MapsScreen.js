@@ -1,23 +1,30 @@
 /**
  * Карты гидроизогипс (AnsSurf)
  *
- * Экран — только рама: язык, тема, отступ под плавающим меню и строка о том,
- * чем кончилась выгрузка. Сам построитель живёт в
+ * Экран — только рама: язык, тема, отступ снизу и строка о том, чем кончилась
+ * выгрузка. Сам построитель живёт в
  * [`components/AnsSurf`](../components/AnsSurf.js) и на устройстве открывается
  * в WebView, а в вебе — в iframe.
  *
  * Карта занимает экран целиком и прокручивается внутри себя, поэтому внешней
  * прокрутки здесь нет: вложенная прокрутка отбирала бы у карты жесты.
+ *
+ * Плавающего меню на этом экране нет. Построитель — полноэкранный инструмент
+ * со своими шагами, а меню висело поверх панели шага, закрывало её кнопки и
+ * отнимало девяносто пикселей высоты у и без того тесного телефона. Назад на
+ * главную — стрелкой в шапке.
  */
 
 import React, { useCallback, useContext, useState } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { useTheme } from 'react-native-paper';
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import I18n from '../Localization';
 import { LanguageContext } from '../LanguageContext';
 import AnsSurf from '../components/AnsSurf';
-import { spacing, type, MENU_BAR_HEIGHT } from '../theme';
+import { setMenuHidden } from '../components/chromeVisibility';
+import { spacing, type } from '../theme';
 
 export default function MapsScreen() {
   const theme = useTheme();
@@ -28,6 +35,15 @@ export default function MapsScreen() {
 
   const [notice, setNotice] = useState('');
   const [failed, setFailed] = useState(false);
+
+  // Меню прячется на время показа экрана и возвращается при уходе — иначе
+  // скрытие залипло бы на всё приложение
+  useFocusEffect(
+    useCallback(() => {
+      setMenuHidden(true);
+      return () => setMenuHidden(false);
+    }, [])
+  );
 
   const handleSaved = useCallback((result) => {
     setFailed(false);
@@ -67,18 +83,13 @@ export default function MapsScreen() {
         </Text>
       ) : null}
 
-      {/* Плавающее меню перекрывает низ экрана. Место под него отводит сама
-          страница, а не подложка снаружи: подложка обрезала бы карту полосой
-          фона, а так полотно уходит под меню целиком, и отступ получает
-          только прокручиваемая панель шага */}
+      {/* Приложение рисуется от края до края: снизу под страницей лежит
+          системная полоса навигации. Место под неё отводит сама страница,
+          а не подложка снаружи — подложка обрезала бы карту полосой фона */}
       <AnsSurf
         locale={locale}
         dark={!!theme.dark}
-        menuInset={
-          Platform.OS === 'web'
-            ? MENU_BAR_HEIGHT + spacing.md
-            : Math.max(insets.bottom, 26) + MENU_BAR_HEIGHT
-        }
+        menuInset={Platform.OS === 'web' ? spacing.md : Math.max(insets.bottom, spacing.md)}
         onSaved={handleSaved}
         onError={handleError}
       />
