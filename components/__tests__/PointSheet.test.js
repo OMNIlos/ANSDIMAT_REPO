@@ -10,6 +10,7 @@
  */
 
 import React from 'react';
+import { Modal } from 'react-native';
 import renderer, { act } from 'react-test-renderer';
 import { Provider as PaperProvider } from 'react-native-paper';
 import { lightTheme } from '../../theme';
@@ -35,12 +36,19 @@ jest.mock('../../hooks/useVoiceRecorder', () => ({
   METER_INTERVAL_MS: 100,
 }));
 
+let mockPlayback;
+jest.mock('../../hooks/useVoicePlayback', () => ({
+  __esModule: true,
+  default: () => mockPlayback,
+}));
+
 // Кнопки ConfirmDialog не несут accessibilityLabel — искать их по метке
 // нечем. Подменяем его строковым компонентом и читаем пропсы
 jest.mock('../ui/ConfirmDialog', () => 'ConfirmDialog');
 jest.mock('../PhotoViewer', () => 'PhotoViewer');
 
 const PointSheet = require('../PointSheet').default;
+const AudioWave = require('../AudioWave').default;
 
 const POINT = {
   id: 'p1',
@@ -63,6 +71,7 @@ beforeAll(() => {
 beforeEach(() => {
   jest.clearAllMocks();
   mockRecorder = { start, stop, isRecording: false, durationMillis: 0, levels: [], denied: false };
+  mockPlayback = { activeId: null, playing: false, progress: 0, toggle: jest.fn(async () => {}), stop: jest.fn() };
 });
 
 // React 19: renderer.create() надо оборачивать в act(), иначе тест-рендерер
@@ -283,4 +292,64 @@ test('удачная запись сообщения о сбое не показ
     expect.objectContaining({ kind: 'audio', uri: 'file:///cache/recording.m4a' })
   );
   expect(texts(tree)).not.toContain(I18n.t('recordingFailed'));
+});
+
+test('кнопка у заметки проигрывает именно её', async () => {
+  const tree = mount();
+
+  await act(async () => {
+    button(tree, 'Прослушать запись').props.onPress();
+  });
+
+  expect(mockPlayback.toggle).toHaveBeenCalledWith(ATTACHMENTS[1]);
+});
+
+test('играющая заметка показывает паузу и закрашивает волну по ходу', () => {
+  mockPlayback = { ...mockPlayback, activeId: 'a2', playing: true, progress: 0.25 };
+  const tree = mount();
+
+  expect(buttons(tree, 'Пауза')).toHaveLength(1);
+  const wave = tree.root.findAll((node) => node.type === AudioWave)[0];
+  expect(wave.props.progress).toBe(0.25);
+});
+
+test('закрытие шторки глушит проигрывание', () => {
+  const onClose = jest.fn();
+  const tree = mount({ onClose });
+
+  act(() => {
+    tree.root.findByType(Modal).props.onRequestClose();
+  });
+
+  expect(mockPlayback.stop).toHaveBeenCalled();
+  expect(onClose).toHaveBeenCalled();
+});
+
+test('начало записи останавливает проигрывание раньше старта рекордера', async () => {
+  // Запись и проигрывание делят аудиосессию: заметка, игравшая под запись,
+  // попала бы в неё же через микрофон
+  const tree = mount();
+
+  await act(async () => {
+    button(tree, 'Запись').props.onPress();
+  });
+
+  expect(mockPlayback.stop).toHaveBeenCalled();
+  expect(mockPlayback.stop.mock.invocationCallOrder[0]).toBeLessThan(
+    start.mock.invocationCallOrder[0]
+  );
+});
+
+test('удаление играющей заметки останавливает проигрывание', async () => {
+  mockPlayback = { ...mockPlayback, activeId: 'a2', playing: true };
+  const tree = mount();
+
+  await act(async () => {
+    button(tree, 'Удалить запись').props.onPress();
+  });
+  await act(async () => {
+    await tree.root.findByType('ConfirmDialog').props.onConfirm();
+  });
+
+  expect(mockPlayback.stop).toHaveBeenCalled();
 });

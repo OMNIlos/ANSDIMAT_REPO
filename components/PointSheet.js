@@ -12,7 +12,7 @@
  * onRequestClose ловит аппаратную кнопку «назад».
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Modal,
   View,
@@ -32,6 +32,7 @@ import PhotoViewer from './PhotoViewer';
 import ConfirmDialog from './ui/ConfirmDialog';
 import usePhotoCapture from '../hooks/usePhotoCapture';
 import useVoiceRecorder from '../hooks/useVoiceRecorder';
+import useVoicePlayback from '../hooks/useVoicePlayback';
 import { ATTACHMENT_KINDS } from '../db/attachments';
 import { formatDuration } from '../lib/waveform';
 import { spacing, radius, type, elevation, numericAt } from '../theme';
@@ -54,6 +55,7 @@ export default function PointSheet({ point, attachments, visible, onClose, onAdd
 
   const { capture, denied: photoDenied } = usePhotoCapture();
   const recorder = useVoiceRecorder();
+  const playback = useVoicePlayback();
 
   // Выбор источника снимка: раскрывается на месте кнопки «Фото»
   const [pickingSource, setPickingSource] = useState(false);
@@ -63,6 +65,19 @@ export default function PointSheet({ point, attachments, visible, onClose, onAdd
   const [pendingDelete, setPendingDelete] = useState(null);
   // Сбой записи: отказ микрофона, занятое устройство, отказ хранилища
   const [recordFailed, setRecordFailed] = useState(false);
+
+  // Скрытая шторка не должна доигрывать заметку в пустоту: скрыть её может
+  // не только кнопка, но и экран, переключившийся на другую точку
+  const stopPlayback = playback.stop;
+  useEffect(() => {
+    if (!visible) stopPlayback();
+  }, [visible, stopPlayback]);
+
+  /** Закрывает шторку, заглушив проигрывание */
+  const close = () => {
+    playback.stop();
+    onClose();
+  };
 
   const photos = attachments.filter((item) => item.kind === ATTACHMENT_KINDS.PHOTO);
   const records = attachments.filter((item) => item.kind === ATTACHMENT_KINDS.AUDIO);
@@ -90,6 +105,9 @@ export default function PointSheet({ point, attachments, visible, onClose, onAdd
     try {
       if (!recorder.isRecording) {
         setRecordFailed(false);
+        // Запись и проигрывание делят аудиосессию: заметка, игравшая под
+        // запись, попала бы в неё же через микрофон
+        playback.stop();
         await recorder.start();
         return;
       }
@@ -111,6 +129,7 @@ export default function PointSheet({ point, attachments, visible, onClose, onAdd
     const target = pendingDelete;
     setPendingDelete(null);
     setViewerIndex(null);
+    if (target && target.id === playback.activeId) playback.stop();
     if (target) await onDelete(target);
   };
 
@@ -125,8 +144,8 @@ export default function PointSheet({ point, attachments, visible, onClose, onAdd
 
   return (
     <>
-      <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-        <Pressable style={styles.backdrop} onPress={onClose}>
+      <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
+        <Pressable style={styles.backdrop} onPress={close}>
           <Pressable
             style={[
               styles.sheet,
@@ -171,14 +190,21 @@ export default function PointSheet({ point, attachments, visible, onClose, onAdd
                 </View>
               )}
 
-              {records.map((record) => (
-                <VoiceRow
-                  key={record.id}
-                  record={record}
-                  colors={colors}
-                  onDelete={() => setPendingDelete(record)}
-                />
-              ))}
+              {records.map((record) => {
+                const active = playback.activeId === record.id;
+                return (
+                  <VoiceRow
+                    key={record.id}
+                    record={record}
+                    colors={colors}
+                    active={active}
+                    playing={active && playback.playing}
+                    progress={active ? playback.progress : 1}
+                    onToggle={() => playback.toggle(record)}
+                    onDelete={() => setPendingDelete(record)}
+                  />
+                );
+              })}
             </ScrollView>
 
             {!!denialNotice && (
@@ -278,19 +304,37 @@ export default function PointSheet({ point, attachments, visible, onClose, onAdd
  *
  * Волна занимает всю доступную ширину, длительность прижата к правому краю
  * моноширинным: у нескольких записей подряд цифры выстраиваются столбиком.
+ * У играющей заметки волна закрашивается по мере проигрывания — AudioWave
+ * для этого и принимает долю пройденного.
  *
  * @param {Object} props
  * @param {Object} props.record - вложение вида audio
  * @param {Object} props.colors - палитра темы
+ * @param {boolean} props.active - заметка стоит в плеере
+ * @param {boolean} props.playing - и сейчас играет
+ * @param {number} props.progress - доля проигранного, 0..1
+ * @param {Function} props.onToggle - играть или поставить на паузу
  * @param {Function} props.onDelete - запрос удаления
  */
-function VoiceRow({ record, colors, onDelete }) {
+function VoiceRow({ record, colors, active, playing, progress, onToggle, onDelete }) {
   return (
     <View style={[styles.voiceRow, { backgroundColor: colors.surfaceSunken }]}>
-      <MaterialIcons name="play-arrow" size={22} color={colors.primaryAccent} />
+      <TouchableOpacity
+        onPress={onToggle}
+        style={styles.voicePlay}
+        accessibilityRole="button"
+        accessibilityLabel={playing ? I18n.t('pauseRecording') : I18n.t('playRecording')}
+        accessibilityState={{ selected: active }}
+      >
+        <MaterialIcons
+          name={playing ? 'pause' : 'play-arrow'}
+          size={22}
+          color={colors.primaryAccent}
+        />
+      </TouchableOpacity>
       <AudioWave
         levels={record.waveform}
-        progress={1}
+        progress={progress}
         color={colors.primaryAccent}
         mutedColor={colors.border}
         height={24}
@@ -396,6 +440,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radius.sm,
+  },
+  voicePlay: {
+    padding: spacing.xs,
   },
   voiceWave: {
     flex: 1,
