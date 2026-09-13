@@ -39,7 +39,7 @@ import Animated, {
 import I18n from '../Localization';
 import FlowTab from './calculator/FlowTab';
 import FiltrationTab from './calculator/FiltrationTab';
-import ParamsTab from './calculator/ParamsTab';
+import SpecificCapacityTab from './calculator/SpecificCapacityTab';
 import ForecastTab from './calculator/ForecastTab';
 import PitTab from './calculator/PitTab';
 import WhpaTab from './calculator/WhpaTab';
@@ -50,7 +50,7 @@ import { spacing, radius, fontFamily, MENU_BAR_HEIGHT } from '../theme';
 const TABS = [
   { key: 'flow', labelKey: 'tabFlow', Component: FlowTab },
   { key: 'filtration', labelKey: 'tabFiltration', Component: FiltrationTab },
-  { key: 'params', labelKey: 'tabParams', Component: ParamsTab },
+  { key: 'params', labelKey: 'tabParams', Component: SpecificCapacityTab },
   { key: 'forecast', labelKey: 'tabForecast', Component: ForecastTab },
   { key: 'pit', labelKey: 'tabPit', Component: PitTab },
   { key: 'whpa', labelKey: 'tabWhpa', Component: WhpaTab },

@@ -189,4 +189,11 @@ describe('CalculatorScreen', () => {
     expect(labels).not.toContain('Параметры');
     expect(labels).not.toContain('Прогноз s');
   });
+
+  it('«Оценка по Q/s» по умолчанию считает T напорного пласта', () => {
+    const tree = renderScreen();
+    selectTab(tree, 2);
+    // Пример из справки настольного АНСДИМАТ: Q = 100 м³/сут, s = 15 м
+    expect(screenText(tree)).toContain('8.133');
+  });
 });

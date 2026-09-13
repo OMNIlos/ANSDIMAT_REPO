@@ -225,7 +225,7 @@ const i18n = new I18n({
     manualCalcFiltration:
       "Перевод коэффициента фильтрации между единицами: м/сут, м/ч, м/с, см/с, фут/сут, мейнцеры.",
     manualCalcParams:
-      "Коэффициент фильтрации по данным одиночной откачки — формулы Дюпюи для напорного и безнапорного пласта, с поправкой Козени на несовершенство скважины.",
+      "Водопроводимость напорного или коэффициент фильтрации безнапорного пласта по удельному дебиту Q/s — формулы настольного АНСДИМАТ, с поправкой на несовершенство скважины.",
     manualCalcForecast:
       "Понижение в опытной и наблюдательной скважинах по четырём схемам: Тейс, пласт с перетеканием, безнапорный пласт Болтона, граница питания.",
     manualCalcPit:
@@ -243,7 +243,7 @@ const i18n = new I18n({
     manualRecoveryNote:
       "Прямая восстановления обязана проходить через начало координат. Заметный сдвиг — признак влияния границ пласта или непостоянного дебита на откачке; приложение об этом предупредит.",
     manualCalculatorNote:
-      "Радиус влияния R редко замеряют — его принимают из опыта работ. Если оставить поле пустым, берётся R = 300·r₀, и в результатах появляется предупреждение: значение оценочное.",
+      "Оценка по Q/s даёт порядок величины по одному замеру: множители 1,22 и 2,43 уже содержат типичное отношение радиуса влияния к радиусу скважины. Точные параметры даёт обработка журнала откачки.",
     manualDiaryTitle: "Полевой дневник",
     manualDiaryStep1:
       "Введите название точки, опишите её и выберите тип: скважина, родник, шурф, наблюдение.",
@@ -742,15 +742,26 @@ const i18n = new I18n({
     result: "Результат",
     convertedToAllUnits: "Пересчёт",
     thickness: "Мощность пласта",
-    influenceRadius: "Радиус влияния",
-    penetrationRatio: "Доля вскрытия",
     transmissivity: "Водопроводимость",
     storativity: "Водоотдача",
     filtrationCoefficient: "Коэф. фильтрации k",
     pitRadius: "Радиус котлована r₀",
-    defaultInfluenceRatioNote: "R и r₀ не заданы — принято R/r₀ = 300.",
     drawdownExceedsThicknessNote:
       "Понижение больше мощности пласта — проверьте исходные данные.",
+
+    // ===== ОЦЕНКА ПО Q/s =====
+    qsWellDrawdown: "Понижение в скважине",
+    qsSaturatedThickness: "Обводнённая мощность",
+    qsFilterGroup: "Фильтр",
+    qsFilterLength: "Длина фильтра",
+    qsFilterMiddle: "Середина фильтра",
+    qsFromTop: "от кровли пласта",
+    qsFromLevel: "от статического уровня",
+    qsAnisotropy: "Анизотропия",
+    filterOutsideAquiferNote:
+      "Фильтр выходит за пределы пласта: zw − lw/2 должно быть не меньше нуля, а zw + lw/2 — не больше m.",
+    filterFullThicknessNote:
+      "Фильтр на всю мощность пласта — скважина по сути совершенная, поправка f равна нулю.",
     unitMDay: "м/сут",
     unitMHour: "м/час",
     unitMSec: "м/сек",
@@ -1956,7 +1967,7 @@ const i18n = new I18n({
     manualCalcFiltration:
       "Convert hydraulic conductivity between units: m/day, m/h, m/s, cm/s, ft/day, Meinzer units.",
     manualCalcParams:
-      "Hydraulic conductivity from a single-well test — Dupuit formulas for confined and unconfined aquifers, with the Kozeny partial-penetration correction.",
+      "Transmissivity of a confined or conductivity of an unconfined aquifer from specific capacity Q/s — the desktop ANSDIMAT formulas, with a partial-penetration correction.",
     manualCalcForecast:
       "Drawdown in the pumped and observation wells for four schemes: Theis, leaky aquifer, Boulton unconfined aquifer, recharge boundary.",
     manualCalcPit:
@@ -1974,7 +1985,7 @@ const i18n = new I18n({
     manualRecoveryNote:
       "The recovery line must pass through the origin. A noticeable offset points to aquifer boundaries or a variable discharge rate during pumping; the app warns about it.",
     manualCalculatorNote:
-      "The radius of influence R is rarely measured — it is taken from experience. Leave the field empty and R = 300·r₀ is used, with a warning that the result is an estimate.",
+      "The Q/s estimate gives an order of magnitude from a single reading: the factors 1.22 and 2.43 already contain a typical ratio of the radius of influence to the well radius. Accurate parameters come from processing the pumping journal.",
     manualDiaryTitle: "Field diary",
     manualDiaryStep1:
       "Enter the point name, describe it and pick its type: well, spring, pit or observation.",
@@ -2472,16 +2483,26 @@ const i18n = new I18n({
     result: "Result",
     convertedToAllUnits: "Conversions",
     thickness: "Aquifer thickness",
-    influenceRadius: "Radius of influence",
-    penetrationRatio: "Penetration ratio",
     transmissivity: "Transmissivity",
     storativity: "Storativity",
     filtrationCoefficient: "Conductivity k",
     pitRadius: "Pit radius r₀",
-    defaultInfluenceRatioNote:
-      "R and r₀ are not set — a ratio R/r₀ = 300 is assumed. Enter actual values for an accurate result.",
     drawdownExceedsThicknessNote:
       "Drawdown exceeds aquifer thickness — check the input data.",
+
+    // ===== ESTIMATE FROM Q/s =====
+    qsWellDrawdown: "Drawdown in the well",
+    qsSaturatedThickness: "Saturated thickness",
+    qsFilterGroup: "Screen",
+    qsFilterLength: "Screen length",
+    qsFilterMiddle: "Screen midpoint",
+    qsFromTop: "from aquifer top",
+    qsFromLevel: "from static level",
+    qsAnisotropy: "Anisotropy",
+    filterOutsideAquiferNote:
+      "The screen extends beyond the aquifer: zw − lw/2 must be at least zero and zw + lw/2 at most m.",
+    filterFullThicknessNote:
+      "The screen spans the full aquifer thickness — the well is effectively fully penetrating, f is zero.",
     unitMDay: "m/day",
     unitMHour: "m/hour",
     unitMSec: "m/sec",
