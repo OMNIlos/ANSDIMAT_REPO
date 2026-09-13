@@ -2,97 +2,98 @@
  * Запись голосовой заметки
  *
  * Проверяется то, что нельзя увидеть глазами на устройстве: уровни копятся,
- * пока идёт запись, прореживаются при остановке, и микрофон отпускается —
- * иначе на iOS воспроизведение уходит в разговорный динамик.
+ * пока идёт запись, микрофон отпускается, а рекордер не опрашивается тогда,
+ * когда нативная сторона его освобождает. Именно такой опрос на Android
+ * бросал исключение в таймере и закрывал приложение после записи.
  */
 
 import React from 'react';
 import renderer, { act } from 'react-test-renderer';
 import { Text } from 'react-native';
 
-// Названия с приставкой mock — не стиль, а требование babel-plugin-jest-hoist:
-// фабрика jest.mock() поднимается над объявлениями, и без приставки mock
-// babel статически запрещает ссылаться на внешние переменные
+// Названия с приставкой mock — требование babel-plugin-jest-hoist: фабрика
+// jest.mock() поднимается над объявлениями и без приставки не видит их
 const mockRecorder = {
   uri: 'file:///cache/recording.m4a',
   prepareToRecordAsync: jest.fn(async () => {}),
   record: jest.fn(() => {}),
   stop: jest.fn(async () => {}),
+  getStatus: jest.fn(),
 };
-
-let mockRecorderState = { isRecording: false, durationMillis: 0, metering: undefined };
 
 jest.mock('expo-audio', () => ({
   AudioModule: { requestRecordingPermissionsAsync: jest.fn(async () => ({ granted: true })) },
   RecordingPresets: { HIGH_QUALITY: { extension: '.m4a' } },
   setAudioModeAsync: jest.fn(async () => {}),
   useAudioRecorder: jest.fn(() => mockRecorder),
-  useAudioRecorderState: jest.fn(() => mockRecorderState),
+  useAudioRecorderState: jest.fn(() => ({ isRecording: false, durationMillis: 0 })),
 }));
 
-const { AudioModule, setAudioModeAsync } = require('expo-audio');
-const useVoiceRecorder = require('../useVoiceRecorder').default;
+const { AudioModule, setAudioModeAsync, useAudioRecorderState } = require('expo-audio');
+const recorderModule = require('../useVoiceRecorder');
 
-function mountHook() {
+const useVoiceRecorder = recorderModule.default;
+const { METER_INTERVAL_MS, MIN_RECORDING_MS } = recorderModule;
+
+/**
+ * Поднимает хук в пробном компоненте
+ *
+ * @returns {Promise<{box: Object, tree: Object}>} доступ к хуку и дерево
+ */
+async function mountHook() {
   const box = {};
   function Probe() {
     box.current = useVoiceRecorder();
     return <Text>probe</Text>;
   }
   let tree;
-  act(() => {
+  await act(async () => {
     tree = renderer.create(<Probe />);
   });
   return { box, tree };
 }
 
 /**
- * Проба для тестов, которым надо прокрутить несколько тиков рекордера
+ * Прокручивает таймеры внутри act: тики опроса обновляют состояние хука
  *
- * Отдельно от mountHook: тем тестам хватает одного рендера, а здесь пробу
- * приходится перерисовывать руками — useAudioRecorderState замокан и сам
- * ничего не публикует.
+ * @param {number} ms - сколько прокрутить
  */
-const tickBox = {};
-function TickProbe() {
-  tickBox.current = useVoiceRecorder();
-  return <Text>probe</Text>;
-}
-
-/**
- * Поднимает пробу тиков
- *
- * @returns {Object} дерево react-test-renderer
- */
-async function mountTicks() {
-  let tree;
+async function advance(ms) {
   await act(async () => {
-    tree = renderer.create(<TickProbe />);
+    jest.advanceTimersByTime(ms);
   });
-  return tree;
 }
 
 /**
- * Проводит один тик рекордера
+ * Начинает запись
  *
- * @param {Object} tree - дерево пробы
- * @param {Object} next - что изменилось в состоянии рекордера
+ * @param {Object} box - доступ к хуку
  */
-async function tick(tree, next) {
-  mockRecorderState = { ...mockRecorderState, ...next };
+async function startRecording(box) {
   await act(async () => {
-    tree.update(<TickProbe />);
+    await box.current.start();
   });
 }
 
 beforeEach(() => {
+  jest.useFakeTimers();
   jest.clearAllMocks();
-  mockRecorderState = { isRecording: false, durationMillis: 0, metering: undefined };
+  mockRecorder.uri = 'file:///cache/recording.m4a';
+  mockRecorder.getStatus.mockImplementation(() => ({
+    isRecording: true,
+    durationMillis: 0,
+    metering: -30,
+  }));
+  mockRecorder.stop.mockImplementation(async () => {});
   AudioModule.requestRecordingPermissionsAsync.mockResolvedValue({ granted: true });
 });
 
+afterEach(() => {
+  jest.useRealTimers();
+});
+
 test('старт готовит рекордер и включает микрофон', async () => {
-  const { box } = mountHook();
+  const { box } = await mountHook();
 
   let started;
   await act(async () => {
@@ -105,11 +106,12 @@ test('старт готовит рекордер и включает микро�
   );
   expect(mockRecorder.prepareToRecordAsync).toHaveBeenCalled();
   expect(mockRecorder.record).toHaveBeenCalled();
+  expect(box.current.isRecording).toBe(true);
 });
 
 test('без доступа к микрофону запись не начинается', async () => {
   AudioModule.requestRecordingPermissionsAsync.mockResolvedValue({ granted: false });
-  const { box } = mountHook();
+  const { box } = await mountHook();
 
   let started;
   await act(async () => {
@@ -121,13 +123,126 @@ test('без доступа к микрофону запись не начина
   expect(box.current.denied).toBe(true);
 });
 
+test('библиотечный опрос состояния не используется', async () => {
+  // useAudioRecorderState держит таймер всё время жизни шторки и зовёт
+  // getStatus в том числе во время остановки
+  await mountHook();
+
+  expect(useAudioRecorderState).not.toHaveBeenCalled();
+});
+
+test('до старта рекордер не опрашивается', async () => {
+  await mountHook();
+
+  await advance(1000);
+
+  expect(mockRecorder.getStatus).not.toHaveBeenCalled();
+});
+
+test('пока идёт запись, уровни копятся по тикам', async () => {
+  const { box } = await mountHook();
+  await startRecording(box);
+
+  // -30 дБFS — середина шкалы, 0 — максимум, -60 — порог тишины
+  mockRecorder.getStatus
+    .mockImplementationOnce(() => ({ isRecording: true, durationMillis: 100, metering: -30 }))
+    .mockImplementationOnce(() => ({ isRecording: true, durationMillis: 200, metering: 0 }))
+    .mockImplementationOnce(() => ({ isRecording: true, durationMillis: 300, metering: -60 }));
+  await advance(METER_INTERVAL_MS * 3);
+
+  expect(box.current.levels).toEqual([0.5, 1, 0]);
+  expect(box.current.durationMillis).toBe(300);
+});
+
+test('опрос снимается раньше, чем рекордер начинает останавливаться', async () => {
+  // Остановка на Android идёт фоновым потоком и освобождает MediaRecorder.
+  // Тик опроса в это время читал maxAmplitude освобождённого рекордера, и
+  // исключение в таймере закрывало приложение
+  const { box } = await mountHook();
+  await startRecording(box);
+  await advance(MIN_RECORDING_MS);
+
+  let pollsAtStop = null;
+  mockRecorder.stop.mockImplementation(async () => {
+    pollsAtStop = mockRecorder.getStatus.mock.calls.length;
+    // Пока нативная остановка идёт, таймеры продолжают тикать
+    jest.advanceTimersByTime(METER_INTERVAL_MS * 5);
+  });
+
+  await act(async () => {
+    await box.current.stop();
+  });
+  await advance(METER_INTERVAL_MS * 5);
+
+  // Опрос шёл во время записи — и ни одного тика с момента остановки
+  expect(pollsAtStop).toBeGreaterThan(0);
+  expect(mockRecorder.getStatus.mock.calls.length).toBe(pollsAtStop);
+});
+
+test('сорвавшийся тик опроса не роняет запись', async () => {
+  const { box } = await mountHook();
+  await startRecording(box);
+  mockRecorder.getStatus.mockImplementation(() => {
+    throw new Error('getMaxAmplitude called in an invalid state');
+  });
+
+  await advance(METER_INTERVAL_MS * 3);
+
+  expect(box.current.isRecording).toBe(true);
+});
+
+test('второе нажатие во время старта рекордер повторно не готовит', async () => {
+  // Двойной тап звал prepareToRecordAsync дважды, и первый MediaRecorder
+  // оставался держать микрофон
+  let grant;
+  AudioModule.requestRecordingPermissionsAsync.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        grant = resolve;
+      })
+  );
+  const { box } = await mountHook();
+
+  let first;
+  let second;
+  await act(async () => {
+    first = box.current.start();
+    second = await box.current.start();
+  });
+  await act(async () => {
+    grant({ granted: true });
+    await first;
+  });
+
+  expect(second).toBe(false);
+  expect(mockRecorder.prepareToRecordAsync).toHaveBeenCalledTimes(1);
+});
+
+test('слишком ранний стоп дожидается минимальной длительности', async () => {
+  // MediaRecorder.stop() сразу после start() бросает «stop failed» и
+  // оставляет пустой файл
+  const { box } = await mountHook();
+  await startRecording(box);
+
+  let stopping;
+  await act(async () => {
+    stopping = box.current.stop();
+  });
+  expect(mockRecorder.stop).not.toHaveBeenCalled();
+
+  await act(async () => {
+    jest.advanceTimersByTime(MIN_RECORDING_MS);
+    await stopping;
+  });
+  expect(mockRecorder.stop).toHaveBeenCalledTimes(1);
+});
+
 test('остановка отпускает микрофон', async () => {
   // С allowsRecording воспроизведение на iOS идёт тихо и через разговорный
   // динамик: записанное потом невозможно прослушать
-  const { box } = mountHook();
-  await act(async () => {
-    await box.current.start();
-  });
+  const { box } = await mountHook();
+  await startRecording(box);
+  await advance(MIN_RECORDING_MS);
   setAudioModeAsync.mockClear();
 
   await act(async () => {
@@ -137,14 +252,35 @@ test('остановка отпускает микрофон', async () => {
   expect(setAudioModeAsync).toHaveBeenCalledWith(
     expect.objectContaining({ allowsRecording: false })
   );
+  expect(box.current.isRecording).toBe(false);
+});
+
+test('сорвавшаяся остановка всё равно отпускает микрофон', async () => {
+  const { box } = await mountHook();
+  await startRecording(box);
+  await advance(MIN_RECORDING_MS);
+  mockRecorder.stop.mockRejectedValueOnce(new Error('stop failed'));
+  setAudioModeAsync.mockClear();
+
+  await act(async () => {
+    await expect(box.current.stop()).rejects.toThrow('stop failed');
+  });
+
+  expect(setAudioModeAsync).toHaveBeenCalledWith(
+    expect.objectContaining({ allowsRecording: false })
+  );
+  expect(box.current.isRecording).toBe(false);
 });
 
 test('остановка отдаёт адрес, длительность и волну', async () => {
-  mockRecorderState = { isRecording: false, durationMillis: 14_400, metering: undefined };
-  const { box } = mountHook();
-  await act(async () => {
-    await box.current.start();
-  });
+  const { box } = await mountHook();
+  await startRecording(box);
+  mockRecorder.getStatus.mockImplementation(() => ({
+    isRecording: true,
+    durationMillis: 14_400,
+    metering: -30,
+  }));
+  await advance(14_400);
 
   let recorded;
   await act(async () => {
@@ -153,15 +289,15 @@ test('остановка отдаёт адрес, длительность и в
 
   expect(recorded.uri).toBe('file:///cache/recording.m4a');
   expect(recorded.durationMillis).toBe(14_400);
-  expect(Array.isArray(recorded.waveform)).toBe(true);
+  // 144 тика прорежены до 40 столбиков
+  expect(recorded.waveform).toHaveLength(40);
 });
 
 test('рекордер без файла ничего не возвращает', async () => {
   mockRecorder.uri = null;
-  const { box } = mountHook();
-  await act(async () => {
-    await box.current.start();
-  });
+  const { box } = await mountHook();
+  await startRecording(box);
+  await advance(MIN_RECORDING_MS);
 
   let recorded;
   await act(async () => {
@@ -169,72 +305,17 @@ test('рекордер без файла ничего не возвращает'
   });
 
   expect(recorded).toBeNull();
-  mockRecorder.uri = 'file:///cache/recording.m4a';
 });
 
-test('пока идёт запись, уровни копятся по тикам', async () => {
-  const tree = await mountTicks();
-
-  // -30 дБFS — середина шкалы, 0 — максимум, -60 — порог тишины
-  await tick(tree, { isRecording: true, durationMillis: 100, metering: -30 });
-  await tick(tree, { durationMillis: 200, metering: 0 });
-  await tick(tree, { durationMillis: 300, metering: -60 });
-
-  expect(tickBox.current.levels).toEqual([0.5, 1, 0]);
-
+test('размонтирование во время записи снимает опрос', async () => {
+  const { box, tree } = await mountHook();
+  await startRecording(box);
   await act(async () => {
     tree.unmount();
   });
-});
+  const polls = mockRecorder.getStatus.mock.calls.length;
 
-test('повторившийся уровень не теряется — в волне не будет провала', async () => {
-  // Это тест на durationMillis в зависимостях эффекта: metering может
-  // совпасть с прошлым значением два тика подряд, и без зависимости,
-  // которая меняется всегда, эффект бы не сработал
-  const tree = await mountTicks();
+  await advance(METER_INTERVAL_MS * 5);
 
-  await tick(tree, { isRecording: true, durationMillis: 100, metering: -20 });
-  await tick(tree, { durationMillis: 200, metering: -20 });
-  await tick(tree, { durationMillis: 300, metering: -20 });
-
-  expect(tickBox.current.levels).toHaveLength(3);
-
-  await act(async () => {
-    tree.unmount();
-  });
-});
-
-test('до старта записи уровни не копятся', async () => {
-  // Тики идут и до нажатия на запись: складывать их в волну незачем
-  const tree = await mountTicks();
-
-  await tick(tree, { durationMillis: 100, metering: -10 });
-  await tick(tree, { durationMillis: 200, metering: -10 });
-
-  expect(tickBox.current.levels).toEqual([]);
-
-  await act(async () => {
-    tree.unmount();
-  });
-});
-
-test('остановка отдаёт накопленную волну, а не пустую', async () => {
-  const tree = await mountTicks();
-  await act(async () => {
-    await tickBox.current.start();
-  });
-
-  await tick(tree, { isRecording: true, durationMillis: 100, metering: -30 });
-  await tick(tree, { durationMillis: 200, metering: 0 });
-
-  let recorded;
-  await act(async () => {
-    recorded = await tickBox.current.stop();
-  });
-
-  expect(recorded.waveform).toEqual([0.5, 1]);
-
-  await act(async () => {
-    tree.unmount();
-  });
+  expect(mockRecorder.getStatus.mock.calls.length).toBe(polls);
 });
