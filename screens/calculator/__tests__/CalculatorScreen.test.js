@@ -23,6 +23,12 @@ jest.mock('../../../db/settings', () => ({
   setSetting: () => Promise.resolve(),
 }));
 
+// Без явной локали тест идёт на английском, и проверки русских подписей
+// («Утечки», «Барраж») проходили бы вхолостую
+beforeAll(() => {
+  I18n.locale = 'ru';
+});
+
 /**
  * Отрисовывает экран целиком
  *
@@ -107,12 +113,12 @@ function selectTab(tree, index) {
 }
 
 describe('CalculatorScreen', () => {
-  it('открывается и показывает все семь вкладок', () => {
+  it('открывается и показывает все шесть вкладок', () => {
     const tree = renderScreen();
-    expect(tabButtons(tree).length).toBe(7);
+    expect(tabButtons(tree).length).toBe(6);
   });
 
-  [0, 1, 2, 3, 4, 5, 6].forEach((index) => {
+  [0, 1, 2, 3, 4, 5].forEach((index) => {
     it(`вкладка ${index + 1} отрисовывается без ошибок`, () => {
       const tree = renderScreen();
       selectTab(tree, index);
@@ -167,5 +173,20 @@ describe('CalculatorScreen', () => {
     const tree = renderScreen(darkTheme);
     selectTab(tree, 5);
     expect(screenText(tree).length).toBeGreaterThan(50);
+  });
+
+  it('вкладки «Барраж» нет', () => {
+    // Граничные условия отображениями и подпор перед стеной в поле не
+    // считают: вкладка занимала ряд и уводила от нужных расчётов
+    expect(screenText(renderScreen())).not.toContain('Барраж');
+  });
+
+  it('вкладки подписаны «Оценка по Q/s» и «Расчёт понижения»', () => {
+    const labels = tabButtons(renderScreen()).map((node) =>
+      collectText(node.props.children).join(' ')
+    );
+    expect(labels).toEqual(expect.arrayContaining(['Оценка по Q/s', 'Расчёт понижения']));
+    expect(labels).not.toContain('Параметры');
+    expect(labels).not.toContain('Прогноз s');
   });
 });

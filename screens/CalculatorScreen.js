@@ -3,12 +3,10 @@
  *
  * 1. Пересчёт расхода — значение по всем размерностям сразу.
  * 2. Коэффициент фильтрации — пересчёт значения по всем единицам сразу.
- * 3. Оценка параметров — k по данным опытной откачки.
- * 4. Прогноз понижения — понижение от водозаборной скважины по четырём схемам.
+ * 3. Оценка по Q/s — фильтрационные параметры по дебиту и понижению.
+ * 4. Расчёт понижения — понижение от водозаборной скважины по четырём схемам.
  * 5. Приток в котлован — водоприток по формулам Дюпюи и Дюпюи–Тима.
  * 6. Зона санитарной охраны — три пояса по времени добегания загрязнения.
- * 7. Барраж — граничные условия пласта методом отображений и подпор
- *    уровня перед непроницаемым сооружением.
  *
  * Экран — только каркас: он держит выбор вкладки и ширину содержимого, а сами
  * вкладки лежат в `screens/calculator/`. Вся математика вынесена в `calc/` и
@@ -45,7 +43,6 @@ import ParamsTab from './calculator/ParamsTab';
 import ForecastTab from './calculator/ForecastTab';
 import PitTab from './calculator/PitTab';
 import WhpaTab from './calculator/WhpaTab';
-import BarrageTab from './calculator/BarrageTab';
 import { styles as shared } from './calculator/shared';
 import useReduceMotion from '../hooks/useReduceMotion';
 import { spacing, radius, fontFamily, MENU_BAR_HEIGHT } from '../theme';
@@ -57,7 +54,6 @@ const TABS = [
   { key: 'forecast', labelKey: 'tabForecast', Component: ForecastTab },
   { key: 'pit', labelKey: 'tabPit', Component: PitTab },
   { key: 'whpa', labelKey: 'tabWhpa', Component: WhpaTab },
-  { key: 'barrage', labelKey: 'tabBarrage', Component: BarrageTab },
 ];
 
 /** Длительность перекраски вкладки, мс */

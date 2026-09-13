@@ -221,17 +221,15 @@ const i18n = new I18n({
       "Начальные замеры искажает ёмкость ствола скважины, конечные — влияние границ пласта. Прямолинейный участок обычно лежит между ними: именно его и стоит выбирать двумя точками.",
     manualCalculatorTitle: "Калькулятор",
     manualCalculatorIntro:
-      "Четыре вкладки для быстрых расчётов, когда полного журнала нет — достаточно нескольких величин из полевой книжки.",
+      "Вкладки для быстрых расчётов, когда полного журнала нет — достаточно нескольких величин из полевой книжки.",
     manualCalcFiltration:
       "Перевод коэффициента фильтрации между единицами: м/сут, м/ч, м/с, см/с, фут/сут, мейнцеры.",
     manualCalcParams:
       "Коэффициент фильтрации по данным одиночной откачки — формулы Дюпюи для напорного и безнапорного пласта, с поправкой Козени на несовершенство скважины.",
     manualCalcForecast:
-      "Понижение на заданном расстоянии и времени по формуле Тейса — через функцию скважины W(u).",
+      "Понижение в опытной и наблюдательной скважинах по четырём схемам: Тейс, пласт с перетеканием, безнапорный пласт Болтона, граница питания.",
     manualCalcPit:
       "Приток воды в котлован: контур заменяется «большим колодцем» эквивалентного радиуса.",
-    manualCalcBarrage:
-      "Пласт с границей: непроницаемый контакт углубляет воронку, река — выполаживает. Плюс подпор уровня перед стеной в грунте.",
     manualRecoveryTitle: "Восстановление уровня",
     manualRecoveryIntro:
       "Вторая половина опыта: насос остановлен, уровень поднимается. Обрабатывать её выгодно — насос не работает, и колебания дебита уже ничего не портят.",
@@ -337,11 +335,11 @@ const i18n = new I18n({
     regimeBarrier: "Непроницаемая граница",
     regimeBarrierSign: "Полка производной выросла в %{ratio} раза.",
     regimeBarrierAdvice:
-      "Понижение дошло до границы пласта. Считайте T по раннему участку: по поздним точкам она выйдет вдвое заниженной. Расстояние до границы оценивает вкладка «Барраж» в калькуляторе.",
+      "Понижение дошло до границы пласта. Считайте T по раннему участку: по поздним точкам она выйдет вдвое заниженной.",
     regimeRecharge: "Подпитка пласта",
     regimeRechargeSign: "Производная падает — понижение перестаёт расти.",
     regimeRechargeAdvice:
-      "В пласт поступает вода: переток через разделяющий слой или близкий водоём. По поздним точкам T выйдет завышенной — берите участок до перегиба, а переток оцените во вкладке «Утечки».",
+      "В пласт поступает вода: переток через разделяющий слой или близкий водоём. По поздним точкам T выйдет завышенной — берите участок до перегиба, а переток оцените схемой «С перетеканием» во вкладке «Расчёт понижения».",
     regimeWellbore: "Работает ствол скважины",
     regimeWellboreSign: "Производная растёт под 45° почти на всей записи.",
     regimeWellboreAdvice:
@@ -419,8 +417,8 @@ const i18n = new I18n({
     // ===== КАЛЬКУЛЯТОР: вкладки и поля =====
     tabFlow: "Пересчёт Q",
     tabFiltration: "Пересчёт k",
-    tabParams: "Параметры",
-    tabForecast: "Прогноз s",
+    tabParams: "Оценка по Q/s",
+    tabForecast: "Расчёт понижения",
     tabPit: "Котлован",
     // ===== ЗОНА САНИТАРНОЙ ОХРАНЫ =====
     tabWhpa: "ЗСО",
@@ -731,24 +729,6 @@ const i18n = new I18n({
     unitBar: "бар",
     unitAtmosphere: "кгс/см²",
     unitMeterH2O: "м вод. ст.",
-    tabBarrage: "Барраж",
-
-    // ===== БАРРАЖ И ГРАНИЧНЫЕ УСЛОВИЯ =====
-    distanceToBoundary: "Расстояние до границы",
-    boundaryResultTitle: "Понижение с учётом границы",
-    boundaryType: "Тип границы",
-    boundaryBarrier: "Непроницаемая",
-    boundaryRecharge: "Постоянный напор",
-    withoutBoundary: "Без границы",
-    boundaryEffect: "Вклад границы",
-    boundaryNotReachedNote:
-      "Возмущение ещё не дошло до границы — она пока не влияет на понижение.",
-    observationBeyondBoundaryNote:
-      "Точка наблюдения оказалась за границей пласта: r должно быть меньше L.",
-    barrageRiseTitle: "Подпор перед сооружением",
-    barrageRiseShort: "Подпор",
-    naturalGradient: "Уклон потока",
-    barrierLength: "Длина сооружения",
 
     // ===== ИНФИЛЬТРАЦИОННЫЕ УТЕЧКИ =====
     aquitardGroup: "Слабопроницаемый слой",
@@ -1501,7 +1481,6 @@ const i18n = new I18n({
     parameterEstimationTab: "Оценка параметров",
     drawdownForecastTab: "Прогноз понижений",
     pitInflowTab: "Приток в котлован",
-    barrageTab: "Барраж",
     infiltrationLeakageTab: "Инфильтрационные утечки",
 
     // Дополнительные переводы для PumpingTestProcessing
@@ -1973,17 +1952,15 @@ const i18n = new I18n({
       "Early measurements are distorted by wellbore storage, late ones by aquifer boundaries. The straight-line segment usually lies between them — that is what the two points should bracket.",
     manualCalculatorTitle: "Calculator",
     manualCalculatorIntro:
-      "Four tabs for quick calculations when there is no full journal — a few values from the field notebook are enough.",
+      "Tabs for quick calculations when there is no full journal — a few values from the field notebook are enough.",
     manualCalcFiltration:
       "Convert hydraulic conductivity between units: m/day, m/h, m/s, cm/s, ft/day, Meinzer units.",
     manualCalcParams:
       "Hydraulic conductivity from a single-well test — Dupuit formulas for confined and unconfined aquifers, with the Kozeny partial-penetration correction.",
     manualCalcForecast:
-      "Drawdown at a given distance and time from the Theis equation via the well function W(u).",
+      "Drawdown in the pumped and observation wells for four schemes: Theis, leaky aquifer, Boulton unconfined aquifer, recharge boundary.",
     manualCalcPit:
       "Inflow into an excavation pit: the contour is replaced by a “big well” of equivalent radius.",
-    manualCalcBarrage:
-      "Aquifer with a boundary: an impermeable contact deepens the cone of depression, a river flattens it. Plus head build-up upstream of a cutoff wall.",
     manualRecoveryTitle: "Level recovery",
     manualRecoveryIntro:
       "The second half of the test: the pump is off and the level rises. Processing it pays off — with the pump stopped, discharge fluctuations no longer spoil the data.",
@@ -2089,11 +2066,11 @@ const i18n = new I18n({
     regimeBarrier: "No-flow boundary",
     regimeBarrierSign: "The derivative plateau has risen %{ratio}-fold.",
     regimeBarrierAdvice:
-      "Drawdown has reached the edge of the aquifer. Compute T from the early segment: late points halve it. The Barrage tab estimates the distance to the boundary.",
+      "Drawdown has reached the edge of the aquifer. Compute T from the early segment: late points halve it.",
     regimeRecharge: "Aquifer is being recharged",
     regimeRechargeSign: "The derivative is falling — drawdown stops growing.",
     regimeRechargeAdvice:
-      "Water enters the aquifer: leakage through the aquitard or a nearby water body. Late points overestimate T — use the segment before the bend, and assess leakage in the Leakage tab.",
+      "Water enters the aquifer: leakage through the aquitard or a nearby water body. Late points overestimate T — use the segment before the bend, and assess leakage with the Leaky scheme on the Drawdown calculation tab.",
     regimeWellbore: "Wellbore storage dominates",
     regimeWellboreSign:
       "The derivative rises at 45° across most of the record.",
@@ -2172,8 +2149,8 @@ const i18n = new I18n({
     // ===== CALCULATOR: tabs and fields =====
     tabFlow: "Convert Q",
     tabFiltration: "Convert k",
-    tabParams: "Parameters",
-    tabForecast: "Drawdown s",
+    tabParams: "Estimate from Q/s",
+    tabForecast: "Drawdown calculation",
     tabPit: "Pit",
     // ===== WELLHEAD PROTECTION AREA =====
     tabWhpa: "WHPA",
@@ -2482,24 +2459,6 @@ const i18n = new I18n({
     unitBar: "bar",
     unitAtmosphere: "kgf/cm²",
     unitMeterH2O: "m H₂O",
-    tabBarrage: "Barrier",
-
-    // ===== BARRIER AND BOUNDARY CONDITIONS =====
-    distanceToBoundary: "Distance to boundary",
-    boundaryResultTitle: "Drawdown with boundary",
-    boundaryType: "Boundary type",
-    boundaryBarrier: "Impermeable",
-    boundaryRecharge: "Constant head",
-    withoutBoundary: "Without boundary",
-    boundaryEffect: "Boundary contribution",
-    boundaryNotReachedNote:
-      "The cone of depression has not reached the boundary yet — it does not affect drawdown so far.",
-    observationBeyondBoundaryNote:
-      "The observation point lies beyond the aquifer boundary: r must be smaller than L.",
-    barrageRiseTitle: "Head build-up upstream of the structure",
-    barrageRiseShort: "Head build-up",
-    naturalGradient: "Natural gradient",
-    barrierLength: "Structure length",
 
     // ===== LEAKAGE =====
     aquitardGroup: "Aquitard",
@@ -3162,7 +3121,6 @@ const i18n = new I18n({
     parameterEstimationTab: "Parameter Estimation",
     drawdownForecastTab: "Drawdown Forecast",
     pitInflowTab: "Pit Inflow",
-    barrageTab: "Barrage",
     infiltrationLeakageTab: "Infiltration Leakage",
 
     // Additional translations for PumpingTestProcessing
