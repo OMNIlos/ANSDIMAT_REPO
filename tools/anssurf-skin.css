@@ -250,21 +250,23 @@ html.hydro-desktop .leaflet-bar a:hover {
   }
 }
 
-/* ── Место под плавающее меню ──────────────────────────────────────────
- * Нижнее меню приложения висит поверх экрана. Содержимое прокручивается
- * под ним, и последняя строка — как правило кнопка выгрузки — оказывалась
- * под кнопкой «Справка».
+/* ── Место у нижнего края экрана ───────────────────────────────────────
+ * Плавающее меню приложения на картах спрятано, но приложение рисуется от
+ * края до края: снизу под страницей лежит системная полоса навигации
+ * Android. Последняя строка панели — как правило кнопка выгрузки — не должна
+ * уходить под системные кнопки.
  *
- * Отступ задаётся переменной: её выставляет приложение при загрузке, потому
- * что высота меню зависит от системного отступа снизу и известна только ему.
+ * Отступ задаётся переменной: её выставляет приложение, потому что высота
+ * системной полосы известна только ему. Имя переменной осталось с тех пор,
+ * как под ней было меню, — его знает мост `components/anssurfBridge.js`.
  */
 html.hydro-desktop #root > div > main {
   padding-bottom: var(--ansd-menu-inset, 0px);
 }
 
-/* На карте отступ снимается: полотну лучше уходить под плавающее меню
+/* На карте отступ снимается: полотну лучше уходить под системную полосу
    целиком, чем обрываться полосой фона. Панель под картой своё место
-   под меню получает отдельно */
+   внизу получает отдельно */
 html.hydro-desktop .hydro-stage {
   margin-bottom: calc(-1 * var(--ansd-menu-inset, 0px));
 }
@@ -279,4 +281,61 @@ html.hydro-desktop .hydro-stage > aside {
  */
 html.hydro-desktop [class*="border-dashed"] {
   border-color: var(--color-border-strong);
+}
+
+/* ── Полосы прокрутки на сенсорном экране ──────────────────────────────
+ * Десктопная тема поставки рисует классические полосы шириной 12 px
+ * (`main::-webkit-scrollbar{width:12px}` с серой дорожкой) и держит полосу
+ * у корня всегда (`html{overflow-y:scroll}`). Как только у полосы задана
+ * ширина, Chrome на Android перестаёт рисовать тонкую накладную и отводит
+ * под классическую место справа — на телефоне это серая дорожка вдоль всего
+ * экрана. Пальцу полоса не нужна: прокрутка остаётся, прячется дорожка.
+ * С мышью правило не срабатывает, и на компьютере полосы на месте.
+ */
+@media (pointer: coarse) {
+  html {
+    overflow-y: auto !important;
+  }
+
+  html,
+  body,
+  html.hydro-desktop #root > div > main,
+  html.hydro-desktop #root > div > aside,
+  html.hydro-desktop .hydro-stage > aside,
+  html.hydro-desktop .hydro-map-pane,
+  html.hydro-desktop .hydro-well-modal {
+    scrollbar-width: none !important;
+  }
+
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar,
+  html.hydro-desktop #root > div > main::-webkit-scrollbar,
+  html.hydro-desktop #root > div > aside::-webkit-scrollbar,
+  html.hydro-desktop .hydro-stage > aside::-webkit-scrollbar,
+  html.hydro-desktop .hydro-map-pane::-webkit-scrollbar,
+  html.hydro-desktop .hydro-well-modal::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+}
+
+/* ── Окно «Новая скважина» поверх панели шага ──────────────────────────
+ * Окно в поставке — `position: fixed` с z-index 200, но рендерится внутри
+ * слоя карты `relative z-0`. Такой слой заводит свой контекст наложения:
+ * z-index окна действует только внутри карты, а сама карта лежит на нулевом
+ * уровне. Панель шага идёт в разметке после неё и рисуется поверх — вместе
+ * с кнопками окна, до которых становится не дотянуться.
+ *
+ * Пока окно открыто, слой карты поднимается выше панели и ленты шагов
+ * (у той z-index 40). Высота окна ограничена экраном: при открытой
+ * клавиатуре кнопки остаются достижимы прокруткой внутри окна.
+ */
+html.hydro-desktop .hydro-stage > .hydro-map-pane:has(.hydro-well-modal-bg) {
+  z-index: 60 !important;
+}
+
+html.hydro-desktop .hydro-well-modal {
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
 }

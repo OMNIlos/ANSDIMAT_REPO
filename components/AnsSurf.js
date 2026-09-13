@@ -16,7 +16,7 @@
  *
  * @param {'ru'|'en'} locale - язык страницы
  * @param {boolean} dark - тёмная тема
- * @param {number} [menuInset] - высота плавающего меню приложения, px
+ * @param {number} [menuInset] - отступ страницы снизу под системную полосу, px
  * @param {Function} [onSaved] - выгрузка удалась: ({saved, names})
  * @param {Function} [onError] - что-то не получилось: (текст)
  */
@@ -112,6 +112,10 @@ export default function AnsSurf({ locale, dark, menuInset = 0, onSaved, onError 
           allowUniversalAccessFromFileURLs
           // Тема и выбранная подложка карты живут в localStorage страницы
           domStorageEnabled
+          // Полосу прокрутки страница прячет сама (см. tools/anssurf-skin.css);
+          // системный индикатор WebView поверх неё тоже не нужен
+          showsVerticalScrollIndicator={false}
+          showsHorizontalScrollIndicator={false}
           javaScriptEnabled
           // Прогресс интерполяции рисуется анимацией: без этого на Android
           // она замирает, и длинный расчёт выглядит зависшим
