@@ -108,7 +108,10 @@ export default function AnsSurf({ locale, dark, menuInset = 0, onError }) {
           ref={frameRef}
           src={uri}
           onLoad={onLoad}
-          title="AnsSurf"
+          // Имя для диктора — в aria-label, а не в title: title браузер
+          // показывает подсказкой «AnsSurf» под курсором, поверх кнопки
+          // «назад» и вкладок шагов
+          aria-label="AnsSurf"
           style={styles.frame}
         />
       ) : null}

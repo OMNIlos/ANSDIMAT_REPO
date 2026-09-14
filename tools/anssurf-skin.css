@@ -283,59 +283,169 @@ html.hydro-desktop [class*="border-dashed"] {
   border-color: var(--color-border-strong);
 }
 
-/* ── Полосы прокрутки на сенсорном экране ──────────────────────────────
- * Десктопная тема поставки рисует классические полосы шириной 12 px
- * (`main::-webkit-scrollbar{width:12px}` с серой дорожкой) и держит полосу
- * у корня всегда (`html{overflow-y:scroll}`). Как только у полосы задана
- * ширина, Chrome на Android перестаёт рисовать тонкую накладную и отводит
- * под классическую место справа — на телефоне это серая дорожка вдоль всего
- * экрана. Пальцу полоса не нужна: прокрутка остаётся, прячется дорожка.
- * С мышью правило не срабатывает, и на компьютере полосы на месте.
+/* ── Полосы прокрутки ──────────────────────────────────────────────────
+ * Десктопная тема поставки рисует классические полосы шириной 12 px со
+ * светлой дорожкой (`main::-webkit-scrollbar{width:12px}`). Как только у
+ * полосы задана ширина, браузер перестаёт рисовать тонкую накладную и
+ * отводит под классическую место справа: в тёмной теме это светло-серая
+ * дорожка вдоль всего экрана.
+ *
+ * Прячутся все полосы и при любом указателе. Раньше правило стояло только
+ * для касания, и в узком окне браузера с мышью дорожка оставалась. Прокрутка
+ * работает как работала; во всём остальном приложении полос тоже нет.
  */
-@media (pointer: coarse) {
-  html {
-    overflow-y: auto !important;
-  }
-
-  html,
-  body,
-  html.hydro-desktop #root > div > main,
-  html.hydro-desktop #root > div > aside,
-  html.hydro-desktop .hydro-stage > aside,
-  html.hydro-desktop .hydro-map-pane,
-  html.hydro-desktop .hydro-well-modal {
-    scrollbar-width: none !important;
-  }
-
-  html::-webkit-scrollbar,
-  body::-webkit-scrollbar,
-  html.hydro-desktop #root > div > main::-webkit-scrollbar,
-  html.hydro-desktop #root > div > aside::-webkit-scrollbar,
-  html.hydro-desktop .hydro-stage > aside::-webkit-scrollbar,
-  html.hydro-desktop .hydro-map-pane::-webkit-scrollbar,
-  html.hydro-desktop .hydro-well-modal::-webkit-scrollbar {
-    display: none !important;
-    width: 0 !important;
-    height: 0 !important;
-  }
+html.hydro-desktop,
+html.hydro-desktop * {
+  scrollbar-width: none !important;
 }
 
-/* ── Окно «Новая скважина» поверх панели шага ──────────────────────────
- * Окно в поставке — `position: fixed` с z-index 200, но рендерится внутри
- * слоя карты `relative z-0`. Такой слой заводит свой контекст наложения:
- * z-index окна действует только внутри карты, а сама карта лежит на нулевом
- * уровне. Панель шага идёт в разметке после неё и рисуется поверх — вместе
- * с кнопками окна, до которых становится не дотянуться.
+html.hydro-desktop::-webkit-scrollbar,
+html.hydro-desktop *::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* ── Кто над кем: ленты, окна и панели ─────────────────────────────────
+ * Окна поставки — `position: fixed` с большим z-index, но рендерятся внутри
+ * слоёв со своим контекстом наложения: окно скважины — в карте
+ * (`relative z-0`), привязка растра и параметры кригинга — в панели шага
+ * (`relative z-10`). z-index окна действует только внутри такого слоя.
  *
- * Пока окно открыто, слой карты поднимается выше панели и ленты шагов
- * (у той z-index 40). Высота окна ограничена экраном: при открытой
- * клавиатуре кнопки остаются достижимы прокруткой внутри окна.
+ * Отсюда два наложения. Панель шага (z 10) рисовалась поверх окна скважины
+ * вместе с его кнопками. Лента шагов (z 45) рисовалась поверх любого окна из
+ * панели и срезала ему верх.
+ *
+ * Лента опускается ниже панели: она стоит над колонкой, а не поверх неё, и
+ * перекрывать ей нечего. Карта, пока в ней открыто окно или меню, встаёт
+ * выше панели.
  */
-html.hydro-desktop .hydro-stage > .hydro-map-pane:has(.hydro-well-modal-bg) {
+html.hydro-desktop #root > div > nav.sticky {
+  z-index: 5 !important;
+}
+
+html.hydro-desktop .hydro-stage > .hydro-map-pane:has(.hydro-well-modal-bg, .hydro-well-ctx) {
   z-index: 60 !important;
+}
+
+/* Затемнение под окном. У поставки оно на 45 % и в тёмной теме почти не
+   видно: страница под окном читалась как есть, и заголовок панели казался
+   наехавшим на окно */
+html.hydro-desktop .hydro-well-modal-bg {
+  background: rgba(10, 6, 8, 0.62) !important;
+}
+
+html.hydro-desktop .hydro-well-modal,
+html.hydro-desktop .hydro-raster-dlg {
+  border-color: var(--color-border-strong) !important;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45) !important;
 }
 
 html.hydro-desktop .hydro-well-modal {
   max-height: calc(100dvh - 2rem);
   overflow-y: auto;
+}
+
+/* На телефоне окно скважины встаёт наверх. Поле имени получает фокус сразу,
+   и клавиатура закрывает нижнюю половину экрана: окно по центру теряло под
+   ней кнопки «Добавить» и «Отмена» */
+@media (max-width: 767px) {
+  html.hydro-desktop .hydro-well-modal-bg:not(.hydro-raster-scrim) {
+    place-items: start center !important;
+    padding-top: 12px;
+  }
+}
+
+/* ── Надписи поверх карты ──────────────────────────────────────────────
+ * Плашка «Нажмите на карту…» и сводка «20 скважин» стоят в левом верхнем
+ * углу карты — ровно там, где кнопки масштаба и линейка Leaflet. Плашка
+ * закрывала «+» и «−» целиком. Надписи сдвигаются вправо от кнопок, как
+ * поставка сама делает с подсказкой линейки (`left-12`).
+ */
+html.hydro-desktop .hydro-map-pane:has(.leaflet-container) > .pointer-events-none.absolute.top-3 {
+  left: 3rem !important;
+}
+
+/* ── Всплывающие подсказки и списки ────────────────────────────────────
+ * Подсказка «ⓘ» и раскрытый список залиты тем же цветом, что карточки под
+ * ними, а тень у поставки рассчитана на светлый фон. В тёмной теме
+ * подсказка сливалась с полями и выглядела наехавшим на них блоком.
+ */
+html.hydro-desktop [role="tooltip"],
+html.hydro-desktop [data-radix-popper-content-wrapper] > * {
+  background: var(--color-surface-3) !important;
+  border-color: var(--color-border-strong) !important;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* ── Поля ───────────────────────────────────────────────────────────────
+ * Длинная подпись («Толщина второстепенных») переносится на вторую строку
+ * и сдвигает своё поле вниз: в паре колонок поля стояли лесенкой. Ячейки
+ * прижимаются к низу — поля встают в одну линию.
+ */
+html.hydro-desktop .hydro-stage > aside .grid.grid-cols-2 {
+  align-items: end;
+}
+
+/* Выбранное значение списка — по левому краю и в одну строку. Кнопка
+   списка центрирует текст по умолчанию, и длинное «Географические WGS 84
+   (градусы десятичные)» вставало в две строки посередине, в отличие от
+   соседних списков */
+html.hydro-desktop button[role="combobox"] {
+  text-align: left;
+}
+
+html.hydro-desktop button[role="combobox"] > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Подсказка в пустом поле бледнее введённого значения */
+html.hydro-desktop input::placeholder {
+  color: var(--color-subtle);
+  opacity: 0.75;
+}
+
+/* Системные ползунки и флажки — в цвет бренда, а не синие */
+html.hydro-desktop {
+  accent-color: var(--color-primary);
+}
+
+/* Подпись «Проект» под кнопками «Сохранить» и «Загрузить» стояла впритык */
+html.hydro-desktop .hydro-stage > aside > .grid.grid-cols-2 + p {
+  margin-top: 6px;
+}
+
+/* ── Кнопка учебного примера ───────────────────────────────────────────
+ * Поставка привлекает к ней внимание кольцом, которое переливается из
+ * оранжевого в синий, и значком того же перелива — два чужих цвета на
+ * бордовом экране. Кольцо остаётся, но бренд-цвета.
+ */
+@keyframes ansd-sample-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 35%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--color-primary) 75%, transparent),
+      0 0 14px color-mix(in srgb, var(--color-primary) 25%, transparent);
+  }
+}
+
+html.hydro-desktop .hydro-sample-btn {
+  animation-name: ansd-sample-ring !important;
+}
+
+html.hydro-desktop .hydro-sample-icon {
+  animation: none !important;
+  color: var(--color-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.hydro-desktop .hydro-sample-btn {
+    animation: none !important;
+  }
 }

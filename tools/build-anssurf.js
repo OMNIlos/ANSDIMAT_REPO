@@ -26,8 +26,12 @@
  *    своей палитрой и десктопной вёрсткой, а внутри приложения раздел обязан
  *    читаться как его часть, а не как вставленный сайт. Скин идёт последним
  *    в `<head>`, поэтому переопределяет токены поставки без `!important`.
- * 6. Подсказки «Правая кнопка мыши — добавить скважину» на сенсорном экране
- *    сменяются подсказкой про касание — см. `TOUCH_HINTS`.
+ * 6. Тексты и места в бандле, которые правятся под приложение: подсказки
+ *    про правую кнопку мыши, кнопка «к печати», меню у края экрана — см.
+ *    `PAGE_TEXT` и `SOURCE_PATCHES`.
+ * 7. Первым в `<head>` встаёт скрипт приложения `tools/anssurf-host.js`: то,
+ *    что скин не умеет, — прокрутка к началу при смене шага и меню в
+ *    пределах экрана.
  *
  * Имена файлов сохраняются. Внутри сборки есть ссылки вида
  * `gidroizogipsy-en.html` и определение языка по `location.pathname` —
@@ -57,6 +61,9 @@ const OUT_DIR = path.join(__dirname, '..', 'assets', 'anssurf');
 /** Скин и шрифты: собираются в один <style> в конце <head> */
 const SKIN_FILES = ['anssurf-fonts.css', 'anssurf-skin.css'];
 
+/** Скрипт приложения: встаёт первым в <head>, до скриптов поставки */
+const HOST_SCRIPT = 'anssurf-host.js';
+
 /**
  * Новое название четвёртого шага по языку страницы
  *
@@ -69,58 +76,82 @@ const STEP_RENAME = {
 };
 
 /**
- * Подсказки про мышь, которым на сенсорном экране нужна замена
+ * Строка бандла в обратных кавычках — так в нём записан любой текст
  *
- * На телефоне поставка пишет «Правая кнопка мыши — добавить скважину». Мыши
- * нет, и подсказка уводит в сторону от единственного рабочего способа:
- * в режиме «Добавить скважину на карте» коснуться карты.
- *
- * Строки не переписываются, а оборачиваются выражением: сенсорный экран
- * получает подсказку про касание, компьютер с мышью — прежнюю. Веб-сборка
- * приложения открывает те же страницы и в браузере на компьютере.
- *
- * Ключ — имя файла поставки, значение — пары «как в поставке → для касания».
+ * @param {string} text - текст
+ * @returns {string} шаблонная строка
  */
-const TOUCH_HINTS = {
+const lit = (text) => `\`${text}\``;
+
+/**
+ * Тексты страницы, которые правятся под приложение
+ *
+ * Подсказки поставки написаны для компьютера: «Правая кнопка мыши — добавить
+ * скважину». На телефоне мыши нет, а в узком окне браузера с мышью подсказка
+ * про касание была бы неверна — поэтому новые тексты верны для обоих: в
+ * режиме «Добавить скважину на карте» скважину ставит обычное нажатие на
+ * карту, и пальцем, и мышью.
+ *
+ * Кнопка третьего шага звала «к печати», хотя четвёртый шаг уже называется
+ * «Выгрузка» и печати в нём нет.
+ *
+ * Подсказка «156.3» в поле уровня выглядела как введённое число: человек
+ * видел значение в поле и не понимал, почему «Добавить» не нажимается.
+ *
+ * Ключ — имя файла поставки, значение — пары «как в бандле → как надо».
+ * Каждая левая часть обязана встретиться ровно один раз.
+ */
+const PAGE_TEXT = {
   'gidroizogipsy.html': [
     [
-      'Укажите положение скважины. Правая кнопка мыши — добавить скважину.',
-      'Коснитесь карты там, где стоит скважина.',
+      lit('Укажите положение скважины. Правая кнопка мыши — добавить скважину.'),
+      lit('Нажмите на карту там, где стоит скважина.'),
     ],
     [
-      'Правая кнопка мыши на карте — добавить скважину.',
-      'Чтобы добавить скважину, нажмите «Добавить скважину на карте» и коснитесь карты.',
+      lit('Правая кнопка мыши на карте — добавить скважину.'),
+      lit('Чтобы добавить скважину, нажмите «Добавить скважину на карте», а затем — на карту.'),
     ],
     [
-      'Укажите положение скважины на карте (правая кнопка — добавить).',
-      'Укажите положение скважины касанием карты.',
+      lit('Укажите положение скважины на карте (правая кнопка — добавить).'),
+      lit('Нажмите на карту там, где стоит скважина.'),
     ],
+    [lit('Подготовить карту к печати'), lit('Перейти к выгрузке')],
+    [`placeholder:${lit('156.3')}`, `placeholder:${lit('напр. 156.3')}`],
   ],
   'gidroizogipsy-en.html': [
     [
-      'Indicate the well location. Right-click the map to add a well.',
-      'Tap the map where the well is.',
+      lit('Indicate the well location. Right-click the map to add a well.'),
+      lit('Click or tap the map where the well is.'),
     ],
     [
-      'Right-click the map to add a well.',
-      'To add a well, press “Add a well on the map” and tap the map.',
+      lit('Right-click the map to add a well.'),
+      lit('To add a well, press “Add a well on the map”, then click or tap the map.'),
     ],
     [
-      'Indicate the well location on the map (right-click to add).',
-      'Tap the map to set the well location.',
+      lit('Indicate the well location on the map (right-click to add).'),
+      lit('Click or tap the map where the well is.'),
     ],
-    ['Click the map…', 'Tap the map…'],
+    [lit('Click the map…'), lit('Pick a point on the map…')],
+    [lit('Prepare the map for print'), lit('Go to export')],
+    [`placeholder:${lit('156.3')}`, `placeholder:${lit('e.g. 156.3')}`],
   ],
 };
 
 /**
- * Выражение, которое страница вычисляет при отрисовке: сенсорный ли экран
+ * Правки кода бандла, общие для обеих страниц
  *
- * `pointer: coarse` — основной указатель палец. Телефон и планшет — да,
- * компьютер с мышью — нет, даже с сенсорным экраном сбоку.
+ * Контекстное меню «Добавить скважину» встаёт в точку нажатия и у правого
+ * края экрана наполовину уходило за него. Меню получает ref, который после
+ * отрисовки сдвигает его внутрь карты (`__ansdClampMenu` из скрипта
+ * приложения). Функция-стрелка, а не ссылка на готовую: новый ref на каждой
+ * отрисовке заставляет React вызвать его и после того, как меню переехало.
  */
-const COARSE_POINTER =
-  '(typeof matchMedia==="function"&&matchMedia("(pointer: coarse)").matches)';
+const SOURCE_PATCHES = [
+  [
+    'style:{left:ctx.px,top:ctx.py}',
+    'ref:e=>window.__ansdClampMenu&&window.__ansdClampMenu(e),style:{left:ctx.px,top:ctx.py}',
+  ],
+];
 
 /**
  * Вырезает кусок между двумя метками вместе с ними
@@ -209,33 +240,57 @@ function renameFourthStep(html, label) {
 }
 
 /**
- * Меняет подсказки про мышь на подсказки про касание
+ * Заменяет кусок бандла, встреченный ровно один раз
  *
- * Подсказка в бандле — шаблонная строка в обратных кавычках. Она заменяется
- * выражением `(касание ? «для касания» : «как было»)`, которое годится в
- * любом месте, где стояла строка: в детях JSX, в тернарнике, в свойстве.
+ * Ни одного вхождения — поставка сменила текст, и правка молча пропала бы.
+ * Больше одного — замена задела бы чужое место.
  *
- * Каждая подсказка обязана встретиться ровно один раз: ни одной — поставка
- * сменила текст, больше одной — замена задела бы чужое место.
+ * @param {string} html - разметка страницы
+ * @param {string} from - что заменить
+ * @param {string} to - на что
+ * @returns {string} разметка с заменой
+ */
+function replaceOnce(html, from, to) {
+  const count = html.split(from).length - 1;
+  if (count !== 1) {
+    throw new Error(
+      `«${from}» найдено ${count} раз вместо одного: поставка AnsSurf изменилась`
+    );
+  }
+  // Функция вместо строки замены: в строке `$&` и `$1` имели бы особый смысл
+  return html.replace(from, () => to);
+}
+
+/**
+ * Применяет к странице тексты и правки кода
  *
  * @param {string} html - разметка страницы
  * @param {string} name - имя файла поставки
- * @returns {string} разметка с подсказками для касания
+ * @returns {string} разметка с правками
  */
-function adaptTouchHints(html, name) {
-  let out = html;
-  for (const [mouse, touch] of TOUCH_HINTS[name]) {
-    const literal = `\`${mouse}\``;
-    const count = out.split(literal).length - 1;
-    if (count !== 1) {
-      throw new Error(
-        `Подсказка «${mouse}» найдена ${count} раз вместо одного: поставка AnsSurf изменилась`
-      );
-    }
-    // Функция вместо строки замены: в строке `$` имел бы особый смысл
-    out = out.replace(literal, () => `(${COARSE_POINTER}?\`${touch}\`:${literal})`);
+function patchPage(html, name) {
+  return [...PAGE_TEXT[name], ...SOURCE_PATCHES].reduce(
+    (out, [from, to]) => replaceOnce(out, from, to),
+    html
+  );
+}
+
+/**
+ * Ставит скрипт приложения первым в <head>
+ *
+ * Первым — чтобы подмена `window.scrollTo` и функции для бандла были готовы
+ * раньше, чем скрипты поставки их позовут.
+ *
+ * @param {string} html - разметка страницы
+ * @param {string} code - содержимое скрипта
+ * @returns {string} разметка со скриптом
+ */
+function addHostScript(html, code) {
+  // Закрывающий тег внутри кода оборвал бы скрипт посередине
+  if (/<\/script/i.test(code)) {
+    throw new Error(`В ${HOST_SCRIPT} встретился </script> — встроить нельзя`);
   }
-  return out;
+  return replaceOnce(html, '<head>', `<head>\n<script data-ansdimat-host>\n${code}\n</script>`);
 }
 
 /**
@@ -267,8 +322,9 @@ function addSkin(html, skin) {
  * @param {string} name - имя файла страницы
  * @param {string} exportCode - содержимое встраиваемого скрипта
  * @param {string} skin - содержимое скина
+ * @param {string} host - скрипт приложения
  */
-function buildPage(srcDir, name, exportCode, skin) {
+function buildPage(srcDir, name, exportCode, skin, host) {
   const source = fs.readFileSync(path.join(srcDir, name), 'utf8');
 
   let html = source;
@@ -281,7 +337,8 @@ function buildPage(srcDir, name, exportCode, skin) {
   html = dropIcons(html);
   html = inlineExport(html, exportCode);
   html = renameFourthStep(html, STEP_RENAME[name]);
-  html = adaptTouchHints(html, name);
+  html = patchPage(html, name);
+  html = addHostScript(html, host);
   html = addSkin(html, skin);
 
   if (/mc\.yandex\.ru|metrika/i.test(html)) {
@@ -317,8 +374,9 @@ function main() {
   const skin = SKIN_FILES.map((file) =>
     fs.readFileSync(path.join(__dirname, file), 'utf8')
   ).join('\n');
+  const host = fs.readFileSync(path.join(__dirname, HOST_SCRIPT), 'utf8');
 
-  for (const name of PAGES) buildPage(srcDir, name, exportCode, skin);
+  for (const name of PAGES) buildPage(srcDir, name, exportCode, skin, host);
 
   console.log(`Готово: ${OUT_DIR}`);
 }
@@ -327,4 +385,4 @@ function main() {
 // отдельных шагов и собирать страницы при этом не должен
 if (require.main === module) main();
 
-module.exports = { TOUCH_HINTS, COARSE_POINTER, adaptTouchHints };
+module.exports = { PAGE_TEXT, SOURCE_PATCHES, replaceOnce, patchPage, addHostScript };
