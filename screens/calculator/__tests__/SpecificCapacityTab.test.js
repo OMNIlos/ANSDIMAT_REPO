@@ -1,10 +1,11 @@
 /**
  * Вкладка «Оценка по Q/s»
  *
- * Расчёт покрыт в `calc/__tests__/specificCapacity.test.js`; здесь важно, что
- * вкладка упрощена, как просили: по умолчанию два поля, фильтр появляется
- * тумблером, безнапорный пласт спрашивает мощность, а выбранная единица
- * расхода читает набранное число, а не пересчитывает его.
+ * Расчёт покрыт в `calc/__tests__/specificCapacity.test.js`, разрез — в
+ * `components/schemes/__tests__`. Здесь проверяется то, что просили в
+ * документе: по умолчанию напорный пласт и два окошка, тумблер добавляет на
+ * схему окошки фильтра, безнапорный пласт спрашивает мощность, а выбранная
+ * единица расхода читает набранное число, а не пересчитывает его.
  */
 
 import React from 'react';
@@ -26,7 +27,7 @@ const mount = () => {
   act(() => {
     tree = renderer.create(
       <PaperProvider theme={lightTheme}>
-        <SpecificCapacityTab />
+        <SpecificCapacityTab contentWidth={343} />
       </PaperProvider>
     );
   });
@@ -53,11 +54,9 @@ const text = (tree) =>
     .flatMap((node) => collect(node.props.children))
     .join(' ');
 
-/** Поле ввода ячейки по её подписи */
-const input = (tree, label) =>
-  tree.root
-    .findAll((node) => node.props?.accessibilityLabel === label && typeof node.type !== 'string')[0]
-    .findByType(TextInput);
+/** Окошки схемы по ключу поля */
+const inputs = (tree) =>
+  Object.fromEntries(tree.root.findAllByType(TextInput).map((node) => [node.props.testID, node]));
 
 /** Нажимает вариант переключателя по подписи */
 const pick = (tree, label) => {
@@ -79,54 +78,62 @@ const toggleImperfect = (tree) => {
   act(() => toggle.props.onPress());
 };
 
-test('по умолчанию — напорный пласт, совершенная скважина: два поля и T', () => {
+test('по умолчанию — напорный пласт, совершенная скважина: два окошка и T', () => {
   const tree = mount();
-  const screen = text(tree);
 
-  expect(screen).toContain('Расход');
-  expect(screen).toContain('Понижение в скважине');
-  expect(screen).not.toContain('Длина фильтра');
-  expect(screen).toContain('Водопроводимость');
+  expect(Object.keys(inputs(tree)).sort()).toEqual(['qs-Q', 'qs-s']);
+  expect(text(tree)).toContain('T, м²/сут');
   // Пример из справки настольной версии: 1.22·100/15
-  expect(screen).toContain('8.133');
+  expect(text(tree)).toContain('8.133');
 });
 
-test('тумблер несовершенной скважины показывает фильтр и пересчитывает T', () => {
+test('тумблер несовершенной скважины добавляет окошки фильтра и пересчитывает T', () => {
   const tree = mount();
   toggleImperfect(tree);
-  const screen = text(tree);
 
-  expect(screen).toContain('Длина фильтра');
-  expect(screen).toContain('Середина фильтра');
-  expect(screen).toContain('Анизотропия');
-  expect(screen).toContain('Мощность пласта');
-  expect(screen).toContain('31.445');
-  expect(screen).toContain('k = T/m');
+  expect(Object.keys(inputs(tree)).sort()).toEqual(
+    ['qs-Q', 'qs-s', 'qs-zw', 'qs-rw', 'qs-m', 'qs-anisotropy', 'qs-lw'].sort()
+  );
+  expect(text(tree)).toContain('31.445');
+  // Результат — только проводимость, как в документе: без пересчёта в k
+  expect(text(tree)).not.toContain('k = T/m');
 });
 
 test('безнапорный пласт спрашивает мощность и считает k', () => {
   const tree = mount();
   pick(tree, 'Безнапорный');
-  const screen = text(tree);
 
-  expect(screen).toContain('Обводнённая мощность');
-  expect(screen).toContain('0.6480');
-  expect(screen).toContain('T = k·m');
+  expect(Object.keys(inputs(tree)).sort()).toEqual(['qs-Q', 'qs-m', 'qs-s']);
+  expect(text(tree)).toContain('k, м/сут');
+  expect(text(tree)).toContain('0.6480');
 });
 
 test('смена единицы расхода оставляет число и меняет результат', () => {
   const tree = mount();
-  pick(tree, 'л/сек');
+
+  const opener = tree.root.find(
+    (node) =>
+      node.props?.accessibilityLabel === I18n.t('qsFlowUnits') && typeof node.props.onPress === 'function'
+  );
+  act(() => opener.props.onPress());
+  const option = tree.root.find(
+    (node) =>
+      node.props?.accessibilityRole === 'menuitem' &&
+      typeof node.props.onPress === 'function' &&
+      collect(node.props.children).includes('л/сек')
+  );
+  act(() => option.props.onPress());
 
   // 100 л/с = 8640 м³/сут: T = 1.22·8640/15
-  expect(input(tree, 'Расход').props.value).toBe('100');
+  expect(inputs(tree)['qs-Q'].props.value).toBe('100');
+  expect(text(tree)).toContain('Q, л/сек');
   expect(text(tree)).toContain('702.720');
 });
 
 test('фильтр за пределами пласта показывает ошибку вместо результата', () => {
   const tree = mount();
   toggleImperfect(tree);
-  act(() => input(tree, 'Середина фильтра').props.onChangeText('0.5'));
+  act(() => inputs(tree)['qs-zw'].props.onChangeText('0.5'));
 
   expect(text(tree)).toContain(I18n.t('filterOutsideAquiferNote'));
   expect(text(tree)).not.toContain('31.445');

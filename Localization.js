@@ -744,7 +744,6 @@ const i18n = new I18n({
     thickness: "Мощность пласта",
     transmissivity: "Водопроводимость",
     storativity: "Водоотдача",
-    filtrationCoefficient: "Коэф. фильтрации k",
     pitRadius: "Радиус котлована r₀",
     drawdownExceedsThicknessNote:
       "Понижение больше мощности пласта — проверьте исходные данные.",
@@ -752,12 +751,10 @@ const i18n = new I18n({
     // ===== ОЦЕНКА ПО Q/s =====
     qsWellDrawdown: "Понижение в скважине",
     qsSaturatedThickness: "Обводнённая мощность",
-    qsFilterGroup: "Фильтр",
     qsFilterLength: "Длина фильтра",
     qsFilterMiddle: "Середина фильтра",
-    qsFromTop: "от кровли пласта",
-    qsFromLevel: "от статического уровня",
     qsAnisotropy: "Анизотропия",
+    qsFlowUnits: "Единицы расхода",
     filterOutsideAquiferNote:
       "Фильтр выходит за пределы пласта: zw − lw/2 должно быть не меньше нуля, а zw + lw/2 — не больше m.",
     filterFullThicknessNote:
@@ -2485,7 +2482,6 @@ const i18n = new I18n({
     thickness: "Aquifer thickness",
     transmissivity: "Transmissivity",
     storativity: "Storativity",
-    filtrationCoefficient: "Conductivity k",
     pitRadius: "Pit radius r₀",
     drawdownExceedsThicknessNote:
       "Drawdown exceeds aquifer thickness — check the input data.",
@@ -2493,12 +2489,10 @@ const i18n = new I18n({
     // ===== ESTIMATE FROM Q/s =====
     qsWellDrawdown: "Drawdown in the well",
     qsSaturatedThickness: "Saturated thickness",
-    qsFilterGroup: "Screen",
     qsFilterLength: "Screen length",
     qsFilterMiddle: "Screen midpoint",
-    qsFromTop: "from aquifer top",
-    qsFromLevel: "from static level",
     qsAnisotropy: "Anisotropy",
+    qsFlowUnits: "Flow units",
     filterOutsideAquiferNote:
       "The screen extends beyond the aquifer: zw − lw/2 must be at least zero and zw + lw/2 at most m.",
     filterFullThicknessNote:

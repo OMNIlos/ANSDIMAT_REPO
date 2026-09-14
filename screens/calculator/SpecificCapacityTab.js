@@ -5,21 +5,23 @@
  * АНСДИМАТ: по дебиту и понижению в опытной скважине — водопроводимость
  * напорного пласта или коэффициент фильтрации безнапорного.
  *
- * По умолчанию на экране два поля — Q и s: напорный пласт и совершенная
- * скважина покрывают большинство полевых оценок. Остальное появляется, только
- * когда оно нужно: мощность — у безнапорного пласта, фильтр — тумблером
- * несовершенной скважины.
+ * Сверху выбирается тип пласта и тумблер несовершенной скважины, под ними —
+ * разрез с окошками ввода на своих местах, как в настольном окне. По
+ * умолчанию на разрезе два окошка — Q и sw: напорный пласт и совершенная
+ * скважина покрывают большинство полевых оценок. Мощность появляется у
+ * безнапорного пласта, окошки фильтра — тумблером.
  *
- * Размерность расхода выбирается прямо здесь, а не в общих настройках: дебит
+ * Размерность расхода выбирается у подписи Q, а не в общих настройках: дебит
  * берут из журнала в тех единицах, в которых его записали. При смене единицы
- * число в поле остаётся как набрано и читается в новой — сначала выбирают
+ * число в окошке остаётся как набрано и читается в новой — сначала выбирают
  * размерность, потом вводят. Длины — в метрах, результат — в м²/сут и м/сут,
  * как в настольной версии.
  *
  * Значения по умолчанию — пример из справки настольной версии: открыв вкладку,
  * видно 8.133, а с тумблером 31.445 — сверка без набора.
  *
- * Математика — в [`calc/specificCapacity.js`](../../calc/specificCapacity.js).
+ * Математика — в [`calc/specificCapacity.js`](../../calc/specificCapacity.js),
+ * разрез — в [`components/schemes/SpecificCapacityScheme.js`](../../components/schemes/SpecificCapacityScheme.js).
  */
 
 import React, { useMemo, useState } from 'react';
@@ -30,22 +32,18 @@ import { FLOW_UNITS } from '../../calc/units';
 import { AQUIFERS, estimateFromSpecificCapacity } from '../../calc/specificCapacity';
 import AppearIn from '../../components/ui/AppearIn';
 import Toggle from '../../components/ui/Toggle';
+import SpecificCapacityScheme from '../../components/schemes/SpecificCapacityScheme';
 import { type, spacing, fontFamily } from '../../theme';
-import {
-  Card,
-  Collapsible,
-  Field,
-  Formula,
-  Notices,
-  OptionRow,
-  ResultCard,
-  SectionLabel,
-  formatValue,
-  parseNumber,
-} from './shared';
+import { Notices, OptionRow, SectionLabel, formatValue, parseNumber } from './shared';
 
 /** Размерности расхода на вкладке — ключи из FLOW_UNITS */
 export const QS_FLOW_UNITS = ['m3_day', 'm3_hour', 'l_min', 'l_sec'];
+
+/** Ширина разреза, если экран не передал свою: телефон в 375 точек */
+const DEFAULT_WIDTH = 343;
+
+/** Значения по умолчанию — пример из справки настольной версии */
+const DEFAULTS = { Q: '100', s: '15', m: '20', lw: '2', zw: '10', rw: '0.1', anisotropy: '1' };
 
 /**
  * Переводит расход из выбранной размерности в м³/сут
@@ -59,19 +57,13 @@ function flowToBase(value, unitKey) {
   return unit ? value / unit.factor : NaN;
 }
 
-export default function SpecificCapacityTab() {
+export default function SpecificCapacityTab({ contentWidth = DEFAULT_WIDTH }) {
   const theme = useTheme();
 
   const [aquifer, setAquifer] = useState(AQUIFERS.CONFINED);
   const [imperfect, setImperfect] = useState(false);
   const [qUnit, setQUnit] = useState('m3_day');
-  const [qText, setQText] = useState('100');
-  const [sText, setSText] = useState('15');
-  const [mText, setMText] = useState('20');
-  const [lwText, setLwText] = useState('2');
-  const [zwText, setZwText] = useState('10');
-  const [rwText, setRwText] = useState('0.1');
-  const [anisotropyText, setAnisotropyText] = useState('1');
+  const [values, setValues] = useState(DEFAULTS);
 
   const unconfined = aquifer === AQUIFERS.UNCONFINED;
 
@@ -80,21 +72,18 @@ export default function SpecificCapacityTab() {
   const result = useMemo(
     () =>
       estimateFromSpecificCapacity({
-        Q: flowToBase(parseNumber(qText), qUnit),
-        s: parseNumber(sText),
+        Q: flowToBase(parseNumber(values.Q), qUnit),
+        s: parseNumber(values.s),
         aquifer,
         imperfect,
-        m: parseNumber(mText),
-        lw: parseNumber(lwText),
-        zw: parseNumber(zwText),
-        rw: parseNumber(rwText),
-        anisotropy: parseNumber(anisotropyText),
+        m: parseNumber(values.m),
+        lw: parseNumber(values.lw),
+        zw: parseNumber(values.zw),
+        rw: parseNumber(values.rw),
+        anisotropy: parseNumber(values.anisotropy),
       }),
-    [qText, qUnit, sText, aquifer, imperfect, mText, lwText, zwText, rwText, anisotropyText]
+    [values, qUnit, aquifer, imperfect]
   );
-
-  const invalid = (key) => result.invalid.includes(key);
-  const meters = I18n.t('unitMeters');
 
   const aquifers = [
     { value: AQUIFERS.CONFINED, label: I18n.t('confined') },
@@ -102,41 +91,11 @@ export default function SpecificCapacityTab() {
   ];
 
   const units = QS_FLOW_UNITS.map((key) => ({
-    value: key,
+    key,
     label: I18n.t(FLOW_UNITS.find((item) => item.key === key).labelKey),
   }));
-  const unitLabel = units.find((item) => item.value === qUnit)?.label;
 
-  const thicknessField = (label) => (
-    <Field
-      label={label}
-      symbol="m"
-      value={mText}
-      onChange={setMText}
-      unit={meters}
-      error={invalid('m')}
-    />
-  );
-
-  const secondaryRows = Number.isFinite(result.secondary)
-    ? [
-        unconfined
-          ? {
-              label: 'T = k·m',
-              value: formatValue(result.secondary),
-              unit: I18n.t('unitTransmissivity'),
-            }
-          : {
-              label: 'k = T/m',
-              value: formatValue(result.secondary),
-              unit: I18n.t('unitMDay'),
-            },
-      ]
-    : [];
-
-  const formula = Number.isFinite(result.f)
-    ? `${result.formula}\nf = ${formatValue(result.f)}`
-    : result.formula;
+  const onChange = (key, text) => setValues((prev) => ({ ...prev, [key]: text }));
 
   return (
     <>
@@ -157,84 +116,27 @@ export default function SpecificCapacityTab() {
       </AppearIn>
 
       <AppearIn index={1}>
-        <SectionLabel>{I18n.t('wellPumpingGroup')}</SectionLabel>
-        <OptionRow options={units} value={qUnit} onChange={setQUnit} tone="data" />
-        <Card style={styles.spaced}>
-          <Field
-            label={I18n.t('flowRate')}
-            symbol="Q"
-            value={qText}
-            onChange={setQText}
-            unit={unitLabel}
-            error={invalid('Q')}
+        <View style={styles.scheme}>
+          <SpecificCapacityScheme
+            width={contentWidth}
+            aquifer={aquifer}
+            imperfect={imperfect}
+            values={values}
+            onChange={onChange}
+            invalid={result.invalid}
+            flowUnit={qUnit}
+            flowUnits={units}
+            onFlowUnitChange={setQUnit}
+            result={{
+              symbol: unconfined ? 'k' : 'T',
+              value: formatValue(result.value),
+              unit: unconfined ? I18n.t('unitMDay') : I18n.t('unitTransmissivity'),
+            }}
+            formula={{ f: Number.isFinite(result.f) ? formatValue(result.f) : null }}
           />
-          <Field
-            label={I18n.t('qsWellDrawdown')}
-            symbol="sw"
-            value={sText}
-            onChange={setSText}
-            unit={meters}
-            error={invalid('s')}
-          />
-          {unconfined ? thicknessField(I18n.t('qsSaturatedThickness')) : null}
-        </Card>
-      </AppearIn>
-
-      {imperfect ? (
-        <AppearIn index={2}>
-          <SectionLabel>{I18n.t('qsFilterGroup')}</SectionLabel>
-          <Card>
-            <Field
-              label={I18n.t('qsFilterLength')}
-              symbol="lw"
-              value={lwText}
-              onChange={setLwText}
-              unit={meters}
-              error={invalid('lw')}
-            />
-            <Field
-              label={I18n.t('qsFilterMiddle')}
-              symbol="zw"
-              value={zwText}
-              onChange={setZwText}
-              unit={meters}
-              hint={I18n.t(unconfined ? 'qsFromLevel' : 'qsFromTop')}
-              error={invalid('zw')}
-            />
-            <Field
-              label={I18n.t('wellRadius')}
-              symbol="rw"
-              value={rwText}
-              onChange={setRwText}
-              unit={meters}
-              error={invalid('rw')}
-            />
-            <Field
-              label={I18n.t('qsAnisotropy')}
-              symbol="kz/kr"
-              value={anisotropyText}
-              onChange={setAnisotropyText}
-              error={invalid('anisotropy')}
-            />
-            {unconfined ? null : thicknessField(I18n.t('thickness'))}
-          </Card>
-        </AppearIn>
-      ) : null}
-
-      <AppearIn index={3}>
-        <ResultCard
-          title={unconfined ? I18n.t('filtrationCoefficient') : I18n.t('transmissivity')}
-          // У безнапорного обозначение уже в названии: «Коэф. фильтрации k»
-          label={unconfined ? undefined : 'T'}
-          value={formatValue(result.value)}
-          unit={unconfined ? I18n.t('unitMDay') : I18n.t('unitTransmissivity')}
-          rows={secondaryRows}
-        />
+        </View>
         <Notices codes={result.errors} suffix="Note" tone="error" />
         <Notices codes={result.warnings} suffix="Note" />
-        <Collapsible title={I18n.t('wellStatsGroup')} note="ƒ">
-          <Formula>{formula}</Formula>
-        </Collapsible>
       </AppearIn>
     </>
   );
@@ -243,9 +145,6 @@ export default function SpecificCapacityTab() {
 const styles = StyleSheet.create({
   firstLabel: {
     marginTop: 0,
-  },
-  spaced: {
-    marginTop: spacing.md,
   },
   switchRow: {
     flexDirection: 'row',
@@ -260,5 +159,8 @@ const styles = StyleSheet.create({
   switchLabel: {
     flex: 1,
     fontFamily: fontFamily.medium,
+  },
+  scheme: {
+    marginTop: spacing.lg,
   },
 });
