@@ -147,7 +147,7 @@ const check = (name, ok, detail='') => {
   const before = await p2.evaluate(() => { __tap('Создать откачку'); return 1; });
   await p2.waitForTimeout(2500);
   const emptyList = await p2.evaluate(() => __text());
-  check('на втором устройстве журналов нет', /Нет проектов|РАНЕЕ СОЗДАННЫЕ · 0/.test(emptyList));
+  check('на втором устройстве журналов нет', /Журналов пока нет|Нет проектов|РАНЕЕ СОЗДАННЫЕ · 0/.test(emptyList));
 
   await p2.evaluate(() => __tap('Настройки'));
   await p2.waitForTimeout(1800);

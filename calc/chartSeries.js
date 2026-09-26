@@ -41,10 +41,11 @@ export const SERIES_COLORS = [
  *
  * @param {Object} params
  * @param {Array<Object>} params.raw - описания серий: id, name, role, color,
- *   measurements вида [{t, s, group?, groupName?}]
+ *   dashed, measurements вида [{t, s, group?, groupName?}]
  * @param {string} params.mode - ось абсцисс, см. X_MODES
  * @param {Array<string>} [params.palette] - цвета; повторяются по кругу
  * @returns {Array<{id: string, name: string, color: string, role: string,
+ *   dashed: boolean|undefined,
  *   points: Array<{x: number, y: number, index: number}>}>} серии
  */
 export function buildSeries({ raw, mode, palette = SERIES_COLORS }) {
@@ -78,6 +79,10 @@ export function buildSeries({ raw, mode, palette = SERIES_COLORS }) {
         name: entry.name,
         color: entry.color ?? nextColor(),
         role: entry.role ?? SERIES_ROLES.REFERENCE,
+        // Пунктиром серии сравнения отличают от кривой подбора. Там, где
+        // сравнивать не с чем, а серия сравнения и есть данные опыта —
+        // ветви петли нагнетания, — она идёт сплошной: `dashed: false`
+        dashed: entry.dashed,
         points: points.map(({ x, y, index }) => ({ x, y, index })),
       });
       continue;
@@ -95,6 +100,7 @@ export function buildSeries({ raw, mode, palette = SERIES_COLORS }) {
           name: point.groupName ?? entry.name,
           color: nextColor(),
           role: entry.role ?? SERIES_ROLES.FIT,
+          dashed: entry.dashed,
           points: [],
         });
       }

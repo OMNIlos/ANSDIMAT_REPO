@@ -51,6 +51,7 @@ import {
   Collapsible,
   Field,
   Formula,
+  NO_AUTOFILL,
   Note,
   Notices,
   OptionRow,
@@ -72,6 +73,15 @@ const METHODS = [
 
 /** Пояса в порядке нарастания: строгий режим, бактериальный, химический */
 const BELTS = ['first', 'bacterial', 'chemical'];
+
+/**
+ * Сколько знаков должно помещаться в поле координаты: «-179.123456»
+ *
+ * Шесть знаков после запятой — это десятки сантиметров на местности, их
+ * подставляет и кнопка «по моему местоположению». В стандартную ширину поля
+ * такая запись не влезала и уезжала за край.
+ */
+const COORD_CHARS = 11;
 
 export default function WhpaTab({ contentWidth }) {
   const theme = useTheme();
@@ -477,6 +487,7 @@ export default function WhpaTab({ contentWidth }) {
             onChange={setLatitude}
             unit="°"
             hint={I18n.t('whpaCoordsHint')}
+            chars={COORD_CHARS}
           />
           <Field
             label={I18n.t('whpaLongitude')}
@@ -484,6 +495,7 @@ export default function WhpaTab({ contentWidth }) {
             value={longitude}
             onChange={setLongitude}
             unit="°"
+            chars={COORD_CHARS}
           />
         </Card>
       </AppearIn>
@@ -773,6 +785,7 @@ export default function WhpaTab({ contentWidth }) {
                     value={layer[field]}
                     onChangeText={(value) => editLayer(layer.id, field, value)}
                     keyboardType="decimal-pad"
+                    {...NO_AUTOFILL}
                     selectTextOnFocus
                     placeholder="—"
                     placeholderTextColor={theme.colors.faint}

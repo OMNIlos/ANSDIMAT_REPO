@@ -69,6 +69,8 @@ describe('ofrSummaryLines', () => {
           head: 0.1,
           depth: 10,
           capillary: 0.3,
+          // Эталон отчёта посчитан по Биндеману, а умолчание — Болдырев
+          useCapillary: true,
         },
       },
       units
@@ -78,6 +80,30 @@ describe('ofrSummaryLines', () => {
     expect(text).toContain(I18n.t('ofrResult'));
     // Контрольный пример: k = 0.1661538 м/сут
     expect(text).toContain('0.166154');
+  });
+
+  test('у Болдырева в сводке нет полей, которых нет в его формуле', () => {
+    const text = ofrSummaryLines(
+      {
+        ofrType: OFR_TYPES.VADOSE,
+        params: {
+          ...defaultParams(OFR_TYPES.VADOSE),
+          volume: 0.003,
+          interval: 10,
+          area: 2.5,
+          head: 0.1,
+          depth: 10,
+          capillary: 0.3,
+        },
+      },
+      units
+    ).join('\n');
+
+    expect(text).not.toContain(I18n.t('vadoseHead'));
+    expect(text).not.toContain(I18n.t('vadoseDepth'));
+    expect(text).not.toContain(I18n.t('vadoseCapillary'));
+    // k = Q/F = 0.432/2.5
+    expect(text).toContain('0.1728');
   });
 
   test('нагнетание отдаёт таблицу ступеней и средние', () => {

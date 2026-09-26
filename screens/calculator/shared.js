@@ -13,7 +13,7 @@
  * это полностью.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,7 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  useWindowDimensions,
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import Animated, {
@@ -40,6 +41,7 @@ import { QUANTITIES, MINUTES_PER_DAY } from '../../calc/units';
 import { useUnits } from '../../UnitsContext';
 import useReduceMotion from '../../hooks/useReduceMotion';
 import { spacing, radius, type, elevation, numericAt, fontFamily } from '../../theme';
+import { NO_AUTOFILL } from '../../lib/inputProps';
 
 /**
  * Разбирает число, принимая запятую как разделитель
@@ -51,6 +53,74 @@ export function parseNumber(text) {
   if (typeof text !== 'string') return Number(text);
   const normalized = text.replace(',', '.').trim();
   return normalized === '' ? NaN : Number(normalized);
+}
+
+// Поле без автозаполнения: вкладки берут набор отсюда, вместе с остальной обвязкой
+export { NO_AUTOFILL };
+
+/**
+ * Число для поля ввода: шесть значащих цифр без хвостовых нулей
+ *
+ * @param {number} value - значение
+ * @returns {string} запись для поля
+ */
+function tidyNumber(value) {
+  return String(Number(value.toPrecision(6)));
+}
+
+/**
+ * Связка «водоотдача — пьезопроводность»: a = k·h / S
+ *
+ * Расчёту нужна одна из двух величин, но на форме стоят обе, и правка одной
+ * раньше не трогала другую: введённая пьезопроводность молча проигрывала
+ * водоотдаче, которую расчёт берёт первой. Теперь ведущее — то поле, что
+ * правили последним, а второе пересчитывается: при его правке и при смене
+ * k или мощности пласта. Пустое или нулевое значение ничего не пересчитывает —
+ * человек, стирающий поле, не должен терять соседнее.
+ *
+ * @param {Object} params
+ * @param {{k: string, h: string, S: string, a: string}} params.values - строки полей
+ * @param {{setK: Function, setH: Function, setS: Function, setA: Function}} params.setters
+ * @param {{kToBase: Function, hToBase: Function, aToBase: Function, aFromBase: Function}} params.convert -
+ *   перевод k, мощности и пьезопроводности из единиц полей в базовые и обратно
+ * @param {'S'|'a'} [params.lead] - ведущее поле, пока ни одно не правили
+ * @returns {{onK: Function, onH: Function, onS: Function, onA: Function}} обработчики полей
+ */
+export function useStorageLink({ values, setters, convert, lead = 'S' }) {
+  const [leading, setLeading] = useState(lead);
+
+  const sync = (kText, hText, sText, aText, by) => {
+    const T = convert.kToBase(parseNumber(kText)) * convert.hToBase(parseNumber(hText));
+    if (!(T > 0)) return;
+    if (by === 'S') {
+      const S = parseNumber(sText);
+      if (S > 0) setters.setA(tidyNumber(convert.aFromBase(T / S)));
+      return;
+    }
+    const a = convert.aToBase(parseNumber(aText));
+    if (a > 0) setters.setS(tidyNumber(T / a));
+  };
+
+  return {
+    onK: (text) => {
+      setters.setK(text);
+      sync(text, values.h, values.S, values.a, leading);
+    },
+    onH: (text) => {
+      setters.setH(text);
+      sync(values.k, text, values.S, values.a, leading);
+    },
+    onS: (text) => {
+      setters.setS(text);
+      setLeading('S');
+      sync(values.k, values.h, text, values.a, 'S');
+    },
+    onA: (text) => {
+      setters.setA(text);
+      setLeading('a');
+      sync(values.k, values.h, values.S, text, 'a');
+    },
+  };
 }
 
 /**
@@ -69,6 +139,134 @@ export function formatValue(value) {
   if (abs >= 1000) return value.toFixed(1);
   if (abs >= 1) return value.toFixed(3);
   return value.toPrecision(4);
+}
+
+/**
+ * Безразмерная величина во всю доступную точность
+ *
+ * Обычный `formatValue` режет до четырёх значащих цифр — для понижения в
+ * метрах этого хватает с запасом, а для промежуточных чисел расчёта нет.
+ * Коэффициенты Бауэра — Райса A₁, A₂, A₃ и ln(R/r_w) входят в k множителями,
+ * и по «A₁ = 1.759» нельзя сверить расчёт ни с настольным АНСДИМАТ, ни с
+ * посчитанным по книге вручную: разойтись числа могут в пятом знаке, а видно
+ * только четыре.
+ *
+ * Девять значащих цифр по умолчанию — столько, сколько напечатано у
+ * коэффициентов полиномов в книге. Столько же экран показывает, пока не знает
+ * ширину строки; дальше число подгоняется под неё, см. `formatFitting`.
+ * Хвостовые нули убираются: «6.89» вместо «6.89000000», «1.2e-7» вместо
+ * «1.20000000e-7». Само число при этом нигде не округляется — сокращается
+ * только показ.
+ *
+ * @param {number} value - значение
+ * @param {number} [digits] - значащих цифр
+ * @returns {string} отформатированное значение
+ */
+export function formatPrecise(value, digits = 9) {
+  if (!isFinite(value)) return '—';
+  const abs = Math.abs(value);
+  if (abs !== 0 && (abs < 1e-4 || abs >= 1e9)) {
+    return value.toExponential(digits - 1).replace(/\.?0+e/, 'e');
+  }
+  // Number() снимает хвостовые нули, которые toPrecision дописывает до
+  // нужного числа цифр; экспоненциальная запись сюда уже не попадает
+  return String(Number(value.toPrecision(digits)));
+}
+
+/**
+ * Больше стольких значащих цифр число не показывается
+ *
+ * Пятнадцать — столько десятичных знаков double хранит без искажений. Дальше в
+ * записи идут не цифры величины, а следы двоичного округления: A₁ при β = 200
+ * по схеме Горнера — 6.0100041200000005, а сложением степеней по порядку —
+ * 6.0100041200000014. Пятнадцать знаков совпадают, дальше — нет, и другая
+ * программа покажет хвост иначе: сверять по нему нечего.
+ */
+export const MAX_SHOWN_DIGITS = 15;
+
+/**
+ * Меньше стольких значащих цифр число не сокращается даже в узкой строке
+ *
+ * Урезанное до «5» значение A₁ = 5.45 читалось бы как само значение, а не как
+ * сокращение. Четыре цифры — столько же, сколько у обычного `formatValue`.
+ */
+export const MIN_SHOWN_DIGITS = 4;
+
+/**
+ * Ширина знака JetBrains Mono в долях кегля
+ *
+ * У гарнитуры все знаки одной ширины — 600 единиц из 1000: цифры, точка, «e»,
+ * «−», «=», пробел и подстрочные ₁ ₂ ₃, в обычном начертании и в полужирном.
+ * Поэтому сколько знаков влезает в строку, считается делением, без замера
+ * самого текста.
+ */
+export const MONO_ADVANCE = 0.6;
+
+/** Кегль строки формулы, см. `styles.formulaText` */
+const FORMULA_FONT_SIZE = 12;
+
+/** Кегль и стандартная ширина числа в ячейке параметра, см. `styles.slotInput` */
+const FIELD_FONT_SIZE = 19;
+const FIELD_INPUT_WIDTH = 112;
+
+/** Кегль значения в строке «величина — значение», см. `styles.statValue` */
+const STAT_VALUE_FONT_SIZE = 14;
+
+/**
+ * Число во столько значащих цифр, сколько влезает в строку
+ *
+ * Расчёт держит значение во всей точности double, а показ сокращается ровно до
+ * ширины: из пятнадцати цифр отбрасываются последние, пока запись длиннее
+ * отведённого места. Отбрасываются округлением — 3.9758177 шестью цифрами
+ * будет 3.97582, а не 3.97581.
+ *
+ * @param {number} value - значение
+ * @param {number} maxChars - сколько знаков отведено под запись; NaN, пока
+ *   ширина строки не измерена, — тогда девять цифр, как у `formatPrecise`
+ * @returns {string} запись числа
+ */
+export function formatFitting(value, maxChars) {
+  if (!isFinite(value)) return '—';
+  if (!isFinite(maxChars)) return formatPrecise(value);
+  for (let digits = MAX_SHOWN_DIGITS; digits > MIN_SHOWN_DIGITS; digits -= 1) {
+    const shown = formatPrecise(value, digits);
+    if (shown.length <= maxChars) return shown;
+  }
+  return formatPrecise(value, MIN_SHOWN_DIGITS);
+}
+
+/**
+ * Сколько знаков моноширинного кегля помещается в ширину
+ *
+ * @param {number} width - ширина строки, px
+ * @param {number} fontSize - кегль, px
+ * @param {number} [fontScale] - множитель размера шрифта из настроек системы:
+ *   текст растягивается им на телефоне, и знаков в строке становится меньше
+ * @returns {number} число знаков; NaN, пока ширина не измерена
+ */
+export function monoCapacity(width, fontSize, fontScale = 1) {
+  if (!(width > 0) || !(fontSize > 0)) return NaN;
+  const advance = MONO_ADVANCE * fontSize * (fontScale > 0 ? fontScale : 1);
+  // Пиксель запаса: строка ровно во всю ширину на части экранов переносится
+  // из-за округления до пикселей устройства
+  return Math.floor((width - 1) / advance);
+}
+
+/**
+ * Ширина блока в знаках моноширинного кегля
+ *
+ * @param {number} fontSize - кегль текста в блоке, px
+ * @returns {[number, Function]} число знаков (NaN до первого замера) и
+ *   обработчик onLayout для блока, который его меряет
+ */
+function useMonoCapacity(fontSize) {
+  const { fontScale } = useWindowDimensions();
+  const [width, setWidth] = useState(NaN);
+  const onLayout = useCallback((event) => {
+    const next = event?.nativeEvent?.layout?.width;
+    if (isFinite(next)) setWidth(next);
+  }, []);
+  return [monoCapacity(width, fontSize, fontScale), onLayout];
 }
 
 /**
@@ -157,11 +355,17 @@ export function useCalcUnits() {
  * @param {React.ReactNode} nodes - содержимое
  * @returns {Array<React.ReactElement>} плоский список элементов
  */
-function flatten(nodes) {
+function flatten(nodes, prefix = '') {
   const out = [];
   React.Children.toArray(nodes).forEach((node) => {
     if (React.isValidElement(node) && node.type === React.Fragment) {
-      out.push(...flatten(node.props.children));
+      // Ключи детей фрагмента начинаются заново — «.0», «.1» — и совпадали
+      // с ключами соседей самой карточки: React ругался на повтор, а строки
+      // при пересчёте могли перепутаться местами. Ключ фрагмента в префиксе
+      // делает их уникальными
+      out.push(...flatten(node.props.children, `${prefix}${node.key}/`));
+    } else if (prefix && React.isValidElement(node)) {
+      out.push(React.cloneElement(node, { key: `${prefix}${node.key}` }));
     } else {
       out.push(node);
     }
@@ -218,13 +422,33 @@ export function Card({ children, style }) {
  * @param {string} [props.hint] - пересчёт или пояснение, справа внизу
  * @param {boolean} [props.error] - значение мешает расчёту
  * @param {boolean} [props.divider] - рисовать разделитель сверху
+ * @param {number} [props.chars] - сколько знаков должно помещаться в поле
+ *   целиком; без него поле стандартной ширины. Координаты «60.281711» в
+ *   стандартную ширину не влезали и уезжали за край
  * @returns {React.ReactElement} ячейка формы
  */
-export function Field({ label, value, onChange, unit, symbol, error, hint, divider }) {
+export function Field({ label, value, onChange, unit, symbol, error, hint, divider, chars }) {
   const theme = useTheme();
+  const { fontScale } = useWindowDimensions();
   const input = useRef(null);
   const [focused, setFocused] = useState(false);
+  // Моноширинный кегль: ширина считается делением, с поправкой на размер
+  // шрифта из настроек телефона и на внутренние поля Android
+  const inputWidth = chars
+    ? Math.max(
+        FIELD_INPUT_WIDTH,
+        Math.ceil(chars * FIELD_FONT_SIZE * MONO_ADVANCE * (fontScale > 0 ? fontScale : 1)) + 8
+      )
+    : null;
   const meta = [symbol, unit].filter(Boolean).join(' · ');
+  // Подписи опытов несут обозначение в конце — «Радиус фильтра r_w»: так они
+  // читаются в текстовой выгрузке. В ячейке обозначение уже стоит строкой
+  // ниже, и повтор «r_w … r_w · м» только шумел, а длинная подпись из-за
+  // него обрезалась многоточием
+  const shownLabel =
+    symbol && typeof label === 'string' && label.endsWith(` ${symbol}`)
+      ? label.slice(0, -(symbol.length + 1))
+      : label;
   const valueColor = error ? theme.colors.error : theme.colors.secondary;
 
   return (
@@ -238,7 +462,7 @@ export function Field({ label, value, onChange, unit, symbol, error, hint, divid
     >
       <View style={styles.slotTop}>
         <Text style={[styles.slotLabel, { color: theme.colors.text }]} numberOfLines={1}>
-          {label}
+          {shownLabel}
         </Text>
         <TextInput
           ref={input}
@@ -247,6 +471,7 @@ export function Field({ label, value, onChange, unit, symbol, error, hint, divid
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           keyboardType="decimal-pad"
+          {...NO_AUTOFILL}
           // Поле калькулятора почти всегда переписывают целиком, а не правят
           // по знаку: выделение по фокусу избавляет от чистки старого числа
           selectTextOnFocus
@@ -254,7 +479,7 @@ export function Field({ label, value, onChange, unit, symbol, error, hint, divid
           placeholderTextColor={theme.colors.faint}
           selectionColor={theme.colors.primary}
           underlineColorAndroid="transparent"
-          style={[styles.slotInput, { color: valueColor }]}
+          style={[styles.slotInput, inputWidth ? { width: inputWidth } : null, { color: valueColor }]}
         />
       </View>
       <View style={styles.slotBottom}>
@@ -468,6 +693,11 @@ export function PresetRow({ options, onPick }) {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        /* Без этого первое нажатие по чипу уходит на закрытие клавиатуры, а
+           не на подстановку: значение «вставляется» только со второго раза,
+           и выглядит это как неработающая лента. У внешней прокрутки экрана
+           то же свойство уже стоит, но вложенная берёт своё умолчание */
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.presetRow}
       >
         {options.map((option) => (
@@ -582,6 +812,38 @@ export function Formula({ children }) {
 }
 
 /**
+ * Формула вида «обозначение = число» с числами во всю ширину строки
+ *
+ * Каждое число показывается с тем числом значащих цифр, какое помещается в
+ * строку рядом со своим обозначением, но не больше пятнадцати, см.
+ * `formatFitting`. Сами значения не округляются — сокращается только запись.
+ *
+ * @param {Object} props
+ * @param {Array<{label: string, value: number}>} props.lines - строки формулы
+ * @param {string} [props.testID] - метка блока, по которой меряется ширина
+ * @returns {React.ReactElement} блок формулы
+ */
+export function FittedFormula({ lines, testID }) {
+  const theme = useTheme();
+  const [capacity, onLayout] = useMonoCapacity(FORMULA_FONT_SIZE);
+  const text = lines
+    .map(({ label, value }) => {
+      const prefix = `${label} = `;
+      return `${prefix}${formatFitting(value, capacity - prefix.length)}`;
+    })
+    .join('\n');
+  return (
+    <View style={[styles.formula, { backgroundColor: theme.colors.surfaceSunken }]}>
+      {/* Меряется обёртка, а не сам текст: ширина текста зависит от того,
+          сколько цифр в нём показано, и замер по нему ходил бы по кругу */}
+      <View testID={testID} onLayout={onLayout}>
+        <Text style={[styles.formulaText, { color: theme.colors.textSecondary }]}>{text}</Text>
+      </View>
+    </View>
+  );
+}
+
+/**
  * Список предупреждений и ошибок расчёта
  *
  * Ошибки красные и останавливают расчёт, предупреждения — приглушённые и
@@ -628,10 +890,18 @@ export function Notices({ codes, prefix = '', suffix = '', tone = 'warning' }) {
 /**
  * Строка «величина — значение» под результатом
  *
+ * Число идёт моноширинной гарнитурой, как все числа приложения. Значение
+ * словами — «Ламинарный поток», «Слаботрещиноватые» — моноширинной выглядело
+ * бы машинописью, поэтому для него есть `text`.
+ *
  * @param {Object} props
+ * @param {string} props.label - подпись
+ * @param {string} props.value - значение
+ * @param {boolean} [props.divider] - линия над строкой
+ * @param {boolean} [props.text] - значение словами, а не числом
  * @returns {React.ReactElement} строка
  */
-export function StatRow({ label, value, divider }) {
+export function StatRow({ label, value, divider, text }) {
   const theme = useTheme();
   return (
     <View
@@ -643,7 +913,52 @@ export function StatRow({ label, value, divider }) {
       <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]} numberOfLines={1}>
         {label}
       </Text>
-      <Text style={[styles.statValue, { color: theme.colors.text }]}>{value}</Text>
+      <Text
+        style={[
+          text ? styles.statValueText : styles.statValue,
+          { color: theme.colors.text },
+        ]}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+/**
+ * Строка «величина — значение» с числом во всю оставшуюся ширину
+ *
+ * Подпись занимает столько, сколько ей нужно, а число — всё остальное место и
+ * показывается с тем числом значащих цифр, какое туда помещается, см.
+ * `formatFitting`. Для коротких подписей вроде «ln(R/r_w)»: у длинной число
+ * сжалось бы до четырёх цифр.
+ *
+ * @param {Object} props
+ * @param {string} props.label - подпись
+ * @param {number} props.value - значение
+ * @param {boolean} [props.divider] - линия над строкой
+ * @param {string} [props.testID] - метка места под число, по которой меряется
+ *   ширина
+ * @returns {React.ReactElement} строка
+ */
+export function FittedStatRow({ label, value, divider, testID }) {
+  const theme = useTheme();
+  const [capacity, onLayout] = useMonoCapacity(STAT_VALUE_FONT_SIZE);
+  return (
+    <View
+      style={[
+        styles.statRow,
+        divider ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.colors.border } : null,
+      ]}
+    >
+      <Text style={[styles.statLabelFitted, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+        {label}
+      </Text>
+      <View testID={testID} style={styles.statValueSlot} onLayout={onLayout}>
+        <Text style={[styles.statValue, { color: theme.colors.text }]} numberOfLines={1}>
+          {formatFitting(value, capacity)}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -651,13 +966,26 @@ export function StatRow({ label, value, divider }) {
 /**
  * Пояснение под блоком: одна приглушённая строка
  *
+ * Пояснение перед блоком — «вносите нарастающий итог…» над таблицей — идёт
+ * с `lead`: у него отступ и снизу, иначе таблица вплотную подпирала текст.
+ *
  * @param {Object} props
+ * @param {boolean} [props.lead] - пояснение стоит перед тем, к чему относится
  * @returns {React.ReactElement} подпись
  */
-export function Note({ children }) {
+export function Note({ children, lead }) {
   const theme = useTheme();
   return (
-    <Text style={[type.caption, styles.note, { color: theme.colors.faint }]}>{children}</Text>
+    <Text
+      style={[
+        type.caption,
+        styles.note,
+        lead ? styles.noteLead : null,
+        { color: theme.colors.faint },
+      ]}
+    >
+      {children}
+    </Text>
   );
 }
 
@@ -698,14 +1026,14 @@ export const styles = StyleSheet.create({
     lineHeight: 19,
   },
   slotInput: {
-    ...numericAt(19),
+    ...numericAt(FIELD_FONT_SIZE),
     fontFamily: fontFamily.monoSemibold,
     fontWeight: '600',
     textAlign: 'right',
     // Ширина задана явно: на вебе <input> без неё занимает свою «естественную»
     // ширину в двадцать знаков — поле выпирало за карточку и выталкивало
     // размерность за край экрана
-    width: 112,
+    width: FIELD_INPUT_WIDTH,
     flexShrink: 0,
     paddingVertical: 0,
     borderWidth: 0,
@@ -815,13 +1143,10 @@ export const styles = StyleSheet.create({
     borderRadius: radius.card,
     borderWidth: 1,
   },
+  // Надзаголовок карточки — тот же, что у разделов, только светлый на синем
   resultCaption: {
-    fontFamily: fontFamily.bold,
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: 'rgba(255,255,255,0.7)',
+    ...type.eyebrow,
+    color: 'rgba(255,255,255,0.72)',
   },
   resultValueRow: {
     flexDirection: 'row',
@@ -860,15 +1185,19 @@ export const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.sm,
   },
+  // Подпись второй величины — словами: гарнитурой интерфейса, как подписи
+  // строк в карточках; моноширинными остаются только числа
   resultRowLabel: {
-    fontFamily: fontFamily.mono,
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.7)',
+    flexShrink: 1,
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(255,255,255,0.74)',
   },
   resultRowValue: {
     fontFamily: fontFamily.monoSemibold,
     fontSize: 15,
-    fontWeight: '600',
+    lineHeight: 20,
     color: '#FFFFFF',
   },
   resultRowUnit: {
@@ -904,7 +1233,7 @@ export const styles = StyleSheet.create({
   },
   formulaText: {
     fontFamily: fontFamily.mono,
-    fontSize: 12,
+    fontSize: FORMULA_FONT_SIZE,
     lineHeight: 19,
   },
 
@@ -931,6 +1260,10 @@ export const styles = StyleSheet.create({
     marginTop: spacing.sm,
     lineHeight: 18,
   },
+  noteLead: {
+    marginTop: 0,
+    marginBottom: spacing.md,
+  },
 
   // --- Строки статистики ------------------------------------------------
   statRow: {
@@ -950,7 +1283,28 @@ export const styles = StyleSheet.create({
   statValue: {
     ...type.numeric,
     fontFamily: fontFamily.monoSemibold,
+    fontSize: STAT_VALUE_FONT_SIZE,
+    lineHeight: 19,
+  },
+  statValueText: {
+    flexShrink: 1,
+    fontFamily: fontFamily.semibold,
     fontSize: 14,
-    fontWeight: '600',
+    lineHeight: 19,
+    textAlign: 'right',
+  },
+  // У строки с подогнанным числом подпись не растягивается, а место под
+  // число забирает весь остаток: его ширина и есть то, во что число влезает.
+  // Половина строки — предел подписи, чтобы длинная не съела число целиком
+  statLabelFitted: {
+    maxWidth: '50%',
+    fontFamily: fontFamily.regular,
+    fontSize: 14,
+    lineHeight: 19,
+  },
+  statValueSlot: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'flex-end',
   },
 });

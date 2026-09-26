@@ -37,6 +37,7 @@ import {
   StatRow,
   parseNumber,
   formatValue,
+  useStorageLink,
   styles as shared,
 } from './shared';
 
@@ -126,6 +127,20 @@ export default function PitTab({ contentWidth }) {
   const [manualR, setManualR] = useState('500');
   const [riverDistance, setRiverDistance] = useState('2200');
   const [factor, setFactor] = useState('1');
+
+  // Водоотдача и пьезопроводность связаны: a = k·h/μ. Правишь одну —
+  // пересчитывается другая; при смене k или мощности пересчитывается a:
+  // водоотдача — свойство породы, а пьезопроводность из неё выводится
+  const link = useStorageLink({
+    values: { k, h: thickness, S: storage, a: diffusivity },
+    setters: { setK, setH: setThickness, setS: setStorage, setA: setDiffusivity },
+    convert: {
+      kToBase: (value) => toBase(value, QUANTITIES.CONDUCTIVITY),
+      hToBase: (value) => toBase(value, QUANTITIES.DISTANCE),
+      aToBase: (value) => toBase(value, QUANTITIES.DIFFUSIVITY),
+      aFromBase: (value) => fromBase(value, QUANTITIES.DIFFUSIVITY),
+    },
+  });
 
   const river = scheme.includes('river');
   const confined = scheme.startsWith('confined');
@@ -232,7 +247,7 @@ export default function PitTab({ contentWidth }) {
           }))}
           onPick={(id) => {
             const entry = PIT_LITHOLOGY.find((item) => item.id === id);
-            if (entry) setK(String(fromBase(entry.k, QUANTITIES.CONDUCTIVITY)));
+            if (entry) link.onK(String(fromBase(entry.k, QUANTITIES.CONDUCTIVITY)));
           }}
         />
         <Card style={styles.spaced}>
@@ -240,7 +255,7 @@ export default function PitTab({ contentWidth }) {
             label={I18n.t('pitConductivity')}
             symbol="k"
             value={k}
-            onChange={setK}
+            onChange={link.onK}
             unit={uCond}
             error={hasError('k')}
             hint={result.ok ? `${formatValue(result.k_ms)} ${I18n.t('unitMSecond')}` : null}
@@ -249,7 +264,7 @@ export default function PitTab({ contentWidth }) {
             label={confined ? I18n.t('pitThicknessConfined') : I18n.t('pitThicknessUnconfined')}
             symbol={confined ? 'm' : 'h₀'}
             value={thickness}
-            onChange={setThickness}
+            onChange={link.onH}
             unit={uLen}
             error={hasError('m') || hasError('h0')}
           />
@@ -289,12 +304,12 @@ export default function PitTab({ contentWidth }) {
                 label={I18n.t('pitDiffusivity')}
                 symbol="a"
                 value={diffusivity}
-                onChange={setDiffusivity}
+                onChange={link.onA}
                 unit={uDiff}
                 error={hasError('a')}
                 hint={I18n.t('pitDiffusivityHint')}
               />
-              <Field label={I18n.t('pitStorage')} symbol="μ" value={storage} onChange={setStorage} />
+              <Field label={I18n.t('pitStorage')} symbol="μ" value={storage} onChange={link.onS} />
             </>
           ) : null}
           <Field label={I18n.t('pitFactor')} symbol="n" value={factor} onChange={setFactor} hint={I18n.t('pitFactorHint')} />

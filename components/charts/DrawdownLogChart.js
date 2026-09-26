@@ -10,10 +10,15 @@
  * По полотну можно вести пальцем: от точки касания к осям тянутся проекции со
  * значениями, а на кривых загораются отметки текущего момента времени —
  * легенда при этом показывает оба понижения на нём.
+ *
+ * Понижение растёт вверх: ноль внизу, максимум наверху — так его читает
+ * заказчик. Нажатие на пункт легенды оставляет одну кривую и подгоняет шкалу
+ * под неё: у наблюдательной понижение в разы меньше, и на общей шкале её
+ * форма пряталась у нуля. Повторное нажатие возвращает обе.
  */
 
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import Svg, { Path, Line, Text as SvgText } from 'react-native-svg';
 import { useTheme } from 'react-native-paper';
 import I18n from '../../Localization';
@@ -41,27 +46,35 @@ function decadeLabel(value) {
   return `1e${power >= 0 ? '+' : ''}${power}`;
 }
 
+/** Ряды графика: понижение в опытной и в наблюдательной скважине */
+const SERIES_KEYS = ['sWell', 'sObs'];
+
 export default function DrawdownLogChart({ series, width = 340 }) {
   const theme = useTheme();
   const plot = useMemo(() => plotArea(width), [width]);
   const { cursor, handlers } = useChartCursor(plot);
+  // Оставленная нажатием на легенду кривая; null — видны обе
+  const [only, setOnly] = useState(null);
+  const shownKeys = only ? [only] : SERIES_KEYS;
 
   const scales = useMemo(() => {
     if (!series || series.length < 2) return null;
     const times = series.map((point) => point.t);
-    const values = series.flatMap((point) => [point.sWell, point.sObs]).filter(Number.isFinite);
+    // Шкала — по видимым кривым: оставил одну, и она растягивается на всю высоту
+    const values = series
+      .flatMap((point) => (only ? [point[only]] : SERIES_KEYS.map((key) => point[key])))
+      .filter(Number.isFinite);
     if (values.length === 0) return null;
     const maxDrawdown = Math.max(...values);
     return {
       x: logScale(Math.min(...times), Math.max(...times), plot.x, plot.x + plot.w),
-      // Понижение отсчитывается от нуля вниз: так график читается как разрез,
-      // а не как перевёрнутая кривая роста
-      y: linearScale(0, maxDrawdown * 1.05, plot.y, plot.y + plot.h),
+      // Понижение растёт вверх: ноль у нижнего края, максимум у верхнего
+      y: linearScale(0, maxDrawdown * 1.05, plot.y + plot.h, plot.y),
       minT: Math.min(...times),
       maxT: Math.max(...times),
       maxDrawdown,
     };
-  }, [series, plot]);
+  }, [series, plot, only]);
 
   if (!scales) {
     return (
@@ -99,25 +112,40 @@ export default function DrawdownLogChart({ series, width = 340 }) {
     { key: 'sWell', color: theme.colors.primary, label: I18n.t('schemePumpedWell') },
     { key: 'sObs', color: theme.colors.secondary, label: I18n.t('schemeObsWell') },
   ];
+  const shownLegend = legend.filter((item) => shownKeys.includes(item.key));
 
   return (
     <View style={[styles.frame, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
       {/* Легенда стоит над полотном: внутри она ложилась на верхнюю линию
           сетки и на подпись нулевого деления оси понижения */}
       <View style={[styles.legend, { borderBottomColor: theme.colors.border }]}>
-        {legend.map((item) => (
-          <View key={item.key} style={styles.legendItem}>
-            <View style={[styles.legendMark, { backgroundColor: item.color }]} />
-            <Text style={[styles.legendLabel, { color: theme.colors.textSecondary }]}>
-              {item.label}
-              {nearest ? (
-                <Text style={[styles.legendValue, { color: theme.colors.text }]}>
-                  {`  ${formatReadout(nearest[item.key])}`}
-                </Text>
-              ) : null}
-            </Text>
-          </View>
-        ))}
+        {legend.map((item) => {
+          const shown = shownKeys.includes(item.key);
+          return (
+            <Pressable
+              key={item.key}
+              onPress={() => setOnly((current) => (current === item.key ? null : item.key))}
+              hitSlop={8}
+              style={[styles.legendItem, shown ? null : styles.legendItemHidden]}
+              accessibilityRole="button"
+              accessibilityLabel={item.label}
+              accessibilityState={{ selected: only === item.key }}
+              accessibilityHint={I18n.t('chartLegendIsolateHint', {
+                defaultValue: 'Оставить на графике только эту кривую',
+              })}
+            >
+              <View style={[styles.legendMark, { backgroundColor: item.color }]} />
+              <Text style={[styles.legendLabel, { color: theme.colors.textSecondary }]}>
+                {item.label}
+                {nearest && shown ? (
+                  <Text style={[styles.legendValue, { color: theme.colors.text }]}>
+                    {`  ${formatReadout(nearest[item.key])}`}
+                  </Text>
+                ) : null}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
       <View {...handlers}>
         <Svg width={width} height={HEIGHT}>
@@ -168,14 +196,18 @@ export default function DrawdownLogChart({ series, width = 340 }) {
           </React.Fragment>
         ))}
 
-        <Path d={curveOf('sWell')} fill="none" stroke={theme.colors.primary} strokeWidth={2} />
-        <Path
-          d={curveOf('sObs')}
-          fill="none"
-          stroke={theme.colors.secondary}
-          strokeWidth={2}
-          strokeDasharray="6 4"
-        />
+        {shownKeys.includes('sWell') ? (
+          <Path d={curveOf('sWell')} fill="none" stroke={theme.colors.primary} strokeWidth={2} />
+        ) : null}
+        {shownKeys.includes('sObs') ? (
+          <Path
+            d={curveOf('sObs')}
+            fill="none"
+            stroke={theme.colors.secondary}
+            strokeWidth={2}
+            strokeDasharray="6 4"
+          />
+        ) : null}
 
         {/* Подпись оси ординат: повёрнута вокруг своей середины, поэтому
             стоит в левом поле и не наезжает на числа делений */}
@@ -213,7 +245,7 @@ export default function DrawdownLogChart({ series, width = 340 }) {
           yLabel={cursor ? formatReadout(scales.y.invert(cursor.y)) : ''}
           marks={
             nearest
-              ? legend
+              ? shownLegend
                   .filter((item) => Number.isFinite(nearest[item.key]))
                   .map((item) => ({ color: item.color, y: scales.y(nearest[item.key]) }))
               : []
@@ -238,6 +270,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  // Скрытая кривая остаётся в легенде бледной: по ней видно, что её можно
+  // вернуть тем же нажатием
+  legendItemHidden: {
+    opacity: 0.35,
   },
   legendMark: {
     width: 14,

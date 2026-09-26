@@ -10,6 +10,7 @@
  */
 
 import React from 'react';
+import { Easing, Platform } from 'react-native';
 import { createStackNavigator, TransitionPresets } from '@react-navigation/stack';
 
 import HomeScreen from '../screens/HomeScreen';
@@ -21,7 +22,6 @@ import LugeonScreen from '../screens/PumpingTestProcessing/LugeonScreen';
 import VadoseFillScreen from '../screens/PumpingTestProcessing/VadoseFillScreen';
 import FieldDiaryScreen from '../screens/FieldDiaryScreen';
 import MapsScreen from '../screens/MapsScreen';
-import ExamplesAndVideos from '../screens/ExamplesAndVideos';
 import UserManualScreen from '../screens/UserManualScreen';
 import AboutScreen from '../screens/AboutScreen';
 import ContactUs from '../screens/ContactUs';
@@ -36,13 +36,63 @@ import { PREMIUM_ENABLED } from '../billing/config';
 
 const Stack = createStackNavigator();
 
+const IS_WEB = Platform.OS === 'web';
+
+/**
+ * Переход между экранами в браузере — как в дизайн-прототипе: новый экран
+ * проявляется и чуть поднимается на место, 0.32 с.
+ *
+ * Выезд справа, как на iOS, в браузере выглядел пустым: предыдущий экран
+ * прятался в первый же кадр, и новый ехал по голому фону. Прятал его сам
+ * react-navigation: на вебе он по умолчанию считает анимацию выключенной
+ * (`animation: 'none'`) и гасит неактивную карточку сразу, хотя переход по
+ * заданной кривой всё равно идёт. С `animation: 'default'` предыдущий экран
+ * остаётся под новым до конца перехода и прячется уже после.
+ *
+ * Жеста «назад» у мыши нет, а проявление поверх ещё видимого экрана
+ * читается как смена страницы, а не как её пропажа. Предыдущий экран стоит
+ * на месте: шапка у обоих одна и та же бордовая, и сдвинутая она мигнула бы
+ * краями.
+ */
+const WEB_TRANSITION = {
+  animation: 'default',
+  gestureEnabled: false,
+  cardOverlayEnabled: false,
+  transitionSpec: {
+    open: {
+      animation: 'timing',
+      config: { duration: 320, easing: Easing.out(Easing.cubic) },
+    },
+    close: {
+      animation: 'timing',
+      config: { duration: 240, easing: Easing.out(Easing.cubic) },
+    },
+  },
+  cardStyleInterpolator: ({ current }) => ({
+    cardStyle: {
+      opacity: current.progress.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0, 1],
+      }),
+      transform: [
+        {
+          translateY: current.progress.interpolate({
+            inputRange: [0, 1],
+            outputRange: [16, 0],
+          }),
+        },
+      ],
+    },
+  }),
+};
+
 export default function RootNavigator() {
   return (
     <Stack.Navigator
       initialRouteName="Home"
       screenOptions={{
         header: (props) => <TopBar {...props} />,
-        ...TransitionPresets.SlideFromRightIOS,
+        ...(IS_WEB ? WEB_TRANSITION : TransitionPresets.SlideFromRightIOS),
         // Карточка экрана обязана держать высоту окна. Без этого на вебе
         // react-navigation ставит ей minHeight: 100% без flex, карточка
         // растягивается по содержимому, и внутренний ScrollView перестаёт
@@ -103,11 +153,8 @@ export default function RootNavigator() {
         component={MapsScreen}
         options={{ title: I18n.t('maps', { defaultValue: 'Карты гидроизогипс' }) }}
       />
-      <Stack.Screen
-        name="ExamplesAndVideos"
-        component={ExamplesAndVideos}
-        options={{ title: I18n.t('examples', { defaultValue: 'Примеры и видео' }) }}
-      />
+      {/* «Примеров и видео» больше нет: видеоуроки живут на сайте, и
+          отдельный экран в приложении только дублировал его */}
       <Stack.Screen
         name="UserManual"
         component={UserManualScreen}

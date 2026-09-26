@@ -62,6 +62,31 @@ describe('fitViewport', () => {
     expect(isFinite(view.x0)).toBe(true);
     expect(view.y1).toBeGreaterThanOrEqual(2);
   });
+
+  test('запас слева отодвигает данные от края', () => {
+    const view = fitViewport([{ points: [{ x: 0, y: 1 }, { x: 10, y: 2 }] }]);
+    expect(view.x0).toBeLessThan(0);
+  });
+
+  test('с привязкой к нулю начало отсчёта стоит в углу', () => {
+    // Петля «расход — давление» из нуля выходит и в него возвращается:
+    // отодвинутый от угла ноль читается как обрезанный график
+    const view = fitViewport(
+      [{ points: [{ x: 0, y: 0 }, { x: 10, y: 2 }, { x: 0, y: 0 }] }],
+      { fromOrigin: true }
+    );
+    expect(view.x0).toBe(0);
+    expect(view.y0).toBe(0);
+    // Справа запас остаётся: без него точка пика вставала бы на самый край
+    expect(view.x1).toBeGreaterThan(10);
+  });
+
+  test('привязка к нулю не обрезает данные левее него', () => {
+    const view = fitViewport([{ points: [{ x: -3, y: 1 }, { x: 4, y: 2 }] }], {
+      fromOrigin: true,
+    });
+    expect(view.x0).toBeLessThanOrEqual(-3);
+  });
 });
 
 describe('clampViewport', () => {

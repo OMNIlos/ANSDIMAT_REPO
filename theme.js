@@ -13,7 +13,6 @@
  */
 
 import { MD3LightTheme, MD3DarkTheme } from 'react-native-paper';
-import { Platform } from 'react-native';
 
 /**
  * Базовая палитра
@@ -124,59 +123,73 @@ export const pointTypeColors = {
 /**
  * Типографическая шкала
  *
- * Шрифты системные (SF Pro на iOS, Roboto на Android) — характер задаётся
- * шкалой, весом и трекингом, а не гарнитурой.
+ * Гарнитура задана в каждом токене: Manrope — текст и интерфейс, JetBrains
+ * Mono — числа и надзаголовки, как в дизайн-прототипе. Раньше токены несли
+ * только кегль и вес, и всё, что на них собрано, — подписи, пояснения,
+ * надзаголовки калькулятора — выходило системным шрифтом: на одном экране
+ * стояли две разные гарнитуры.
+ *
+ * Вес несёт само семейство (Manrope_700Bold и т. п.), поэтому fontWeight в
+ * токенах нет: на Android вес поверх жирного семейства дорисовывается
+ * синтетически, а на вебе грани весов раскладывает lib/webPolish.web.js.
  *
  * numeric — табличные цифры: в приложении про замеры колонки чисел
  * обязаны выравниваться по разрядам.
  */
 export const type = {
   display: {
+    fontFamily: fontFamily.bold,
     fontSize: 28,
     lineHeight: 34,
-    fontWeight: '700',
     letterSpacing: -0.5,
   },
   title: {
+    fontFamily: fontFamily.bold,
     fontSize: 20,
     lineHeight: 26,
-    fontWeight: '700',
     letterSpacing: -0.3,
   },
   cardTitle: {
+    fontFamily: fontFamily.bold,
     fontSize: 17,
     lineHeight: 22,
-    fontWeight: '600',
     letterSpacing: -0.2,
   },
   body: {
+    fontFamily: fontFamily.regular,
     fontSize: 15,
     lineHeight: 21,
-    fontWeight: '400',
   },
   caption: {
+    fontFamily: fontFamily.regular,
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: '400',
   },
-  // Надзаголовок секции: КАПСОМ, разрежённый
+  // Надзаголовок секции: моноширинный, КАПСОМ, разрежённый — как в
+  // прототипе. Только для слов: обозначения величин и размерности капсом
+  // меняют смысл (s — понижение, S — водоотдача; м — метр, М — мега),
+  // поэтому формулы и единицы в надзаголовок не кладутся
   eyebrow: {
-    fontSize: 11,
+    fontFamily: fontFamily.monoSemibold,
+    fontSize: 10.5,
     lineHeight: 14,
-    fontWeight: '700',
-    letterSpacing: 1.2,
+    letterSpacing: 1.4,
     textTransform: 'uppercase',
   },
+  // Подпись с обозначениями: «s — lg t», «t, мин», «T, м²/сут». Та же
+  // моноширинная строка, что у надзаголовка, но в том регистре, в каком
+  // написана, — регистр здесь часть формулы
+  label: {
+    fontFamily: fontFamily.monoSemibold,
+    fontSize: 11.5,
+    lineHeight: 15,
+    letterSpacing: 0.2,
+  },
   numeric: {
+    fontFamily: fontFamily.monoMedium,
     fontSize: 15,
     lineHeight: 20,
-    fontWeight: '500',
     fontVariant: ['tabular-nums'],
-    ...Platform.select({
-      ios: { fontFamily: 'SF Mono' },
-      android: { fontFamily: 'monospace' },
-      default: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
-    }),
   },
 };
 
@@ -295,6 +308,12 @@ export const lightTheme = {
     wineText: palette.wine,
     wineBorder: '#E1D6DB',
 
+    // Выбранный сегмент переключателя: приподнятая «таблетка» на утопленной
+    // дорожке. Светлее дорожки в обеих темах — иначе выбор читается как
+    // провал, а не как выпуклость
+    segment: palette.surface,
+    segmentBorder: 'rgba(20, 7, 14, 0.06)',
+
     // Плашка-чип, фон превью видео, фон области графика
     chip: 'rgba(255,255,255,0.92)',
     thumb: '#EDE3E7',
@@ -370,6 +389,11 @@ export const darkTheme = {
     wineText: '#D98BAA',
     wineBorder: '#4A2733',
 
+    // Выбранный сегмент: в тёмной теме поверхность карточки темнее дорожки,
+    // и выбранный вариант проваливался в неё. Здесь он светлее дорожки
+    segment: '#39323A',
+    segmentBorder: 'rgba(255, 255, 255, 0.07)',
+
     // Плашка-чип, фон превью видео, фон области графика
     chip: 'rgba(28,25,28,0.92)',
     thumb: '#241A1F',
@@ -440,7 +464,7 @@ export function getThemeSwitchLabel(themeMode, locale = 'ru') {
       case 'light':
         return 'Светлая тема';
       case 'dark':
-        return 'Темная тема';
+        return 'Тёмная тема';
       case 'system':
         return 'Системная тема';
       default:

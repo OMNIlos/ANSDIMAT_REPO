@@ -152,7 +152,9 @@ export function bindemanConductivity({ flow, area, head, depth, capillary }) {
  * @param {number} params.head - высота столба воды в шурфе H, м
  * @param {number} params.depth - глубина зоны просачивания z, м
  * @param {number} [params.capillary] - высота капиллярного поднятия H_c, м
- * @param {boolean} [params.useCapillary] - считать по Биндеману
+ * @param {boolean} [params.useCapillary] - считать по Биндеману; по умолчанию
+ *   нет: Болдыреву хватает расхода и площади, и достраивать по неполному
+ *   набору более требовательный метод нельзя
  * @returns {{flow: number, k: number, capillary: number, method: string}}
  *   расход, взятый в расчёт, коэффициент фильтрации, учтённая высота
  *   капиллярного поднятия и метод, по которому получен результат
@@ -165,7 +167,7 @@ export function processVadoseFill({
   head,
   depth,
   capillary,
-  useCapillary = true,
+  useCapillary = false,
 }) {
   const resolvedFlow =
     isFinite(flow) && flow > 0 ? flow : flowFromVolume({ volume, interval });

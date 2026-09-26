@@ -19,7 +19,7 @@ import I18n from '../Localization';
 import { QUANTITIES, MINUTES_PER_DAY } from '../calc/units';
 import { OFR_TYPES } from '../db/schema';
 import { processLugeon } from '../calc/lugeon';
-import { processVadoseFill } from '../calc/vadoseFill';
+import { processVadoseFill, VADOSE_METHODS } from '../calc/vadoseFill';
 
 /** Литров в кубометре: расход ступени принято писать в л/мин */
 const L_PER_M3 = 1000;
@@ -84,7 +84,7 @@ export function ofrSummaryLines(project, { fromBase, unitLabel }) {
       line('slugFilterRadius', params.rw, QUANTITIES.DISTANCE),
       line('slugCasingRadius', params.rc, QUANTITIES.DISTANCE),
       line('slugFilterLength', params.lw, QUANTITIES.DISTANCE),
-      line('slugFilterBottom', params.z, QUANTITIES.DISTANCE),
+      line('slugFilterMiddle', params.lt, QUANTITIES.DISTANCE),
       line('slugThickness', params.m, QUANTITIES.DISTANCE),
       line('slugInitialDrawdown', params.s0, QUANTITIES.DRAWDOWN),
     ];
@@ -92,19 +92,28 @@ export function ofrSummaryLines(project, { fromBase, unitLabel }) {
 
   if (project.ofrType === OFR_TYPES.VADOSE) {
     const result = processVadoseFill(params);
+    // Слой воды, глубина просачивания и капиллярное поднятие входят только в
+    // формулу Биндемана. У Болдырева их нет, и в сводке они выглядели бы
+    // исходными данными расчёта, которым на самом деле не пригодились
+    const capillaryLines =
+      result.method === VADOSE_METHODS.BINDEMAN
+        ? [
+            line('vadoseHead', params.head, QUANTITIES.DISTANCE),
+            line('vadoseDepth', params.depth, QUANTITIES.DISTANCE),
+            line('vadoseCapillary', result.capillary, QUANTITIES.DISTANCE),
+          ]
+        : [];
     return [
       '',
       I18n.t('ofrInputs'),
       line('vadoseVolume', params.volume, QUANTITIES.VOLUME),
       line('vadoseInterval', params.interval, QUANTITIES.TIME),
       line('vadoseArea', params.area, QUANTITIES.AREA),
-      line('vadoseHead', params.head, QUANTITIES.DISTANCE),
-      line('vadoseDepth', params.depth, QUANTITIES.DISTANCE),
-      line('vadoseCapillary', result.capillary, QUANTITIES.DISTANCE),
+      ...capillaryLines,
       '',
       I18n.t('ofrResult'),
       `${I18n.t('vadoseMethodName')}: ${I18n.t(
-        result.method === 'bindeman'
+        result.method === VADOSE_METHODS.BINDEMAN
           ? 'vadoseMethodBindemanName'
           : 'vadoseMethodBoldyrevName'
       )}`,
@@ -132,7 +141,9 @@ export function ofrSummaryLines(project, { fromBase, unitLabel }) {
       line('lugeonIntervalLength', params.lw, QUANTITIES.DISTANCE),
       line('lugeonWellRadius', params.rw, QUANTITIES.DISTANCE),
       line('lugeonReadingInterval', params.interval, QUANTITIES.TIME),
-      line('lugeonDensity', params.density),
+      // Размерность плотности приписана вручную: величины `density` в
+      // QUANTITIES нет — она одна на все системы единиц
+      `${line('lugeonDensity', params.density)} ${I18n.t('unitDensity')}`,
       `${I18n.t('lugeonFormula')}: ${I18n.t(
         result.formula === 'thiem' ? 'lugeonFormulaThiem' : 'lugeonFormulaMoye'
       )}`,

@@ -18,6 +18,7 @@ import React from 'react';
 import { Modal, View, Text, StyleSheet, TouchableOpacity, Pressable } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import I18n from '../../Localization';
+import { AnimatedPressable, useDialogEntrance } from './dialogMotion';
 import { spacing, radius, fontFamily, elevation } from '../../theme';
 
 export default function ConfirmDialog({
@@ -30,16 +31,19 @@ export default function ConfirmDialog({
   onCancel,
 }) {
   const { colors } = useTheme();
+  // Окно чуть подрастает на место вместе с затемнением фона, см. dialogMotion
+  const cardMotion = useDialogEntrance(visible);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       {/* Нажатие мимо окна закрывает его — привычное поведение */}
       <Pressable style={styles.backdrop} onPress={onCancel}>
-        <Pressable
+        <AnimatedPressable
           style={[
             styles.card,
             elevation.raised,
             { backgroundColor: colors.surface, borderColor: colors.border },
+            cardMotion,
           ]}
           onPress={() => {}}
         >
@@ -72,7 +76,7 @@ export default function ConfirmDialog({
               </Text>
             </TouchableOpacity>
           </View>
-        </Pressable>
+        </AnimatedPressable>
       </Pressable>
     </Modal>
   );
@@ -96,7 +100,7 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: fontFamily.bold,
     fontSize: 17,
-    fontWeight: '700',
+    lineHeight: 23,
     letterSpacing: -0.2,
   },
   message: {
@@ -120,6 +124,6 @@ const styles = StyleSheet.create({
   buttonText: {
     fontFamily: fontFamily.bold,
     fontSize: 15,
-    fontWeight: '700',
+    lineHeight: 20,
   },
 });

@@ -174,4 +174,72 @@ describe('подписи делений', () => {
     expect(formatLogTick(20.000000000000004)).toBe('20');
     expect(formatLogTick(100)).toBe('100');
   });
+
+  test('подписи одной оси идут с одним числом знаков — по шагу сетки', () => {
+    // Раньше знаки зависели от величины числа: при шаге 0.5 ось читалась
+    // «0, 0.500, 1.00, 1.50», при шаге 10 — «0, 10.0, 20.0»
+    expect([0, 0.5, 1, 1.5, 2].map((v) => formatTick(v, 0.5))).toEqual([
+      '0.0',
+      '0.5',
+      '1.0',
+      '1.5',
+      '2.0',
+    ]);
+    expect([0, 10, 20, 30].map((v) => formatTick(v, 10))).toEqual([
+      '0',
+      '10',
+      '20',
+      '30',
+    ]);
+    expect([0, 1, 2, 3, 4].map((v) => formatTick(v, 1))).toEqual([
+      '0',
+      '1',
+      '2',
+      '3',
+      '4',
+    ]);
+    expect([0.05, 0.1, 0.15].map((v) => formatTick(v, 0.05))).toEqual([
+      '0.05',
+      '0.10',
+      '0.15',
+    ]);
+  });
+
+  test('накопленная погрешность шага не даёт «−0» и хвостов', () => {
+    // 0.1 + 0.2 в двоичной записи — 0.30000000000000004
+    expect(formatTick(0.1 + 0.2, 0.1)).toBe('0.3');
+    expect(formatTick(-1e-17, 0.5)).toBe('0.0');
+  });
+
+  test('крайности по шагу тоже уходят в степенную запись', () => {
+    expect(formatTick(2e-6, 1e-6)).toContain('e');
+    expect(formatTick(5e6, 1e6)).toContain('e');
+  });
+
+  test('в сцене деления одной оси подписаны единообразно', () => {
+    const scene = buildScene({
+      series: [
+        {
+          id: 'a',
+          role: 'fit',
+          color: '#000',
+          points: [
+            { x: 0, y: 0, index: 0 },
+            { x: 40, y: 2.1, index: 1 },
+          ],
+        },
+      ],
+      view: { x0: 0, x1: 45, y0: 0, y1: 2.2 },
+      base: { x0: 0, x1: 45, y0: 0, y1: 2.2 },
+      plot: { x: 40, y: 10, w: 300, h: 200 },
+      mode: 'linear',
+      fit: null,
+      anchors: null,
+    });
+    const decimals = (label) => (label.split('.')[1] ?? '').length;
+    const yDecimals = new Set(scene.yTicks.map((tick) => decimals(tick.label)));
+    const xDecimals = new Set(scene.xTicks.map((tick) => decimals(tick.label)));
+    expect(yDecimals.size).toBe(1);
+    expect(xDecimals.size).toBe(1);
+  });
 });

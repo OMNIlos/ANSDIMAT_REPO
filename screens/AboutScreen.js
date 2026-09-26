@@ -2,14 +2,18 @@
  * Справка / О приложении (about)
  *
  * Воссоздаёт экран из дизайн-прототипа:
- * - логотип, название, слоган, пилюля версии
- * - список ссылок (руководство, видеоуроки, контакты, сайт)
+ * - логотип, название, слоган, имя релиза и пилюля версии
+ * - список ссылок (руководство, контакты, лицензия, сайт)
  * - подпись о локальном хранении данных
  *
- * Год в пилюле версии подставляется автоматически.
+ * Год в пилюле версии подставляется автоматически, номер версии — из
+ * app.json (см. lib/release.js).
+ *
+ * Видеоуроков здесь больше нет: они лежат на сайте, куда ведёт последняя
+ * строка, и отдельный экран в приложении только дублировал его.
  */
 
-import React from 'react';
+import React, { useContext } from 'react';
 import {
   View,
   Text,
@@ -22,14 +26,21 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import I18n from '../Localization';
+import { LanguageContext } from '../LanguageContext';
 import { fontFamily, brandHeader } from '../theme';
+import { useContentMaxWidth } from '../lib/appPrefs';
+import { RELEASE_NAME, RELEASE_VERSION } from '../lib/release';
+import { siteUrl } from '../lib/siteLinks';
 
 export default function AboutScreen({ navigation }) {
   const { colors } = useTheme();
+  const { locale } = useContext(LanguageContext);
   const { width } = useWindowDimensions();
-  const contentMaxWidth = width >= 700 ? 620 : undefined;
+  // «Адаптация под планшет» в настройках: колонка по центру или вся ширина
+  const column = useContentMaxWidth(620);
+  const contentMaxWidth = width >= 700 ? column : undefined;
   const year = new Date().getFullYear();
 
   const rows = [
@@ -38,12 +49,6 @@ export default function AboutScreen({ navigation }) {
       icon: 'menu-book',
       label: I18n.t('aboutManual', { defaultValue: 'Руководство пользователя' }),
       onPress: () => navigation.navigate('UserManual'),
-    },
-    {
-      key: 'videos',
-      icon: 'ondemand-video',
-      label: I18n.t('aboutVideos', { defaultValue: 'Видеоуроки' }),
-      onPress: () => navigation.navigate('ExamplesAndVideos'),
     },
     {
       key: 'contact',
@@ -66,7 +71,11 @@ export default function AboutScreen({ navigation }) {
       key: 'site',
       icon: 'public',
       label: 'ansdimat.com',
-      onPress: () => Linking.openURL('https://www.ansdimat.com/'),
+      // Уводит из приложения в браузер — значок «наружу», как у баннера
+      // десктоп-версии на главной, а не шеврон перехода внутрь. Версия
+      // сайта — на языке приложения
+      external: true,
+      onPress: () => Linking.openURL(siteUrl(locale)),
     },
   ];
 
@@ -85,10 +94,26 @@ export default function AboutScreen({ navigation }) {
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
               {I18n.t('appSubtitle', { defaultValue: 'полевой калькулятор гидрогеолога' })}
             </Text>
-            <View style={[styles.versionPill, { backgroundColor: colors.surfaceSunken, borderColor: colors.border }]}>
-              <Text style={[styles.versionText, { color: colors.textSecondary }]}>
-                {I18n.t('versionLabel', { defaultValue: 'версия' })} 1.0.0 · 1993–{year}
-              </Text>
+            {/* Имя релиза и номер версии — одной строкой: на узком экране
+                пилюли переносятся по центру, а не обрезаются */}
+            <View style={styles.releaseRow}>
+              <View
+                style={[styles.releaseChip, { backgroundColor: colors.primaryWash }]}
+                accessible
+                accessibilityLabel={I18n.t('releaseLabel', {
+                  name: RELEASE_NAME,
+                  version: RELEASE_VERSION,
+                  defaultValue: `Релиз ${RELEASE_NAME}, версия ${RELEASE_VERSION}`,
+                })}
+              >
+                <MaterialCommunityIcons name="flower-outline" size={15} color={colors.primaryAccent} />
+                <Text style={[styles.releaseText, { color: colors.primaryAccent }]}>{RELEASE_NAME}</Text>
+              </View>
+              <View style={[styles.versionPill, { backgroundColor: colors.surfaceSunken, borderColor: colors.border }]}>
+                <Text style={[styles.versionText, { color: colors.textSecondary }]}>
+                  {I18n.t('versionLabel', { defaultValue: 'версия' })} {RELEASE_VERSION} · 1993–{year}
+                </Text>
+              </View>
             </View>
           </View>
 
@@ -107,7 +132,11 @@ export default function AboutScreen({ navigation }) {
               >
                 <MaterialIcons name={row.icon} size={22} color={colors.secondary} />
                 <Text style={[styles.rowLabel, { color: colors.text }]}>{row.label}</Text>
-                <MaterialIcons name="chevron-right" size={20} color={colors.faint} />
+                <MaterialIcons
+                  name={row.external ? 'open-in-new' : 'chevron-right'}
+                  size={row.external ? 18 : 20}
+                  color={colors.faint}
+                />
               </TouchableOpacity>
             ))}
           </View>
@@ -151,8 +180,29 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
     marginTop: 4,
   },
+  releaseRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+  },
+  releaseChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  releaseText: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
   versionPill: {
-    marginTop: 10,
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: 20,
@@ -189,7 +239,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
+  // Ширина подвала ограничена, чтобы две строки легли поровну, а не
+  // «…работают без» и одинокое «связи.» на второй
   footer: {
+    alignSelf: 'center',
+    maxWidth: 300,
     fontFamily: fontFamily.regular,
     fontSize: 12,
     textAlign: 'center',

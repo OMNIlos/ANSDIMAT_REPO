@@ -35,7 +35,7 @@ import useVoiceRecorder from '../hooks/useVoiceRecorder';
 import useVoicePlayback from '../hooks/useVoicePlayback';
 import { ATTACHMENT_KINDS } from '../db/attachments';
 import { formatDuration } from '../lib/waveform';
-import { spacing, radius, type, elevation, numericAt } from '../theme';
+import { spacing, radius, type, elevation, numericAt, fontFamily } from '../theme';
 
 /** Миниатюр в ряду: на телефоне шире трёх они уже не читаются */
 const COLUMNS = 3;
@@ -495,7 +495,7 @@ const styles = StyleSheet.create({
   },
   actionText: {
     fontSize: 14,
-    fontWeight: '700',
+    fontFamily: fontFamily.bold,
   },
   notice: {
     marginTop: spacing.sm,

@@ -28,6 +28,7 @@ import ConfirmDialog from '../components/ui/ConfirmDialog';
 import PressableScale from '../components/ui/PressableScale';
 import AppearIn from '../components/ui/AppearIn';
 import { spacing, radius, type, elevation, fontFamily } from '../theme';
+import { useContentMaxWidth } from '../lib/appPrefs';
 
 /**
  * Человеческое описание времени последней синхронизации
@@ -64,7 +65,9 @@ export default function AccountScreen({ navigation }) {
   const [askDelete, setAskDelete] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const contentMaxWidth = width >= 700 ? 620 : undefined;
+  // «Адаптация под планшет» в настройках: колонка по центру или вся ширина
+  const column = useContentMaxWidth(620);
+  const contentMaxWidth = width >= 700 ? column : undefined;
 
   const handlePassword = async () => {
     if (password.length < 6) {

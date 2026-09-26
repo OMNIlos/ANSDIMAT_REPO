@@ -32,6 +32,7 @@ import { type, spacing, fontFamily } from '../../theme';
 import {
   Card,
   Field,
+  NO_AUTOFILL,
   Note,
   SectionLabel,
   parseNumber,
@@ -42,8 +43,10 @@ import {
 export default function FlowTab() {
   const theme = useTheme();
 
-  const [value, setValue] = useState('100');
-  const [unit, setUnit] = useState('m3_day');
+  // Открывается на 10 л/мин: так заказчик чаще всего получает дебит из
+  // полевых замеров, и первая же строка списка сразу отвечает на вопрос
+  const [value, setValue] = useState('10');
+  const [unit, setUnit] = useState('l_min');
   const [density, setDensity] = useState(String(DEFAULT_DENSITY));
 
   const converted = convertFlowToAllUnits(
@@ -85,6 +88,7 @@ export default function FlowTab() {
                 value={value}
                 onChangeText={setValue}
                 keyboardType="decimal-pad"
+                {...NO_AUTOFILL}
                 placeholder="—"
                 placeholderTextColor={theme.colors.faint}
                 selectionColor={theme.colors.primary}

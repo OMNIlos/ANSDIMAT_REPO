@@ -77,6 +77,27 @@ const row = (tree, key) =>
 /** Значение в строке пересчёта */
 const rowValue = (tree, key) => textIn(row(tree, key));
 
+/**
+ * Переводит ввод в кубометры в сутки
+ *
+ * Вкладка открывается на литрах в минуту, а проверки ниже считают от
+ * кубометра в сутки — единицу выбирают так же, как человек: нажатием строки
+ */
+const inCubicPerDay = (tree) => {
+  act(() => {
+    row(tree, 'm3_day').props.onPress();
+  });
+};
+
+test('при открытии стоит 10 л/мин', () => {
+  const tree = mount();
+
+  expect(valueInput(tree).props.value).toBe('10');
+  expect(row(tree, 'l_min').props.accessibilityState.selected).toBe(true);
+  // 10 л/мин — это 14.4 м³/сут
+  expect(rowValue(tree, 'm3_day')).toContain('14.4');
+});
+
 test('показывает все двадцать девять единиц и названия групп', () => {
   const text = screenText(mount());
 
@@ -89,6 +110,7 @@ test('показывает все двадцать девять единиц и 
 
 test('кубометр в сутки раскладывается по единицам', () => {
   const tree = mount();
+  inCubicPerDay(tree);
   act(() => {
     valueInput(tree).props.onChangeText('1');
   });
@@ -100,6 +122,7 @@ test('кубометр в сутки раскладывается по един�
 
 test('дробное значение вводится через запятую', () => {
   const tree = mount();
+  inCubicPerDay(tree);
   act(() => {
     valueInput(tree).props.onChangeText('0,5');
   });
@@ -111,6 +134,7 @@ test('дробное значение вводится через запятую
 
 test('нажатие на строку переносит ввод в эту единицу', () => {
   const tree = mount();
+  inCubicPerDay(tree);
   act(() => {
     valueInput(tree).props.onChangeText('1');
   });
@@ -128,6 +152,7 @@ test('нажатие на строку переносит ввод в эту е�
 
 test('плотность двигает только массовые единицы', () => {
   const tree = mount();
+  inCubicPerDay(tree);
   act(() => {
     valueInput(tree).props.onChangeText('1');
   });

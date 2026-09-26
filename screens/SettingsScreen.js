@@ -10,7 +10,7 @@
  * Тумблеры хранятся в SQLite (repository db/settings), тема и язык — в контекстах.
  */
 
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect } from "react";
 import {
   View,
   Text,
@@ -32,7 +32,7 @@ import { PREMIUM_ENABLED } from "../billing/config";
 import I18n from "../Localization";
 import Segmented from "../components/ui/Segmented";
 import Toggle from "../components/ui/Toggle";
-import { getSettings, setSetting } from "../db/settings";
+import { loadPrefs, setPref, usePrefs, useContentMaxWidth } from "../lib/appPrefs";
 import { useUnits } from "../UnitsContext";
 import { UNITS, QUANTITIES } from "../calc/units";
 import { fontFamily, brandHeader } from "../theme";
@@ -44,31 +44,20 @@ export default function SettingsScreen({ navigation }) {
   const { user } = useAuth();
   const { entitlements } = useEntitlements();
   const { width } = useWindowDimensions();
-  const contentMaxWidth = width >= 700 ? 620 : undefined;
+  const column = useContentMaxWidth(620);
+  const contentMaxWidth = width >= 700 ? column : undefined;
 
-  const [flags, setFlags] = useState({
-    tablet: true,
-    autoLocation: true,
-    tabularNums: true,
-  });
+  // Переключатели живут в общем хранилище, а не в состоянии экрана: их
+  // читают другие экраны, и переключение должно доезжать до них сразу
+  const flags = usePrefs();
   const { units, setUnit } = useUnits();
 
   useEffect(() => {
-    getSettings()
-      .then((s) =>
-        setFlags({
-          tablet: s.tablet,
-          autoLocation: s.autoLocation,
-          tabularNums: s.tabularNums,
-        }),
-      )
-      .catch(() => {});
+    loadPrefs();
   }, []);
 
   const toggleFlag = (key) => {
-    const next = !flags[key];
-    setFlags((prev) => ({ ...prev, [key]: next }));
-    setSetting(key, next).catch(() => {});
+    setPref(key, !flags[key]);
   };
 
   const themeOptions = [

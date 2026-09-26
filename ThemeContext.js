@@ -17,6 +17,7 @@ import { PaperProvider } from 'react-native-paper';
 import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { lightTheme, darkTheme } from './theme.js';
+import { syncWebSurface } from './lib/webPolish';
 
 // Создаем контекст с дефолтными значениями
 export const ThemeContext = React.createContext({
@@ -132,7 +133,13 @@ export function ThemeProvider({ children }) {
   
   // Получаем текущую тему для применения
   const currentTheme = getCurrentTheme();
-  
+
+  // Фон самой веб-страницы — под тему: он проступает при прокрутке с
+  // оттяжкой и в момент смены экранов. На нативе вызов пустой
+  React.useEffect(() => {
+    if (!isLoading) syncWebSurface(currentTheme);
+  }, [currentTheme, isLoading]);
+
   // Показываем загрузочный экран пока загружаются настройки
   // Используем светлую тему как fallback во время загрузки
   if (isLoading) {

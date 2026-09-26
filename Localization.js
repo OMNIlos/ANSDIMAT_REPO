@@ -39,7 +39,6 @@ const i18n = new I18n({
     order: "Заказ",
     download: "Скачать программу",
     contact: "Связаться с нами",
-    examples: "Примеры и видео",
     utilities: "Утилиты",
     util1: "Калькулятор",
     util2: "Обработка откачек",
@@ -160,114 +159,217 @@ const i18n = new I18n({
     diffusivityLabel: "Пьезопр. a, %{unit}",
     momentLabel: "Момент времени",
 
-    // ===== ПРИМЕРЫ И ВИДЕО (редизайн) =====
-    filterAll: "Все",
-    filterPumping: "Обработка ОФР",
-    filterDewatering: "Водопонижение",
-    filterModeling: "Моделирование",
-    videoLessons: "Видеоуроки",
-    studyMaterials: "Материалы",
-    open: "Открыть",
-
     // ===== СПРАВКА (редизайн) =====
     aboutManual: "Руководство пользователя",
-    aboutVideos: "Видеоуроки",
     aboutContact: "Связаться с нами",
     aboutLocalData:
       "© АНСДИМАТ. Расчёты идут на устройстве и работают без связи.",
     orderLicense: "Заказать лицензию",
     versionLabel: "версия",
+    releaseLabel: "Релиз %{name}, версия %{version}",
 
     // ===== РУКОВОДСТВО ПОЛЬЗОВАТЕЛЯ =====
-    manualEyebrow: "Как пользоваться",
     manualStartTitle: "С чего начать",
     manualStartIntro:
-      "АНСДИМАТ — полевой инструмент гидрогеолога: журнал опытно-фильтрационных работ (ОФР), обработка замеров и расчёты параметров водоносного пласта. Всё считается на устройстве и хранится локально, интернет нужен только для входа в аккаунт и синхронизации.",
+      "АНСДИМАТ — полевой инструмент гидрогеолога: журналы опытно-фильтрационных работ (ОФР) и их обработка, калькулятор, карты гидроизогипс и полевой дневник. Всё считается на устройстве и хранится в его памяти; интернет нужен только для подложки карт, входа в аккаунт и синхронизации.",
     manualStartStep1:
-      "«Создать откачку» — заведите журнал: выберите тип ОФР и назовите проект.",
-    manualStartStep2:
-      "Заполните паспорт опыта: дебит, радиус скважины, мощность пласта.",
-    manualStartStep3: "Вносите замеры «время — понижение» по ходу откачки.",
+      "«Создать откачку» на главной: выберите вид ОФР, назовите журнал и нажмите «Создать».",
+    manualStartStep2: "Внесите исходные данные опыта и замеры по ходу опробования.",
+    manualStartStep3:
+      "Обработка идёт сразу: график строится по мере ввода, параметры пересчитываются на лету.",
     manualStartStep4:
-      "Откройте обработку: график строится сам, параметры пересчитываются на лету.",
-    manualJournalTitle: "Журнал ОФР",
+      "Созданные журналы хранятся в «Архиве откачек» — плитка на главной ведёт прямо к их списку.",
+    manualJournalTitle: "Журналы и архив откачек",
     manualJournalIntro:
-      "Журнал — это опыт целиком: паспорт скважины, условия опробования и таблица замеров. Журналы не удаляются случайно: удаление всегда спрашивает подтверждение, а вместе с журналом удаляются и его замеры.",
+      "Журнал — это опыт целиком: вид ОФР, исходные данные, замеры и результат расчёта. Все журналы собраны на экране «Обработка откачек» в списке «Ранее созданные»; туда же ведёт плитка «Архив откачек» на главной.",
+    manualTypeSingle:
+      "Откачка из одной скважины: понижение и восстановление уровня в ней самой, водопроводимость T.",
+    manualTypeCluster:
+      "Опытная скважина и наблюдательные вокруг неё: по наблюдательным считаются ещё пьезопроводность a и водоотдача S.",
+    manualTypeSlug: "Мгновенный сдвиг уровня и его возврат — решение Бауэра — Райса.",
+    manualTypeLugeon: "Нагнетание воды в интервал скважины ступенями давления — метод Люжона.",
+    manualTypeVadose: "Опробование зоны аэрации — методы Болдырева и Биндемана.",
     manualJournalStep1:
-      "Карандаш у журнала — вернуться к вводу данных и правке замеров.",
-    manualJournalStep2: "График — перейти к обработке и расчёту параметров.",
+      "Нажмите на журнал в списке, чтобы открыть его и продолжить ввод или обработку.",
+    manualJournalStep2: "Звезда — закрепить журнал: избранные стоят в начале списка.",
     manualJournalStep3:
-      "Звезда — пометить журнал важным, он поднимется в начало списка.",
+      "«Поделиться» — отправить журнал файлом проекта или таблицей замеров, см. раздел «Обмен журналами».",
     manualJournalStep4:
-      "Стрелка — выгрузить журнал вместе с замерами и передать коллеге.",
+      "Корзина — удалить журнал вместе с замерами; удаление всегда спрашивает подтверждение.",
     manualJournalNote:
-      "Время замеров вводится от начала откачки. Понижение — разность между статическим и динамическим уровнем, всегда положительная величина.",
-    manualProcessingTitle: "Обработка ОФР",
+      "Время замеров вводится от начала откачки, понижение — разность статического и динамического уровня, всегда положительная величина.",
+    manualProcessingTitle: "Обработка откачки",
     manualProcessingIntro:
-      "Обработка идёт методом Купера — Джейкоба: замеры откладываются в полулогарифмических координатах «lg t — понижение», и по прямолинейному участку определяются параметры пласта.",
+      "Одиночная и кустовая откачки обрабатываются методом Купера — Джейкоба: замеры откладываются в координатах «lg t — понижение», и по прямолинейному участку определяются параметры пласта.",
     manualFormulaT:
-      "T — водопроводимость, м²/сут; Q — дебит, м³/сут; a — наклон прямой, м на логарифмический цикл.",
-    manualFormulaK:
-      "k — коэффициент фильтрации, м/сут; m — мощность водоносного пласта, м.",
+      "T — водопроводимость, м²/сут; Q — дебит, м³/сут; C — наклон прямой: приращение понижения за логарифмический цикл времени, м.",
     manualProcessingStep1:
-      "По умолчанию прямая проводится методом наименьших квадратов по всем замерам.",
+      "Над графиком выберите ось времени: lg t, t или √t. Водопроводимость считается по оси lg t.",
     manualProcessingStep2:
-      "Чтобы отсечь начальный и конечный участки, переключитесь на построение по двум точкам и отметьте их — в таблице замеров или прямо на графике.",
+      "«По всем точкам» — прямая проводится методом наименьших квадратов. Чтобы отсечь начальный и конечный участки, отметьте две точки — кружками в таблице замеров или прямо на графике.",
     manualProcessingStep3:
-      "График масштабируется двумя пальцами и кнопками «+» и «−», перетаскивается одним пальцем; оси при этом остаются на месте.",
+      "«Свободная прямая» — проведите прямую руками: тяните её точки, как на чертеже.",
     manualProcessingStep4:
-      "Кнопка «Вписать» возвращает исходный масштаб по всем замерам.",
+      "График масштабируется двумя пальцами и кнопками «+» и «−», сдвигается одним пальцем. «Сброс» возвращает исходный вид, кнопка с рамкой разворачивает график на весь экран.",
     manualProcessingNote:
-      "Начальные замеры искажает ёмкость ствола скважины, конечные — влияние границ пласта. Прямолинейный участок обычно лежит между ними: именно его и стоит выбирать двумя точками.",
-    manualCalculatorTitle: "Калькулятор",
-    manualCalculatorIntro:
-      "Вкладки для быстрых расчётов, когда полного журнала нет — достаточно нескольких величин из полевой книжки.",
-    manualCalcFiltration:
-      "Перевод коэффициента фильтрации между единицами: м/сут, м/ч, м/с, см/с, фут/сут, мейнцеры.",
-    manualCalcParams:
-      "Водопроводимость напорного или коэффициент фильтрации безнапорного пласта по удельному дебиту Q/s — формулы настольного АНСДИМАТ, с поправкой на несовершенство скважины.",
-    manualCalcForecast:
-      "Понижение в опытной и наблюдательной скважинах по четырём схемам: Тейс, пласт с перетеканием, безнапорный пласт Болтона, граница питания.",
-    manualCalcPit:
-      "Приток воды в котлован: контур заменяется «большим колодцем» эквивалентного радиуса.",
+      "Начальные замеры искажает ёмкость ствола скважины, конечные — влияние границ пласта. Прямолинейный участок обычно лежит между ними: его и стоит отмечать двумя точками. Какой участок выбрать, подскажет «Диагностика».",
+    manualDiagIntro:
+      "Вкладка «Диагностика» над графиком строит понижение и его производную ds/d(ln t) в логарифмическом масштабе. По форме производной видно, какой режим был на каждом участке опыта и по каким точкам вести прямую.",
+    manualDiagRadial:
+      "Производная держится на полке: формула Купера — Джейкоба применима, прямую ведут по этому участку.",
+    manualDiagBarrier:
+      "Полка производной поднялась примерно вдвое: понижение дошло до границы пласта. T считают по раннему участку.",
+    manualDiagRecharge:
+      "Производная падает: в пласт поступает вода — переток или близкий водоём. Берите участок до перегиба.",
+    manualDiagWellbore:
+      "Производная растёт под 45°: откачивается вода из самого ствола, пласт ещё не включился. По этим замерам считать нельзя.",
+    manualDiagNote:
+      "Нужно не меньше пяти замеров, разнесённых по времени в несколько раз: 1, 2, 5, 10, 30 минут. Режим приложение подпишет под графиком само.",
     manualRecoveryTitle: "Восстановление уровня",
     manualRecoveryIntro:
-      "Вторая половина опыта: насос остановлен, уровень поднимается. Обрабатывать её выгодно — насос не работает, и колебания дебита уже ничего не портят.",
+      "Вторая половина опыта: насос остановлен, уровень возвращается. Её выгодно обрабатывать — колебания дебита на откачке здесь уже ничего не портят.",
     manualFormulaRecovery:
       "s′ — остаточное понижение, м; t — время от начала откачки; t′ — время от остановки насоса.",
     manualRecoveryStep1: "В обработке переключитесь на «Восстановление».",
     manualRecoveryStep2:
-      "Укажите, сколько длилась откачка: от этого момента отсчитывается t′.",
+      "Длительность откачки и понижение на остановке подставляются из журнала откачки — проверьте их.",
     manualRecoveryStep3:
-      "Замеры вносятся так же — время от начала опыта и остаточное понижение.",
+      "Во второй таблице ведите журнал восстановления: время t′ от остановки насоса и подъём уровня от момента остановки — значения растут от нуля.",
+    manualRecoveryStep4:
+      "Остаточное понижение приложение считает само: понижение на остановке минус подъём.",
     manualRecoveryNote:
-      "Прямая восстановления обязана проходить через начало координат. Заметный сдвиг — признак влияния границ пласта или непостоянного дебита на откачке; приложение об этом предупредит.",
+      "Прямая восстановления должна проходить через начало координат; заметный сдвиг — признак влияния границ пласта или непостоянного дебита, приложение об этом предупредит. Опыт считается законченным, когда остаточное понижение меньше 5 % от понижения на остановке.",
+    manualClusterTitle: "Кустовая откачка",
+    manualClusterIntro:
+      "Куст — опытная скважина и одна или несколько наблюдательных. У каждой скважины свой журнал замеров, расстояния от опытной до наблюдательных задаются в таблице.",
+    manualClusterStep1:
+      "При создании куста назовите опытную и первую наблюдательную скважину. Пустые поля получат имена «w» и «p», как в настольном АНСДИМАТ.",
+    manualClusterStep2:
+      "Наблюдательные скважины можно добавить и потом; опытная в опробовании одна.",
+    manualClusterStep3:
+      "Переключайте скважины над журналом: график и расчёт идут по той, что открыта.",
+    manualClusterStep4:
+      "По наблюдательной скважине кроме T считаются пьезопроводность a и водоотдача S — для них нужно расстояние до опытной.",
+    manualSlugIntro:
+      "Уровень в скважине мгновенно сдвигают — подливом, сбросом или вытеснителем — и следят, как он возвращается. Обработка по решению Бауэра — Райса.",
+    manualSlugStep1:
+      "Задайте геометрию скважины: радиус фильтра r_w, радиус обсадной трубы r_c, длину фильтра l_w, расстояние от уровня грунтовых вод до середины фильтра LT_w и обводнённую мощность m.",
+    manualSlugStep2: "Укажите скачок понижения s⁰ — насколько уровень сместился в начале опыта.",
+    manualSlugStep3:
+      "В журнал вносите время и подъём уровня — насколько он уже вернулся: значения растут от нуля до s⁰.",
+    manualSlugStep4:
+      "По прямой lg(s⁰/s) — t считается коэффициент фильтрации; радиус влияния подбирается по схеме скважины сам.",
+    manualFormulaSlug: "C — наклон прямой lg(s⁰/s) — t; R — радиус влияния по коэффициентам A₁—A₃.",
+    manualSlugNote:
+      "Если на графике два прямолинейных участка, считают по второму: первый говорит о нарушенной зоне вокруг скважины или о перетекании.",
+    manualLugeonIntro:
+      "Метод Люжона: воду нагнетают в изолированный интервал скважины ступенями давления и по расходу на каждой ступени оценивают проницаемость трещиноватых пород.",
+    manualLugeonStep1:
+      "Задайте радиус скважины r_w, длину интервала l_w и промежуток между отсчётами расходомера.",
+    manualLugeonStep2:
+      "Для каждой ступени впишите давление ΔP и показания расходомера нарастающим итогом (120, 138, 157…), а не прирост за промежуток.",
+    manualLugeonStep3:
+      "Стандартная схема — пять ступеней по 10 минут: 0,5, 0,75, 1, 0,75 и 0,5 от максимального давления.",
+    manualLugeonStep4:
+      "Приложение считает средний расход, Lu на каждой ступени и k по формуле Мойе или Тима, определяет вид зависимости «расход — давление» и представительное Lu.",
+    manualFormulaLu: "Q — л/мин, l_w — м, P₀ = 1 МПа. Оценочно 1 Lu ≈ 0,011 м/сут.",
+    manualLugeonNote:
+      "Вид зависимости — ламинарный или турбулентный поток, раскрытие трещин, размыв, заполнение — определяется по пяти ступеням: три на подъёме давления и две на спуске.",
+    manualVadoseIntro:
+      "Опробование зоны аэрации: в шурф доливают воду, держа постоянный слой, и по расходу оценивают коэффициент фильтрации.",
+    manualVadoseBoldyrev:
+      "k = Q / F — расход, делённый на площадь инфильтрации. Для двух колец (метод Нестерова) F — площадь внутреннего кольца.",
+    manualVadoseBindeman:
+      "k = Q · z / (F · (H + H_c + z)) — учитывает глубину просачивания z, слой воды H и капиллярное поднятие H_c.",
+    manualVadoseStep1:
+      "Задайте расход Q — или налитый объём ΔV вместе с интервалом Δt — и площадь инфильтрации F.",
+    manualVadoseStep2:
+      "Для Биндемана укажите слой воды в шурфе H (по методу около 10 см) и глубину просачивания z на конец опыта.",
+    manualVadoseStep3:
+      "Капиллярное поднятие можно взять по справочнику, выбрав породу, но замеренное лучше вписать руками.",
+    manualVadoseNote:
+      "Без капиллярных сил результат завышен: вся движущая сила приписана гравитации.",
+    manualCalculatorTitle: "Калькулятор",
+    manualCalculatorIntro:
+      "Вкладки для быстрых расчётов, когда полного журнала нет: достаточно нескольких величин из полевой книжки.",
+    manualCalcFlow:
+      "Перевод расхода между единицами — метрическими, британскими и американскими, массовыми (по плотности). Нажмите строку, чтобы вводить в её единице.",
+    manualCalcFiltration:
+      "Перевод коэффициента фильтрации: м/сут, м/с, см/с, фт/сут, мейнцеры и другие единицы.",
+    manualCalcParams:
+      "Водопроводимость напорного или коэффициент фильтрации безнапорного пласта по удельному дебиту Q/s — формулы настольного АНСДИМАТ, с поправкой на несовершенство скважины.",
+    manualCalcForecast:
+      "Понижение в опытной и наблюдательной скважинах по четырём схемам: Тейс, пласт с перетеканием, безнапорный пласт Болтона, граница питания. Показывает запас до допустимого понижения.",
+    manualCalcPit:
+      "Приток воды в котлован в безнапорном и напорном пласте, с рекой и без: контур заменяется «большим колодцем» эквивалентного радиуса.",
+    manualCalcWhpa:
+      "Пояса зоны санитарной охраны водозабора: аналитически в естественном потоке или по объёму отобранной воды. План поясов на карте с координатами поворотных точек и оценка защищённости горизонта.",
     manualCalculatorNote:
       "Оценка по Q/s даёт порядок величины по одному замеру: множители 1,22 и 2,43 уже содержат типичное отношение радиуса влияния к радиусу скважины. Точные параметры даёт обработка журнала откачки.",
+    manualMapsIntro:
+      "Построитель карт AnsSurf: по уровням в скважинах строит изолинии поверх подложки OpenStreetMap и выгружает результат в форматы, которые понимает настольный АНСДИМАТ.",
+    manualMapsStep1:
+      "«Данные» — загрузите таблицу уровней (TXT, DAT, XYZ, CSV, XLS, XLSX: колонки X, Y и УГВ), укажите скважины на карте вручную или откройте сохранённый проект. Для знакомства есть пример на 20 скважин.",
+    manualMapsStep2: "«Скважины» — проверьте точки и поправьте ошибочные.",
+    manualMapsStep3: "«Изогипсы» — постройте карту изолиний уровня по скважинам.",
+    manualMapsStep4: "«Выгрузка» — сохраните или отправьте файлы для настольной программы.",
+    manualMapsNote: "Подложке карты нужен интернет; скважины и изолинии от него не зависят.",
     manualDiaryTitle: "Полевой дневник",
     manualDiaryStep1:
       "Введите название точки, опишите её и выберите тип: скважина, родник, шурф, наблюдение.",
-    manualDiaryStep2:
-      "Нажмите на карту в нужном месте — точка встанет по координатам нажатия.",
+    manualDiaryStep2: "Нажмите на карту в нужном месте — точка встанет по координатам нажатия.",
     manualDiaryStep3:
-      "Кнопка «Отметить моё местоположение» ставит точку по координатам устройства, кружок на карте просто подводит карту к вам.",
+      "Кнопка «Отметить моё местоположение» ставит точку по координатам устройства, кружок на карте только подводит карту к вам. Карту можно развернуть на весь экран.",
     manualDiaryStep4:
       "Описание правится и потом — прямо в списке под точкой. Написанное сохраняется само, отдельной кнопки нет.",
+    manualDiaryStep5:
+      "Скрепка у точки открывает вложения: снимки с камеры или из галереи и голосовые заметки. Запись начинается касанием «Запись» и останавливается вторым касанием.",
     manualDiaryNote:
-      "Карта подгружается из интернета, но уже отмеченные точки и их координаты хранятся на устройстве и доступны без связи.",
+      "Карта подгружается из интернета, но уже отмеченные точки, их координаты и вложения хранятся на устройстве и доступны без связи.",
+    manualExchangeTitle: "Обмен журналами",
+    manualExchangeIntro:
+      "Журналом можно поделиться с коллегой или перенести его на другое устройство без аккаунта — файлом проекта.",
+    manualExchangeStep1: "В списке журналов нажмите «Поделиться» и выберите вид выгрузки.",
+    manualExchangeStep2:
+      "«Файл проекта (.ansdimat)» переносит журнал целиком: скважины, обе фазы замеров, исходные данные и результаты.",
+    manualExchangeStep3:
+      "«Таблица замеров (текст)» — замеры и результаты для отчёта: таблицу можно вставить в Excel.",
+    manualExchangeStep4:
+      "Присланный файл откройте нажатием в мессенджере или почте — или кнопкой «Импорт» над списком журналов.",
+    manualExchangeNote:
+      "Если журнал из этого файла уже есть, приложение предложит заменить его, создать копию или открыть имеющийся.",
+    manualSettingsTheme: "Светлая, тёмная или как в системе телефона.",
+    manualSettingsLanguage:
+      "Русский или английский; сайт АНСДИМАТ по ссылкам открывается на том же языке.",
+    manualSettingsUnits:
+      "Единицы для ввода и результатов. Расчёт идёт в базовых единицах, уже введённые данные не меняются.",
+    manualSettingsTablet:
+      "На широком экране содержимое собирается в колонку по центру; выключите, чтобы отдать ему всю ширину.",
+    manualSettingsLocation: "Дневник сам подводит карту к вам, если доступ к геопозиции уже выдан.",
     manualAccountTitle: "Аккаунт и синхронизация",
     manualAccountIntro:
       "Без аккаунта приложение полностью работоспособно: журналы, замеры и точки хранятся в памяти устройства. Аккаунт нужен, чтобы те же данные открывались на другом телефоне или планшете.",
+    manualAccountStep1: "«Настройки» → «Войти в аккаунт»: вход по почте и паролю или регистрация.",
+    manualAccountStep2:
+      "Синхронизация идёт сама — при входе, при возвращении в приложение и вскоре после правок. Кнопка «Синхронизировать» на экране аккаунта запускает её сразу.",
     manualGlossaryTitle: "Обозначения",
     manualTermQ: "Дебит скважины, м³/сут",
     manualTermS: "Понижение уровня, м",
+    manualTermSResidual: "Остаточное понижение после остановки насоса, м",
+    manualTermS0: "Понижение на остановке насоса; в экспресс-опробовании — скачок уровня, м",
+    manualTermTime: "Время от начала откачки и от остановки насоса",
     manualTermT: "Водопроводимость, м²/сут",
     manualTermK: "Коэффициент фильтрации, м/сут",
     manualTermM: "Мощность водоносного пласта, м",
-    manualTermA: "Наклон прямой, м на логарифмический цикл",
-    manualTermR0: "Радиус скважины, м",
-    manualTermR: "Радиус влияния откачки, м",
+    manualTermC: "Наклон прямой, м на логарифмический цикл",
+    manualTermA: "Пьезопроводность, м²/сут",
+    manualTermStorativity: "Водоотдача, безразмерная",
+    manualTermRw: "Радиус скважины (фильтра), м",
+    manualTermRObs: "Расстояние от опытной до наблюдательной скважины, м",
+    manualTermR: "Радиус влияния, м",
+    manualTermLu: "Единица Люжона: 1 л/мин на метр интервала при избыточном давлении 1 МПа",
     manualTermW: "Функция скважины Тейса, безразмерная",
+    manualEyebrow: "Как пользоваться",
 
     // ===== ГРАФИК ПОНИЖЕНИЯ =====
     fitAuto: "По всем точкам",
@@ -359,7 +461,12 @@ const i18n = new I18n({
       "Радиус влияния ≈ %{radius} м — дальше понижение практически не ощущается.",
 
     // ===== СПИСОК ЖУРНАЛОВ =====
-    measurementsCount: "%{count} замеров",
+    measurementsCount: {
+      one: "%{count} замер",
+      few: "%{count} замера",
+      many: "%{count} замеров",
+      other: "%{count} замера",
+    },
     noMeasurements: "замеров нет",
     createFailed: "Не удалось создать журнал. Попробуйте ещё раз.",
 
@@ -405,6 +512,8 @@ const i18n = new I18n({
     mainScenario: "Основной сценарий",
     createPumping: "Создать откачку",
     createPumpingSub: "Журнал и обработка ОФР",
+    pumpingArchive: "Архив откачек",
+    pumpingArchiveSub: "Ранее созданные журналы",
     desktopBanner: "Полная версия для Windows — расчёты на компьютере",
     desktopBannerTitle: "Версия для Windows",
     desktopBannerSub: "Полные расчёты на компьютере",
@@ -684,6 +793,7 @@ const i18n = new I18n({
     schemeInitialGwl: "нач. УГВ",
     schemePumpedWell: "опытная",
     schemeObsWell: "набл.",
+    chartLegendIsolateHint: "Оставить на графике только эту кривую",
 
     // --- Типовые грунты: приток в котлован ---
     lithoClay: "Глина",
@@ -819,8 +929,9 @@ const i18n = new I18n({
     pointType_spring: "Родник",
     pointType_pit: "Шурф",
     pointType_observation: "Точка",
-    pointsCount: "точек",
-    typesCount: "типа",
+    // Подписи под числом в карточках дневника: форма слова зависит от числа
+    pointsCount: { one: "точка", few: "точки", many: "точек", other: "точки" },
+    typesCount: { one: "тип", few: "типа", many: "типов", other: "типа" },
     lastRecord: "запись",
     observationPoints: "Точки наблюдения",
     pointTitlePlaceholder: "Название точки",
@@ -1011,9 +1122,8 @@ const i18n = new I18n({
 
     // Описания карточек главного экрана
     // Каждая карточка имеет название и описание для лучшего понимания пользователем
-    calculatorDesc: "Гидрогеологические расчеты",
+    calculatorDesc: "Гидрогеологические расчёты",
     pumpingTestDesc: "Заполнение журнала и обработка ОФР",
-    examplesDesc: "Обучающие материалы",
 
     // ===== КАРТЫ ГИДРОИЗОГИПС (AnsSurf) =====
     maps: "Карты гидроизогипс",
@@ -1107,8 +1217,11 @@ const i18n = new I18n({
     organization: "Организация",
     phone: "Телефон",
     licenseType: "Тип лицензии",
-    singleLicense: "Однопользовательская",
-    multiLicense: "Многопользовательская",
+    licenseProDesc: "Профессиональная",
+    licenseLiteDesc: "Ограниченная",
+    licenseNetDesc: "Сетевая",
+    licenseEduDesc: "Учебная",
+    tariffsLink: "Подробнее о тарифах на сайте",
     comment: "Комментарий",
     submit: "Отправить",
     orderSent: "Заказ отправлен",
@@ -1125,10 +1238,11 @@ const i18n = new I18n({
 
     // Контакты
     contactsTitle: "Наши контакты",
-    australiaTitle: "АНСДИМАТ Австралия",
-    russiaTitle: "АНСДИМАТ Россия",
-    websiteSupport: "Вебсайт и техническая поддержка:",
+    australiaTitle: "Австралия",
+    russiaTitle: "Россия",
+    websiteSupport: "Сайт и техническая поддержка",
     goToWebsite: "Перейти на сайт АНСДИМАТ",
+    contacts: "Контакты",
 
     // Примеры и видео
     examplesTitle: "Примеры и обучающие видео",
@@ -1252,7 +1366,9 @@ const i18n = new I18n({
       "Мастер создания нового журнала обработки откачки за 3 шага",
     journal: "Журнал",
     journalManagement: "Журналы",
-    noProjects: "Нет проектов",
+    noProjects: "Журналов пока нет",
+    noProjectsHint:
+      "Выберите вид ОФР и назовите журнал — или откройте файл .ansdimat кнопкой «Импорт».",
     createFirstProject: "Создайте первый проект с помощью мастера выше",
     journalDetails: "Детали журнала",
     editJournal: "Редактировать журнал",
@@ -1348,14 +1464,12 @@ const i18n = new I18n({
     premiumOnly: "Только для премиум пользователей",
     subscriptionNavigation: "Функция перехода к подписке будет добавлена позже",
 
-    // Контакты
-    anastasiaBoronina: "Анастасия Боронина",
-    nevaGroundwaterConsulting: "Нева Грунтовые Воды Консалтинг",
+    // Контакты — от лица офисов, без имён сотрудников
+    australiaOffice: "Международный офис АНСДИМАТ",
+    russiaOffice: "Центральный офис разработки АНСДИМАТ",
     phoneNumber: "Номер телефона",
-    antonNikulenkov: "Антон Никулинов",
-    instituteOfGeoecology: "Институт геоэкологии, Академия Наук",
     address: "Адрес",
-    russiaAddress: "199004, Россия, Санкт-Петербург, средний проспект V.O., 41",
+    russiaAddress: "РФ, Санкт-Петербург, Средний проспект В.О., д.41",
     email: "Email",
 
     // Ошибки и сообщения
@@ -1550,7 +1664,7 @@ const i18n = new I18n({
     difficultyHard: "Сложный",
     categoryBasics: "Основы",
     categorySetup: "Настройка",
-    categoryCalculations: "Расчеты",
+    categoryCalculations: "Расчёты",
     categoryAnalysis: "Анализ",
     projectAlreadyExists: "Проект уже существует",
     projectAlreadyExistsDescription:
@@ -1621,7 +1735,7 @@ const i18n = new I18n({
     slugBeta: "β = l_w/r_w",
     slugSchemePartial: "Несовершенная скважина: радиус влияния по A₁ и A₂.",
     slugSchemeFull:
-      "Фильтр достаёт до подошвы пласта: радиус влияния по A₃, как у совершенной скважины.",
+      "Фильтр во всю мощность пласта или до его подошвы: радиус влияния по A₃, как у совершенной скважины.",
     slugThicknessCapped:
       "Мощность велика: ln[(m−z)/r_w] взят равным 6 — верхнему пределу зависимости.",
     slugBetaClamped:
@@ -1776,7 +1890,6 @@ const i18n = new I18n({
     order: "Order",
     download: "Download",
     contact: "Contact Us",
-    examples: "Examples & Videos",
     utilities: "Utilities",
     util1: "Calculator",
     util2: "Pumping Test Processing",
@@ -1898,115 +2011,222 @@ const i18n = new I18n({
     momentLabel: "Moment in time",
     methodNeedLogAxis: "Switch the X axis to lg t to compute T.",
 
-    // ===== EXAMPLES & VIDEOS (redesign) =====
-    filterAll: "All",
-    filterPumping: "Test processing",
-    filterDewatering: "Dewatering",
-    filterModeling: "Modeling",
-    videoLessons: "Video tutorials",
-    studyMaterials: "Materials",
-    open: "Open",
-
     // ===== ABOUT (redesign) =====
     aboutManual: "User manual",
-    aboutVideos: "Video tutorials",
     aboutContact: "Contact us",
     aboutLocalData:
       "© ANSDIMAT. Calculations run on the device and work offline.",
     orderLicense: "Order a licence",
     versionLabel: "version",
+    releaseLabel: "Release %{name}, version %{version}",
 
     // ===== USER MANUAL =====
-    manualEyebrow: "How to use",
     manualStartTitle: "Getting started",
     manualStartIntro:
-      "ANSDIMAT is a field tool for hydrogeologists: a pumping-test journal, measurement processing and aquifer parameter calculations. Everything is computed on the device and stored locally; the internet is only needed to sign in and sync.",
+      "ANSDIMAT is a hydrogeologist's field tool: aquifer test logs and their analysis, a calculator, hydroisohypse maps and a field diary. Everything is computed on the device and stored in its memory; the internet is needed only for map backgrounds, signing in and sync.",
     manualStartStep1:
-      "Tap “Create pumping test” — pick the test type and name the project.",
-    manualStartStep2:
-      "Fill in the test data: discharge rate, well radius, aquifer thickness.",
-    manualStartStep3: "Record time–drawdown measurements as the test runs.",
+      "Tap “Create pumping test” on the home screen: choose the test type, name the log and tap “Create”.",
+    manualStartStep2: "Enter the test's input data and the measurements as the test goes on.",
+    manualStartStep3:
+      "Analysis runs at once: the chart is drawn as you type and the parameters are recalculated on the fly.",
     manualStartStep4:
-      "Open processing: the plot is built automatically and parameters update live.",
-    manualJournalTitle: "Pumping-test journal",
+      "Your logs are kept in the “Pumping test archive” — the home screen tile takes you straight to the list.",
+    manualJournalTitle: "Logs and the pumping test archive",
     manualJournalIntro:
-      "A journal holds the whole test: well data, test conditions and the measurement table. Journals are not deleted by accident — deletion always asks for confirmation, and the measurements go with the journal.",
+      "A log is the whole test: its type, input data, measurements and results. All logs are listed under “Previously created” on the “Pumping Test” screen; the “Pumping test archive” tile on the home screen leads there too.",
+    manualTypeSingle:
+      "Pumping from one well: drawdown and recovery in the well itself, transmissivity T.",
+    manualTypeCluster:
+      "A pumping well with observation wells around it: the observation wells also give diffusivity a and storativity S.",
+    manualTypeSlug:
+      "An instantaneous change of water level and its recovery — the Bouwer–Rice solution.",
+    manualTypeLugeon:
+      "Water injected into a packed-off interval in pressure steps — the Lugeon method.",
+    manualTypeVadose: "Testing the unsaturated zone — the Boldyrev and Bindeman methods.",
     manualJournalStep1:
-      "The pencil returns you to data entry and measurement editing.",
-    manualJournalStep2:
-      "The chart icon opens processing and parameter calculation.",
+      "Tap a log in the list to open it and continue entering data or analysing it.",
+    manualJournalStep2: "Star — pin the log: starred logs stay at the top of the list.",
     manualJournalStep3:
-      "The star marks a journal as important and moves it to the top of the list.",
+      "“Share” — send the log as a project file or as a measurements table, see “Sharing logs”.",
     manualJournalStep4:
-      "The arrow exports the journal together with its measurements.",
+      "Bin — delete the log together with its measurements; deletion always asks for confirmation.",
     manualJournalNote:
-      "Measurement time is counted from the start of pumping. Drawdown is the difference between the static and dynamic water level and is always positive.",
-    manualProcessingTitle: "Test processing",
+      "Measurement time is counted from the start of pumping; drawdown is the difference between static and dynamic level and is always positive.",
+    manualProcessingTitle: "Pumping test analysis",
     manualProcessingIntro:
-      "Processing uses the Cooper–Jacob method: measurements are plotted in semi-log coordinates (lg t vs drawdown), and aquifer parameters are derived from the straight-line segment.",
+      "Single-well and cluster tests are analysed by the Cooper–Jacob method: measurements are plotted as “lg t — drawdown”, and the aquifer parameters come from the straight-line segment.",
     manualFormulaT:
-      "T — transmissivity, m²/day; Q — discharge rate, m³/day; a — slope of the line, m per log cycle.",
-    manualFormulaK:
-      "k — hydraulic conductivity, m/day; m — aquifer thickness, m.",
+      "T — transmissivity, m²/day; Q — pumping rate, m³/day; C — slope of the line: drawdown increase per log cycle of time, m.",
     manualProcessingStep1:
-      "By default the line is fitted by least squares over all measurements.",
+      "Choose the time axis above the chart: lg t, t or √t. Transmissivity is computed on the lg t axis.",
     manualProcessingStep2:
-      "To cut off the early and late segments, switch to the two-point fit and mark the points — in the measurement table or directly on the plot.",
+      "“All points” — the line is fitted by least squares. To cut off the early and late segments, mark two points — with the circles in the measurements table or right on the chart.",
     manualProcessingStep3:
-      "Pinch with two fingers or use “+” and “−” to zoom, drag with one finger to pan; the axes stay in place.",
+      "“Free line” — draw the line by hand: drag its points, as on a paper plot.",
     manualProcessingStep4:
-      "“Fit” restores the original scale covering all measurements.",
+      "Pinch with two fingers or use “+” and “−” to zoom, drag with one finger to pan. “Reset” restores the view; the frame button opens the chart full screen.",
     manualProcessingNote:
-      "Early measurements are distorted by wellbore storage, late ones by aquifer boundaries. The straight-line segment usually lies between them — that is what the two points should bracket.",
-    manualCalculatorTitle: "Calculator",
-    manualCalculatorIntro:
-      "Tabs for quick calculations when there is no full journal — a few values from the field notebook are enough.",
-    manualCalcFiltration:
-      "Convert hydraulic conductivity between units: m/day, m/h, m/s, cm/s, ft/day, Meinzer units.",
-    manualCalcParams:
-      "Transmissivity of a confined or conductivity of an unconfined aquifer from specific capacity Q/s — the desktop ANSDIMAT formulas, with a partial-penetration correction.",
-    manualCalcForecast:
-      "Drawdown in the pumped and observation wells for four schemes: Theis, leaky aquifer, Boulton unconfined aquifer, recharge boundary.",
-    manualCalcPit:
-      "Inflow into an excavation pit: the contour is replaced by a “big well” of equivalent radius.",
-    manualRecoveryTitle: "Level recovery",
+      "Early measurements are distorted by wellbore storage, late ones by aquifer boundaries. The straight segment usually lies between them — mark it with two points. The “Diagnosis” tab tells which segment to pick.",
+    manualDiagIntro:
+      "The diagnosis tab above the chart plots drawdown and its derivative ds/d(ln t) on log scales. The shape of the derivative shows which flow regime held on each part of the test and which points the line should follow.",
+    manualDiagRadial:
+      "The derivative sits on a plateau: the Cooper–Jacob formula applies, fit the line on this segment.",
+    manualDiagBarrier:
+      "The derivative plateau has risen about twofold: the cone of depression has reached an aquifer boundary. Compute T from the early segment.",
+    manualDiagRecharge:
+      "The derivative falls: water is entering the aquifer — leakage or a nearby water body. Use the segment before the bend.",
+    manualDiagWellbore:
+      "The derivative rises at 45°: water is coming from the borehole itself and the aquifer has not responded yet. These measurements cannot be used.",
+    manualDiagNote:
+      "At least five measurements spread in time by several times are needed: 1, 2, 5, 10, 30 minutes. The app labels the regime under the chart itself.",
+    manualRecoveryTitle: "Water level recovery",
     manualRecoveryIntro:
-      "The second half of the test: the pump is off and the level rises. Processing it pays off — with the pump stopped, discharge fluctuations no longer spoil the data.",
+      "The second half of the test: the pump is off and the level comes back. It is worth analysing — fluctuations of the pumping rate no longer spoil anything here.",
     manualFormulaRecovery:
       "s′ — residual drawdown, m; t — time since pumping started; t′ — time since the pump stopped.",
-    manualRecoveryStep1: "In processing, switch to “Recovery”.",
+    manualRecoveryStep1: "Switch the analysis to “Recovery”.",
     manualRecoveryStep2:
-      "Enter how long pumping lasted: t′ is counted from that moment.",
+      "The pumping duration and the drawdown at pump stop are taken from the pumping log — check them.",
     manualRecoveryStep3:
-      "Measurements are entered the same way — time from the start and residual drawdown.",
+      "Fill in the recovery log in the second table: time t′ since the pump stopped and the rise of the level since then — the values grow from zero.",
+    manualRecoveryStep4:
+      "The app computes residual drawdown itself: drawdown at pump stop minus the rise.",
     manualRecoveryNote:
-      "The recovery line must pass through the origin. A noticeable offset points to aquifer boundaries or a variable discharge rate during pumping; the app warns about it.",
+      "The recovery line should pass through the origin; a noticeable offset points to aquifer boundaries or an unsteady pumping rate, and the app will warn you. The test is considered complete when residual drawdown is below 5 % of the drawdown at pump stop.",
+    manualClusterTitle: "Cluster pumping test",
+    manualClusterIntro:
+      "A cluster is a pumping well and one or more observation wells. Each well has its own measurement log; distances from the pumping well to the observation wells are entered in a table.",
+    manualClusterStep1:
+      "When creating a cluster, name the pumping well and the first observation well. Empty fields get the names “w” and “p”, as in desktop ANSDIMAT.",
+    manualClusterStep2:
+      "Observation wells can be added later; there is only one pumping well per test.",
+    manualClusterStep3:
+      "Switch wells above the log: the chart and the calculation follow the well that is open.",
+    manualClusterStep4:
+      "Besides T, an observation well gives diffusivity a and storativity S — they need its distance to the pumping well.",
+    manualSlugIntro:
+      "The water level in the well is changed instantly — by adding or removing water or with a slug — and its return is recorded. Analysis by the Bouwer–Rice solution.",
+    manualSlugStep1:
+      "Enter the well geometry: screen radius r_w, casing radius r_c, screen length l_w, distance from the water table to the middle of the screen LT_w and saturated thickness m.",
+    manualSlugStep2:
+      "Enter the initial displacement s⁰ — how far the level moved at the start of the test.",
+    manualSlugStep3:
+      "Log time and the rise of the level — how much it has already recovered: the values grow from zero to s⁰.",
+    manualSlugStep4:
+      "Hydraulic conductivity comes from the lg(s⁰/s) — t line; the radius of influence is chosen from the well geometry automatically.",
+    manualFormulaSlug:
+      "C — slope of the lg(s⁰/s) — t line; R — radius of influence from coefficients A₁—A₃.",
+    manualSlugNote:
+      "If the plot shows two straight segments, use the second one: the first reflects a disturbed zone around the well or leakage.",
+    manualLugeonIntro:
+      "The Lugeon method: water is injected into a packed-off interval of a borehole in pressure steps, and the flow at each step gives the permeability of fractured rock.",
+    manualLugeonStep1:
+      "Enter the borehole radius r_w, the interval length l_w and the time between flow meter readings.",
+    manualLugeonStep2:
+      "For each step enter the pressure ΔP and cumulative flow meter readings (120, 138, 157…), not the increment per interval.",
+    manualLugeonStep3:
+      "The standard scheme is five 10-minute steps: 0.5, 0.75, 1, 0.75 and 0.5 of the maximum pressure.",
+    manualLugeonStep4:
+      "The app computes the mean flow, Lu at each step and k by the Moye or Thiem formula, identifies the flow–pressure pattern and the representative Lu.",
+    manualFormulaLu: "Q in l/min, l_w in m, P₀ = 1 MPa. Roughly 1 Lu ≈ 0.011 m/day.",
+    manualLugeonNote:
+      "The pattern — laminar or turbulent flow, fracture dilation, washout, void filling — is identified from five steps: three with rising pressure and two with falling.",
+    manualVadoseIntro:
+      "Testing the unsaturated zone: water is added to a pit keeping a constant layer, and the rate gives hydraulic conductivity.",
+    manualVadoseBoldyrev:
+      "k = Q / F — the rate divided by the infiltration area. With two rings (Nesterov's method) F is the area of the inner ring.",
+    manualVadoseBindeman:
+      "k = Q · z / (F · (H + H_c + z)) — accounts for the percolation depth z, the water layer H and capillary rise H_c.",
+    manualVadoseStep1:
+      "Enter the rate Q — or the added volume ΔV together with the interval Δt — and the infiltration area F.",
+    manualVadoseStep2:
+      "For Bindeman, enter the water layer in the pit H (about 10 cm by the method) and the percolation depth z at the end of the test.",
+    manualVadoseStep3:
+      "Capillary rise can be taken from the reference by choosing the rock type, but a measured value is better entered by hand.",
+    manualVadoseNote:
+      "Without capillary forces the result is overestimated: the whole driving force is attributed to gravity.",
+    manualCalculatorTitle: "Calculator",
+    manualCalculatorIntro:
+      "Tabs for quick calculations when there is no full log — a few values from the field book are enough.",
+    manualCalcFlow:
+      "Converts flow rate between metric, imperial and US units, and mass units (via density). Tap a row to enter the value in its unit.",
+    manualCalcFiltration:
+      "Converts hydraulic conductivity: m/day, m/s, cm/s, ft/day, meinzers and other units.",
+    manualCalcParams:
+      "Transmissivity of a confined or hydraulic conductivity of an unconfined aquifer from specific capacity Q/s — desktop ANSDIMAT formulas, with a partial-penetration correction.",
+    manualCalcForecast:
+      "Drawdown in the pumping and observation wells by four schemes: Theis, leaky aquifer, Boulton's unconfined aquifer, recharge boundary. Shows the margin to the allowable drawdown.",
+    manualCalcPit:
+      "Inflow into an excavation in an unconfined or confined aquifer, with or without a river: the pit is replaced by a “large well” of equivalent radius.",
+    manualCalcWhpa:
+      "Wellhead protection zones: analytically in the natural flow or by the volume of abstracted water. A plan of the zones on the map with turning point coordinates, and an assessment of aquifer protection.",
     manualCalculatorNote:
-      "The Q/s estimate gives an order of magnitude from a single reading: the factors 1.22 and 2.43 already contain a typical ratio of the radius of influence to the well radius. Accurate parameters come from processing the pumping journal.",
+      "The Q/s estimate gives the order of magnitude from a single measurement: the factors 1.22 and 2.43 already contain a typical ratio of influence radius to well radius. Accurate parameters come from analysing a pumping test log.",
+    manualMapsIntro:
+      "The AnsSurf map builder: draws contours of water level from wells over an OpenStreetMap background and exports the result in formats desktop ANSDIMAT reads.",
+    manualMapsStep1:
+      "“Data” — load a table of levels (TXT, DAT, XYZ, CSV, XLS, XLSX: columns X, Y and water level), place wells on the map by hand or open a saved project. There is a 20-well example to get started.",
+    manualMapsStep2: "“Wells” — check the points and fix wrong ones.",
+    manualMapsStep3: "“Contours” — build the water level contour map from the wells.",
+    manualMapsStep4: "“Export” — save or send the files for the desktop program.",
+    manualMapsNote: "The map background needs the internet; wells and contours do not.",
     manualDiaryTitle: "Field diary",
     manualDiaryStep1:
-      "Enter the point name, describe it and pick its type: well, spring, pit or observation.",
-    manualDiaryStep2:
-      "Tap the map where you need it — the point is placed at the tapped coordinates.",
+      "Enter the point name, describe it and choose its type: well, spring, pit, observation.",
+    manualDiaryStep2: "Tap the map where you need — the point is placed at the tapped coordinates.",
     manualDiaryStep3:
-      "“Mark my location” places a point at the device coordinates; the circle on the map only centres the map on you.",
+      "“Mark my location” places a point at the device coordinates; the round button on the map only moves the map to you. The map can be opened full screen.",
     manualDiaryStep4:
-      "The description can be edited later, right in the list under the point. What you write is saved on its own — there is no separate button.",
+      "The description can be edited later — right in the list under the point. It is saved as you type, there is no separate button.",
+    manualDiaryStep5:
+      "The paper clip on a point opens its attachments: photos from the camera or gallery and voice notes. Recording starts with a tap on “Record” and stops with a second tap.",
     manualDiaryNote:
-      "Map tiles come from the internet, but points you have already marked and their coordinates are stored on the device and available offline.",
+      "The map is loaded from the internet, but the points you have marked, their coordinates and attachments are stored on the device and available offline.",
+    manualExchangeTitle: "Sharing logs",
+    manualExchangeIntro:
+      "A log can be shared with a colleague or moved to another device without an account — as a project file.",
+    manualExchangeStep1: "In the list of logs tap “Share” and choose what to send.",
+    manualExchangeStep2:
+      "“Project file (.ansdimat)” carries the whole log: wells, both test phases, input data and results.",
+    manualExchangeStep3:
+      "“Measurements table (text)” — measurements and results for a report: the table can be pasted into Excel.",
+    manualExchangeStep4:
+      "Open a received file by tapping it in a messenger or mail app — or with the “Import” button above the list of logs.",
+    manualExchangeNote:
+      "If a log from this file already exists, the app offers to replace it, create a copy or open the existing one.",
+    manualSettingsTheme: "Light, dark or following the phone's system setting.",
+    manualSettingsLanguage:
+      "Russian or English; links to the ANSDIMAT website open in the same language.",
+    manualSettingsUnits:
+      "Units for input and results. Calculations run in base units, and values already entered do not change.",
+    manualSettingsTablet:
+      "On a wide screen the content is gathered in a centred column; turn it off to give the content the full width.",
+    manualSettingsLocation:
+      "The diary moves the map to you by itself if location access has already been granted.",
     manualAccountTitle: "Account and sync",
     manualAccountIntro:
-      "The app works fully without an account: journals, measurements and points live in the device storage. An account lets the same data open on another phone or tablet.",
+      "The app works fully without an account: logs, measurements and points are stored in the device memory. An account lets the same data open on another phone or tablet.",
+    manualAccountStep1: "“Settings” → “Sign in”: sign in with e-mail and password or register.",
+    manualAccountStep2:
+      "Sync runs by itself — on sign-in, when you return to the app and shortly after edits. The “Sync now” button on the account screen runs it at once.",
     manualGlossaryTitle: "Notation",
-    manualTermQ: "Well discharge rate, m³/day",
-    manualTermS: "Water level drawdown, m",
+    manualTermQ: "Pumping rate, m³/day",
+    manualTermS: "Drawdown, m",
+    manualTermSResidual: "Residual drawdown after the pump stopped, m",
+    manualTermS0: "Drawdown at pump stop; in a slug test — the initial displacement, m",
+    manualTermTime: "Time since pumping started and since the pump stopped",
     manualTermT: "Transmissivity, m²/day",
     manualTermK: "Hydraulic conductivity, m/day",
     manualTermM: "Aquifer thickness, m",
-    manualTermA: "Slope of the line, m per log cycle",
-    manualTermR0: "Well radius, m",
+    manualTermC: "Slope of the line, m per log cycle",
+    manualTermA: "Hydraulic diffusivity, m²/day",
+    manualTermStorativity: "Storativity, dimensionless",
+    manualTermRw: "Well (screen) radius, m",
+    manualTermRObs: "Distance from the pumping well to the observation well, m",
     manualTermR: "Radius of influence, m",
+    manualTermLu: "Lugeon unit: 1 l/min per metre of interval at an excess pressure of 1 MPa",
     manualTermW: "Theis well function, dimensionless",
+    manualEyebrow: "How to use",
 
     // ===== DRAWDOWN CHART =====
     fitAuto: "All points",
@@ -2078,7 +2298,7 @@ const i18n = new I18n({
     regimeRecharge: "Aquifer is being recharged",
     regimeRechargeSign: "The derivative is falling — drawdown stops growing.",
     regimeRechargeAdvice:
-      "Water enters the aquifer: leakage through the aquitard or a nearby water body. Late points overestimate T — use the segment before the bend, and assess leakage with the Leaky scheme on the Drawdown calculation tab.",
+      "Water enters the aquifer: leakage through the aquitard or a nearby water body. Late points overestimate T — use the segment before the bend, and assess leakage with the Leaky scheme on the Drawdown tab.",
     regimeWellbore: "Wellbore storage dominates",
     regimeWellboreSign:
       "The derivative rises at 45° across most of the record.",
@@ -2099,7 +2319,10 @@ const i18n = new I18n({
       "Radius of influence ≈ %{radius} m — beyond it drawdown is negligible.",
 
     // ===== JOURNAL LIST =====
-    measurementsCount: "%{count} readings",
+    measurementsCount: {
+      one: "%{count} reading",
+      other: "%{count} readings",
+    },
     noMeasurements: "no readings",
     createFailed: "Could not create the journal. Please try again.",
 
@@ -2144,7 +2367,9 @@ const i18n = new I18n({
     // ===== HOME (redesign) =====
     mainScenario: "Main scenario",
     createPumping: "Create pumping test",
-    createPumpingSub: "Journal and OFR processing",
+    createPumpingSub: "Input data and analysis",
+    pumpingArchive: "Pumping test archive",
+    pumpingArchiveSub: "Previously created logs",
     desktopBanner: "Full Windows version — calculations on desktop",
     desktopBannerTitle: "Windows version",
     desktopBannerSub: "Full calculations on desktop",
@@ -2157,8 +2382,8 @@ const i18n = new I18n({
     // ===== CALCULATOR: tabs and fields =====
     tabFlow: "Convert Q",
     tabFiltration: "Convert k",
-    tabParams: "Estimate from Q/s",
-    tabForecast: "Drawdown calculation",
+    tabParams: "Q/s estimate",
+    tabForecast: "Drawdown",
     tabPit: "Pit",
     // ===== WELLHEAD PROTECTION AREA =====
     tabWhpa: "WHPA",
@@ -2422,6 +2647,7 @@ const i18n = new I18n({
     schemeInitialGwl: "initial GWL",
     schemePumpedWell: "pumped",
     schemeObsWell: "obs.",
+    chartLegendIsolateHint: "Show only this curve on the chart",
 
     // --- Soil presets: pit inflow ---
     lithoClay: "Clay",
@@ -2554,8 +2780,8 @@ const i18n = new I18n({
     pointType_spring: "Spring",
     pointType_pit: "Pit",
     pointType_observation: "Point",
-    pointsCount: "points",
-    typesCount: "types",
+    pointsCount: { one: "point", other: "points" },
+    typesCount: { one: "type", other: "types" },
     lastRecord: "record",
     observationPoints: "Observation points",
     pointTitlePlaceholder: "Point name",
@@ -2747,8 +2973,7 @@ const i18n = new I18n({
 
     // Descriptions of the main screen cards
     calculatorDesc: "Hydrogeological calculations",
-    pumpingTestDesc: "Filling out the log and processing the OFR",
-    examplesDesc: "Training materials",
+    pumpingTestDesc: "Input data and analysis",
 
     // ===== HYDROISOHYPSE MAPS (AnsSurf) =====
     maps: "Hydroisohypse maps",
@@ -2773,8 +2998,11 @@ const i18n = new I18n({
     organization: "Organization",
     phone: "Phone",
     licenseType: "License type",
-    singleLicense: "Single User",
-    multiLicense: "Multi User",
+    licenseProDesc: "Professional",
+    licenseLiteDesc: "Limited",
+    licenseNetDesc: "Network",
+    licenseEduDesc: "Educational",
+    tariffsLink: "Plans and pricing on the website",
     comment: "Comment",
     submit: "Submit",
     orderSent: "Order Sent",
@@ -2791,10 +3019,11 @@ const i18n = new I18n({
 
     // Contact
     contactsTitle: "Our Contacts",
-    australiaTitle: "ANSDIMAT Australia",
-    russiaTitle: "ANSDIMAT Russia",
-    websiteSupport: "Website and Technical Support:",
+    australiaTitle: "Australia",
+    russiaTitle: "Russia",
+    websiteSupport: "Website and technical support",
     goToWebsite: "Go to ANSDIMAT Website",
+    contacts: "Contacts",
 
     // Examples and Videos
     examplesTitle: "Examples and Tutorial Videos",
@@ -2908,7 +3137,9 @@ const i18n = new I18n({
     // Data Processing
     dataProcessing: "Processing",
     processingTitle: "Journal Processing",
-    noProjects: "No projects",
+    noProjects: "No journals yet",
+    noProjectsHint:
+      "Pick the test type and name the journal above — or open an .ansdimat file with Import.",
     createFirstProject: "Create your first project using the wizard above",
     journal: "Journal",
     createJournalSubtitle: "Create a new journal in 3 steps",
@@ -2997,14 +3228,12 @@ const i18n = new I18n({
     premiumOnly: "Premium users only",
     subscriptionNavigation: "Subscription navigation will be added later",
 
-    // Contacts
-    anastasiaBoronina: "Anastasia Boronina",
-    nevaGroundwaterConsulting: "Neva Groundwater Consulting",
+    // Contacts — offices, not individual staff
+    australiaOffice: "International ANSDIMAT Office",
+    russiaOffice: "ANSDIMAT Central Development Office",
     phoneNumber: "Phone number",
-    antonNikulenkov: "Anton Nikulenkov",
-    instituteOfGeoecology: "Institute of Geoecology, Academy of Sciences",
     address: "Address",
-    russiaAddress: "199004, Russia, St. Petersburg, Sredny prospect V.O., 41",
+    russiaAddress: "41 Sredny Prospekt V.O., Saint Petersburg, Russia",
     email: "Email",
 
     // Errors and messages
@@ -3322,7 +3551,7 @@ const i18n = new I18n({
     slugSchemePartial:
       "Partially penetrating well: effective radius from A₁ and A₂.",
     slugSchemeFull:
-      "Screen reaches the aquifer base: effective radius from A₃, as for a fully penetrating well.",
+      "Screen spans the full aquifer thickness or reaches its base: effective radius from A₃, as for a fully penetrating well.",
     slugThicknessCapped:
       "Thick aquifer: ln[(m−z)/r_w] is capped at 6, the upper limit of the relation.",
     slugBetaClamped:
@@ -3489,6 +3718,29 @@ function systemLocale() {
     return "ru";
   }
 }
+
+/**
+ * Формы русского слова при числе: 1 замер, 2 замера, 5 замеров, 21 замер
+ *
+ * Библиотека по умолчанию знает только английские «one/other», и строка
+ * «34 замеров» выходила с ошибкой в каждом втором числе. Дробное число берёт
+ * форму «other» — «1.5 замера».
+ *
+ * @param {Object} _i18n - экземпляр i18n
+ * @param {number} count - число
+ * @returns {Array<string>} ключи форм по порядку предпочтения
+ */
+function russianPlural(_i18n, count) {
+  if (!Number.isInteger(count)) return ["other"];
+  const mod100 = Math.abs(count) % 100;
+  const mod10 = mod100 % 10;
+  if (mod100 >= 11 && mod100 <= 14) return ["many", "other"];
+  if (mod10 === 1) return ["one", "other"];
+  if (mod10 >= 2 && mod10 <= 4) return ["few", "other"];
+  return ["many", "other"];
+}
+
+i18n.pluralization.register("ru", russianPlural);
 
 i18n.defaultLocale = "ru";
 i18n.locale = systemLocale();

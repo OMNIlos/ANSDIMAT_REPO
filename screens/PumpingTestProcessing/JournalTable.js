@@ -15,7 +15,7 @@ import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import I18n from '../../Localization';
-import { spacing, radius, type, numericAt } from '../../theme';
+import { spacing, radius, type, numericAt, fontFamily } from '../../theme';
 
 /**
  * @param {Object} props
@@ -68,10 +68,10 @@ export default function JournalTable({
       ]}
     >
       <View style={[styles.head, { borderBottomColor: theme.colors.border }]}>
-        <Text style={[type.eyebrow, styles.headCell, { color: theme.colors.faint }]}>
+        <Text style={[type.label, styles.headCell, { color: theme.colors.textSecondary }]}>
           {`t, ${timeUnit}`}
         </Text>
-        <Text style={[type.eyebrow, styles.headCell, { color: theme.colors.faint }]}>
+        <Text style={[type.label, styles.headCell, { color: theme.colors.textSecondary }]}>
           {`${valueLabel}, ${valueUnit}`}
         </Text>
         <View style={styles.removeSlot} />
@@ -98,8 +98,8 @@ export default function JournalTable({
         onPress={onAdd}
         style={[styles.add, { borderTopColor: theme.colors.border }]}
       >
-        <MaterialIcons name="add" size={16} color={theme.colors.primary} />
-        <Text style={[type.caption, { color: theme.colors.primary }]}>
+        <MaterialIcons name="add" size={18} color={theme.colors.primaryAccent} />
+        <Text style={[styles.addText, { color: theme.colors.primaryAccent }]}>
           {I18n.t('addMeasurement', { defaultValue: 'Добавить замер' })}
         </Text>
       </Pressable>
@@ -123,6 +123,8 @@ const styles = StyleSheet.create({
   },
   headCell: {
     flex: 1,
+    minWidth: 0,
+    paddingRight: spacing.sm,
   },
   row: {
     flexDirection: 'row',
@@ -130,8 +132,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
+  // Нулевой минимум обязателен: на вебе <input> без него держит свою
+  // «естественную» ширину, вторая колонка уезжала вправо от своей шапки
   cell: {
     flex: 1,
+    minWidth: 0,
     paddingVertical: spacing.sm,
     paddingRight: spacing.sm,
   },
@@ -144,8 +149,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.xs,
+    gap: 6,
     paddingVertical: spacing.md,
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  // Как у журнала откачки: одна и та же кнопка выглядит одинаково везде
+  addText: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 14,
+    lineHeight: 19,
   },
 });

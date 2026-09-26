@@ -8,7 +8,7 @@
  * Источник данных — локальная SQLite: приложение работает в поле без связи.
  */
 
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -45,7 +45,8 @@ import { processLugeon } from "../../calc/lugeon";
 import { processVadoseFill } from "../../calc/vadoseFill";
 import { formatValue } from "../calculator/shared";
 import { useImport } from "../../share/ImportContext";
-import { spacing, radius, type, elevation } from "../../theme";
+import { spacing, radius, type, elevation, fontFamily } from "../../theme";
+import { useContentMaxWidth } from "../../lib/appPrefs";
 
 export const OFR_OPTIONS = [
   { key: OFR_TYPES.SINGLE, labelKey: "ofr_single" },
@@ -82,6 +83,12 @@ const SCREEN_BY_OFR = {
 export function routeFor(ofrType) {
   return SCREEN_BY_OFR[ofrType] ?? "DataProcessing";
 }
+
+/** Неразрывный пробел: число не отрывается от своей размерности */
+const NBSP = "\u00A0";
+
+/** Соединитель слов: запрещает перенос у косой черты в «м/сут» */
+const WORD_JOINER = "\u2060";
 
 /**
  * Коэффициент фильтрации журнала для строки списка
@@ -127,8 +134,10 @@ function formatDate(timestamp) {
   return `${day}.${month}.${date.getFullYear()}`;
 }
 
-export default function ProjectsScreen({ navigation }) {
+export default function ProjectsScreen({ navigation, route }) {
   const theme = useTheme();
+  // Колонка 720 px — если включена «Адаптация под планшет»
+  const column = useContentMaxWidth(720);
   // Таблица замеров уходит наружу в тех же размерностях, в каких геолог её
   // видел. К файлу проекта это не относится: там всё в базовых единицах,
   // иначе получатель с другими настройками прочёл бы чужие числа как свои
@@ -152,9 +161,51 @@ export default function ProjectsScreen({ navigation }) {
   const [observationWell, setObservationWell] = useState("");
   const [creating, setCreating] = useState(false);
 
+  // Переход с плитки «Архив откачек» на главной: экран тот же, но
+  // прокручивается сразу к списку ранее созданных журналов
+  const scrollRef = useRef(null);
+  // Где начинается список — заголовок «Ранее созданные», px от начала прокрутки
+  const archiveY = useRef(null);
+  // Прокрутку к архиву ещё предстоит сделать
+  const archivePending = useRef(false);
+  // Список прочитан из базы: до этого высота содержимого меньше настоящей,
+  // и прокрутка упёрлась бы в край, не донеся заголовок до верха
+  const listLoaded = useRef(false);
+
+  /**
+   * Подводит список журналов к верху экрана, если об этом просили
+   *
+   * Зовётся из всех мест, где может появиться недостающее: замер заголовка,
+   * смена высоты содержимого после загрузки списка, приход параметра.
+   * Отработав на загруженном списке, просьба снимается — иначе каждое
+   * удаление журнала снова уводило бы экран к архиву.
+   */
+  const scrollToArchive = useCallback(() => {
+    if (!archivePending.current || archiveY.current === null) return;
+    scrollRef.current?.scrollTo({
+      y: Math.max(0, archiveY.current - spacing.md),
+      animated: true,
+    });
+    if (listLoaded.current) archivePending.current = false;
+  }, []);
+
+  const focus = route?.params?.focus;
+  useEffect(() => {
+    if (focus !== "archive") return;
+    archivePending.current = true;
+    // Параметр гасится сразу: возврат на экран из журнала не должен снова
+    // перематывать к архиву
+    navigation.setParams({ focus: undefined });
+    scrollToArchive();
+  }, [focus, navigation, scrollToArchive]);
+
   const load = useCallback(async () => {
     setProjects(await listProjects());
-  }, []);
+    listLoaded.current = true;
+    // Если высота содержимого не поменялась (журналов нет), onContentSizeChange
+    // не придёт — прокрутка доводится следующим кадром
+    requestAnimationFrame(scrollToArchive);
+  }, [scrollToArchive]);
 
   useFocusEffect(
     useCallback(() => {
@@ -315,15 +366,72 @@ export default function ProjectsScreen({ navigation }) {
     await load();
   };
 
+  /**
+   * Открывает журнал на экране его вида ОФР
+   *
+   * @param {Object} project - журнал из списка
+   */
+  const openProject = (project) =>
+    navigation.navigate(routeFor(project.ofrType), { projectId: project.id });
+
+  /**
+   * Что внутри журнала — части строки под названием
+   *
+   * Слова идут гарнитурой интерфейса, числа с размерностью — моноширинной.
+   * Внутри «k = 0.042 м/сут» строка не рвётся: пробелы неразрывные, а у
+   * косой черты стоят соединители слов — иначе браузер переносил
+   * размерность надвое, «м/» на одной строке и «сут» на другой.
+   *
+   * @param {Object} project - журнал из списка
+   * @returns {Array<{text: string, numeric?: boolean}>} части строки
+   */
+  const projectMeta = (project) => {
+    const glue = (text) =>
+      text.replace(/ /g, NBSP).replace(/\//g, `${WORD_JOINER}/${WORD_JOINER}`);
+    const parts = [
+      { text: I18n.t(`ofr_${project.ofrType}`, { defaultValue: project.ofrType }) },
+    ];
+    if (hasDrawdownJournal(project.ofrType)) {
+      parts.push({
+        text:
+          project.measurementsCount > 0
+            ? I18n.t("measurementsCount", {
+                count: project.measurementsCount,
+                defaultValue: `${project.measurementsCount} замеров`,
+              })
+            : I18n.t("noMeasurements", { defaultValue: "замеров нет" }),
+      });
+    }
+    if (isFinite(project.results?.T) && project.results.T !== null) {
+      const T = fromBase(project.results.T, QUANTITIES.TRANSMISSIVITY).toFixed(1);
+      parts.push({
+        text: glue(`T = ${T} ${unitLabel(QUANTITIES.TRANSMISSIVITY)}`),
+        numeric: true,
+      });
+    }
+    const k = conductivityOf(project);
+    if (k !== null) {
+      parts.push({
+        text: glue(
+          `k = ${formatValue(fromBase(k, QUANTITIES.CONDUCTIVITY))} ${unitLabel(QUANTITIES.CONDUCTIVITY)}`
+        ),
+        numeric: true,
+      });
+    }
+    return parts;
+  };
+
   const selectedLabel = ofrType
     ? I18n.t(OFR_OPTIONS.find((o) => o.key === ofrType).labelKey)
     : I18n.t("selectOfrType", { defaultValue: "Выберите тип ОФР" });
 
   return (
     <ScrollView
+      ref={scrollRef}
       style={{ backgroundColor: theme.colors.background }}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { maxWidth: column ?? "100%" }]}
       keyboardShouldPersistTaps="handled"
+      onContentSizeChange={scrollToArchive}
     >
       {/* Форма нового журнала */}
       <Text style={[type.eyebrow, { color: theme.colors.textSecondary }]}>
@@ -470,8 +578,14 @@ export default function ProjectsScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      {/* Ранее созданные */}
-      <View style={styles.listHeader}>
+      {/* Ранее созданные — сюда ведёт плитка «Архив откачек» с главной */}
+      <View
+        style={styles.listHeader}
+        onLayout={(event) => {
+          archiveY.current = event.nativeEvent.layout.y;
+          scrollToArchive();
+        }}
+      >
         <Text style={[type.eyebrow, { color: theme.colors.textSecondary }]}>
           {I18n.t("previouslyCreated", { defaultValue: "Ранее созданные" })} ·{" "}
           {projects.length}
@@ -519,10 +633,21 @@ export default function ProjectsScreen({ navigation }) {
             style={[
               type.body,
               styles.emptyText,
-              { color: theme.colors.textSecondary },
+              { color: theme.colors.text },
             ]}
           >
             {I18n.t("noProjects")}
+          </Text>
+          {/* Пустой список — приглашение к действию, а не констатация: куда
+              нажать, чтобы журнал появился */}
+          <Text
+            style={[
+              type.caption,
+              styles.emptyHint,
+              { color: theme.colors.textSecondary },
+            ]}
+          >
+            {I18n.t("noProjectsHint")}
           </Text>
         </View>
       ) : (
@@ -543,13 +668,10 @@ export default function ProjectsScreen({ navigation }) {
                 только двумя иконками внизу, которые вели в одно и то же
                 место — палец же по привычке бьёт в название */}
             <TouchableOpacity
-              onPress={() =>
-                navigation.navigate(routeFor(project.ofrType), {
-                  projectId: project.id,
-                })
-              }
+              onPress={() => openProject(project)}
               accessibilityRole="button"
               accessibilityLabel={project.name}
+              activeOpacity={0.7}
             >
               <View style={styles.projectTop}>
                 <Text
@@ -565,53 +687,51 @@ export default function ProjectsScreen({ navigation }) {
                 <Text
                   style={[
                     styles.projectDate,
-                    { color: theme.colors.textSecondary },
+                    { color: theme.colors.faint },
                   ]}
                 >
                   {formatDate(project.createdAt)}
                 </Text>
               </View>
-
-              {/* Что внутри журнала: тип опыта, сколько замеров и получен ли
-                  результат. Без этого список — просто набор названий, и
-                  заполненный журнал не отличить от заведённого и забытого.
-
-                  У нагнетания и налива замеров в этом смысле нет: данные
-                  лежат ступенями и полями формы. Писать им «замеров нет»
-                  значило бы называть заполненный журнал пустым, поэтому там
-                  сразу стоит посчитанный коэффициент фильтрации */}
-              <Text
-                style={[
-                  styles.projectMeta,
-                  { color: theme.colors.textSecondary },
-                ]}
-              >
-                {I18n.t(`ofr_${project.ofrType}`, {
-                  defaultValue: project.ofrType,
-                })}
-                {hasDrawdownJournal(project.ofrType)
-                  ? ` · ${
-                      project.measurementsCount > 0
-                        ? I18n.t("measurementsCount", {
-                            count: project.measurementsCount,
-                            defaultValue: `${project.measurementsCount} замеров`,
-                          })
-                        : I18n.t("noMeasurements", {
-                            defaultValue: "замеров нет",
-                          })
-                    }`
-                  : ""}
-                {isFinite(project.results?.T) && project.results.T !== null
-                  ? ` · T = ${fromBase(project.results.T, QUANTITIES.TRANSMISSIVITY).toFixed(1)} ${unitLabel(QUANTITIES.TRANSMISSIVITY)}`
-                  : ""}
-                {conductivityOf(project) !== null
-                  ? ` · k = ${formatValue(fromBase(conductivityOf(project), QUANTITIES.CONDUCTIVITY))} ${unitLabel(QUANTITIES.CONDUCTIVITY)}`
-                  : ""}
-              </Text>
             </TouchableOpacity>
 
-            <View style={styles.projectActions}>
-              <View style={styles.actionSpacer} />
+            {/* Что внутри журнала — тип опыта, сколько замеров и получен ли
+                результат — стоит в одной строке с кнопками. Под кнопками
+                раньше оставалась пустая полоса во всю ширину карточки, и
+                список из пяти журналов не помещался на экран.
+
+                У нагнетания и налива замеров в этом смысле нет: данные
+                лежат ступенями и полями формы. Писать им «замеров нет»
+                значило бы называть заполненный журнал пустым, поэтому там
+                сразу стоит посчитанный коэффициент фильтрации */}
+            <View style={styles.projectFoot}>
+              <TouchableOpacity
+                style={styles.projectMetaTap}
+                onPress={() => openProject(project)}
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.projectMeta,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  {projectMeta(project).map((part, partIndex) => (
+                    <React.Fragment key={partIndex}>
+                      {partIndex > 0 ? " · " : ""}
+                      <Text
+                        style={part.numeric ? styles.projectMetaNumber : null}
+                      >
+                        {part.text}
+                      </Text>
+                    </React.Fragment>
+                  ))}
+                </Text>
+              </TouchableOpacity>
+
+              <View style={styles.projectActions}>
 
               <TouchableOpacity
                 style={styles.actionButton}
@@ -682,6 +802,7 @@ export default function ProjectsScreen({ navigation }) {
                   color={theme.colors.error}
                 />
               </TouchableOpacity>
+              </View>
             </View>
           </AppearIn>
         ))
@@ -749,8 +870,9 @@ const styles = StyleSheet.create({
   },
   createButtonText: {
     color: "#FFFFFF",
+    fontFamily: fontFamily.bold,
     fontSize: 15,
-    fontWeight: "700",
+    lineHeight: 20,
   },
   listHeader: {
     marginTop: spacing.xl,
@@ -770,54 +892,80 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
   },
   importButtonText: {
+    fontFamily: fontFamily.semibold,
     fontSize: 13,
-    fontWeight: "600",
+    lineHeight: 18,
   },
   empty: {
     alignItems: "center",
     paddingVertical: spacing.xxl,
+    paddingHorizontal: spacing.xl,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
   },
   emptyText: {
     marginTop: spacing.md,
+    fontFamily: fontFamily.semibold,
+  },
+  emptyHint: {
+    marginTop: spacing.xs,
+    maxWidth: 300,
+    textAlign: "center",
   },
   projectRow: {
-    padding: spacing.lg,
+    paddingTop: 14,
+    paddingBottom: 6,
+    paddingHorizontal: spacing.lg,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: spacing.md,
+    marginBottom: 11,
   },
   projectTop: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "baseline",
     justifyContent: "space-between",
   },
   projectName: {
     flex: 1,
+    minWidth: 0,
     marginRight: spacing.md,
   },
   projectDate: {
     ...type.numeric,
-    fontSize: 12,
+    fontSize: 11.5,
+    lineHeight: 16,
+  },
+  // Строка под названием: слева что внутри журнала, справа кнопки. Кнопки
+  // прижаты к правому краю карточки, а строка забирает всё остальное место
+  projectFoot: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 2,
+    gap: spacing.sm,
+  },
+  projectMetaTap: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: spacing.sm,
   },
   projectMeta: {
-    ...type.numeric,
+    ...type.caption,
+    fontSize: 12.5,
+    lineHeight: 17,
+  },
+  projectMetaNumber: {
+    fontFamily: fontFamily.monoMedium,
     fontSize: 12,
-    marginTop: 4,
   },
   projectActions: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: spacing.md,
+    marginRight: -spacing.sm,
   },
   actionButton: {
-    width: 34,
-    height: 34,
+    width: 36,
+    height: 36,
     alignItems: "center",
     justifyContent: "center",
-  },
-  actionSpacer: {
-    flex: 1,
   },
 });

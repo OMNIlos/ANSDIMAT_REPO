@@ -28,7 +28,7 @@ import { useTheme } from 'react-native-paper';
 import I18n from '../Localization';
 import useChartViewport from './chart/useChartViewport';
 import ChartToolbar from './chart/ChartToolbar';
-import { spacing, radius, type } from '../theme';
+import { spacing, radius, type, fontFamily } from '../theme';
 
 const HEIGHT = 250;
 // Те же пределы, что у основного графика: плоскости одинаковые, и разные
@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
   },
   emptyTitle: {
-    fontWeight: '700',
+    fontFamily: fontFamily.bold,
     textAlign: 'center',
   },
   emptyText: {

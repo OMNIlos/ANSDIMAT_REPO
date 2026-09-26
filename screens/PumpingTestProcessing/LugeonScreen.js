@@ -57,7 +57,7 @@ import {
   useCalcUnits,
 } from '../calculator/shared';
 import OfrTestShell, { useOfrParams, useParamFields } from './OfrTestShell';
-import { spacing, radius, type, numericAt } from '../../theme';
+import { spacing, radius, type, numericAt, fontFamily } from '../../theme';
 
 /** Литров в кубометре: средний расход показывается в л/мин, как в отчёте */
 const L_PER_M3 = 1000;
@@ -312,13 +312,21 @@ function Stat({ label, value }) {
   const theme = useTheme();
   return (
     <View style={styles.stat}>
-      <Text
-        style={[type.caption, { color: theme.colors.faint }]}
-        numberOfLines={1}
-      >
-        {label}
+      {/* Подпись до двух строк и прижата к числу снизу: «Средний расход,
+          л/мин» в треть ширины телефона одной строкой не помещалась и
+          обрезалась многоточием. Короткие подписи стоят на той же линии,
+          что и последняя строка длинной, и числа всех трёх колонок — вровень */}
+      <View style={styles.statLabelBox}>
+        <Text
+          style={[type.caption, styles.statLabel, { color: theme.colors.faint }]}
+          numberOfLines={2}
+        >
+          {label}
+        </Text>
+      </View>
+      <Text style={[numericAt(14), { color: theme.colors.text }]} numberOfLines={1}>
+        {value}
       </Text>
-      <Text style={[numericAt(14), { color: theme.colors.text }]}>{value}</Text>
     </View>
   );
 }
@@ -636,7 +644,7 @@ export default function LugeonScreen({ route }) {
           <SectionLabel>{I18n.t('lugeonStagesTitle')}</SectionLabel>
           {/* Пояснение стоит до карточек, а не после: читают его перед тем,
               как заполнять поля, а не разбираясь, почему расход отрицательный */}
-          <Note>{I18n.t('lugeonReadingsHint')}</Note>
+          <Note lead>{I18n.t('lugeonReadingsHint')}</Note>
           {stages.map((stage, index) => (
             <StageCard
               key={index}
@@ -667,8 +675,8 @@ export default function LugeonScreen({ route }) {
               { borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
             ]}
           >
-            <MaterialIcons name="add" size={16} color={theme.colors.primary} />
-            <Text style={[type.caption, { color: theme.colors.primary }]}>
+            <MaterialIcons name="add" size={18} color={theme.colors.primaryAccent} />
+            <Text style={[styles.addStageText, { color: theme.colors.primaryAccent }]}>
               {I18n.t('lugeonAddStage')}
             </Text>
           </Pressable>
@@ -711,10 +719,11 @@ export default function LugeonScreen({ route }) {
               { label: I18n.t('lugeonMeanLu'), value: formatValue(result.meanLu) },
             ]}
           />
-          <Card>
+          <Card style={styles.afterResult}>
             <StatRow
               label={I18n.t('lugeonPatternTitle')}
               value={I18n.t(patternKey)}
+              text
             />
             <StatRow
               label={I18n.t('lugeonRepresentative')}
@@ -731,10 +740,12 @@ export default function LugeonScreen({ route }) {
                 <StatRow
                   label={I18n.t('lugeonRockClass')}
                   value={I18n.t(`lugeonRock${rockKey}`)}
+                  text
                 />
                 <StatRow
                   label={I18n.t('lugeonPermeabilityTitle')}
                   value={I18n.t(`lugeonPermeability${rockKey}`)}
+                  text
                 />
               </>
             ) : null}
@@ -759,6 +770,11 @@ export default function LugeonScreen({ route }) {
 }
 
 const styles = StyleSheet.create({
+  // Карточка подробностей под карточкой результата: без зазора синяя и
+  // тёмная сливались краями в один неровный блок
+  afterResult: {
+    marginTop: spacing.md,
+  },
   firstLabel: {
     marginTop: 0,
   },
@@ -800,8 +816,10 @@ const styles = StyleSheet.create({
   readingIndex: {
     textAlign: 'center',
   },
+  // Ширина под восемь знаков: нарастающий итог расходомера в литрах —
+  // пять-шесть цифр и дробная часть, и в 66 px «12707.5» обрезалось до «12707.»
   reading: {
-    width: 66,
+    width: 84,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.chip,
     paddingHorizontal: spacing.sm,
@@ -817,7 +835,16 @@ const styles = StyleSheet.create({
   },
   stat: {
     flex: 1,
+    minWidth: 0,
     gap: 2,
+  },
+  statLabelBox: {
+    minHeight: 34,
+    justifyContent: 'flex-end',
+  },
+  statLabel: {
+    fontSize: 12,
+    lineHeight: 16,
   },
   stageWarning: {
     marginTop: spacing.sm,
@@ -861,10 +888,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.xs,
+    gap: 6,
     paddingVertical: spacing.md,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.card,
     marginBottom: spacing.md,
+  },
+  addStageText: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 14,
+    lineHeight: 19,
   },
 });

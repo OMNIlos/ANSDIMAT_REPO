@@ -13,7 +13,15 @@ import I18n from '../../Localization';
 import { convertToAllUnits, FILTRATION_UNITS } from '../../calc/units';
 import AppearIn from '../../components/ui/AppearIn';
 import { type, spacing, fontFamily } from '../../theme';
-import { Card, OptionRow, SectionLabel, parseNumber, formatValue, styles as shared } from './shared';
+import {
+  Card,
+  NO_AUTOFILL,
+  OptionRow,
+  SectionLabel,
+  parseNumber,
+  formatValue,
+  styles as shared,
+} from './shared';
 
 export default function FiltrationTab() {
   const theme = useTheme();
@@ -41,6 +49,7 @@ export default function FiltrationTab() {
                 value={kValue}
                 onChangeText={setKValue}
                 keyboardType="decimal-pad"
+                {...NO_AUTOFILL}
                 placeholder="—"
                 placeholderTextColor={theme.colors.faint}
                 selectionColor={theme.colors.primary}

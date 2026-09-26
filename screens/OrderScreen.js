@@ -9,6 +9,9 @@
  * Вёрстка та же, что на остальных экранах: карточки на поверхности, подпись
  * слева, значение справа, ошибка под своим полем. Раньше экран был собран
  * на компонентах react-native-paper и выглядел чужим среди прочих.
+ *
+ * Тарифы — Pro, Lite, Net, Edu, как на странице заказа сайта; чем они
+ * различаются, объясняет ссылка на неё.
  */
 
 import React, { useContext, useState } from 'react';
@@ -25,7 +28,9 @@ import { useTheme } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import I18n from '../Localization';
 import { LanguageContext } from '../LanguageContext';
-import { spacing, radius, type, elevation } from '../theme';
+import { spacing, radius, type, elevation, fontFamily } from '../theme';
+import { useContentMaxWidth } from '../lib/appPrefs';
+import { orderUrl } from '../lib/siteLinks';
 
 /** Поля формы: часть обязательна, часть нет */
 const FIELDS = [
@@ -36,13 +41,24 @@ const FIELDS = [
   { key: 'address', labelKey: 'address', fallback: 'Адрес' },
 ];
 
+/**
+ * Тарифы — те же, что на странице заказа сайта. Название тарифа одно на все
+ * языки, переводится только пояснение под ним
+ */
 const LICENSES = [
-  { key: 'single', labelKey: 'singleLicense', fallback: 'Однопользовательская' },
-  { key: 'multi', labelKey: 'multiLicense', fallback: 'Многопользовательская' },
+  { key: 'pro', name: 'Pro', descKey: 'licenseProDesc', fallback: 'Профессиональная' },
+  { key: 'lite', name: 'Lite', descKey: 'licenseLiteDesc', fallback: 'Ограниченная' },
+  { key: 'net', name: 'Net', descKey: 'licenseNetDesc', fallback: 'Сетевая' },
+  { key: 'edu', name: 'Edu', descKey: 'licenseEduDesc', fallback: 'Учебная' },
 ];
+
+/** Пояснение к тарифу на языке интерфейса */
+const licenseDesc = (license) => I18n.t(license.descKey, { defaultValue: license.fallback });
 
 export default function OrderScreen() {
   const theme = useTheme();
+  // Колонка 720 px — если включена «Адаптация под планшет»
+  const column = useContentMaxWidth(720);
   const c = theme.colors;
   const { locale } = useContext(LanguageContext);
 
@@ -52,7 +68,7 @@ export default function OrderScreen() {
     email: '',
     phone: '',
     address: '',
-    licenseType: 'single',
+    licenseType: 'pro',
     comment: '',
   });
   const [errors, setErrors] = useState({});
@@ -92,7 +108,7 @@ export default function OrderScreen() {
       `${I18n.t('email')}: ${form.email}`,
       `${I18n.t('phone')}: ${form.phone}`,
       `${I18n.t('address')}: ${form.address}`,
-      `${I18n.t('licenseType')}: ${I18n.t(license.labelKey, { defaultValue: license.fallback })}`,
+      `${I18n.t('licenseType')}: ${license.name} (${licenseDesc(license)})`,
       `${I18n.t('comment')}: ${form.comment}`,
     ].join('\n');
 
@@ -151,7 +167,7 @@ export default function OrderScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: c.background }]}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.content, { maxWidth: column ?? '100%' }]} keyboardShouldPersistTaps="handled">
         <Text style={[type.caption, styles.intro, { color: c.textSecondary }]}>
           {I18n.t('orderIntro', {
             defaultValue:
@@ -173,9 +189,10 @@ export default function OrderScreen() {
           {I18n.t('licenseType', { defaultValue: 'Тип лицензии' })}
         </Text>
 
-        <View style={styles.licenseRow}>
+        <View style={styles.licenseGrid}>
           {LICENSES.map((item) => {
             const active = item.key === form.licenseType;
+            const desc = licenseDesc(item);
             return (
               <TouchableOpacity
                 key={item.key}
@@ -189,14 +206,37 @@ export default function OrderScreen() {
                 ]}
                 accessibilityRole="radio"
                 accessibilityState={{ selected: active }}
+                accessibilityLabel={`${item.name} — ${desc}`}
               >
-                <Text style={[styles.licenseText, { color: active ? '#FFFFFF' : c.textSecondary }]}>
-                  {I18n.t(item.labelKey, { defaultValue: item.fallback })}
+                <Text style={[styles.licenseName, { color: active ? '#FFFFFF' : c.text }]}>
+                  {item.name}
+                </Text>
+                <Text
+                  style={[
+                    styles.licenseDesc,
+                    { color: active ? 'rgba(255,255,255,0.85)' : c.textSecondary },
+                  ]}
+                >
+                  {desc}
                 </Text>
               </TouchableOpacity>
             );
           })}
         </View>
+
+        {/* Чем тарифы различаются и сколько стоят — на сайте: цены
+            меняются, и держать их в приложении значило бы показывать старые */}
+        <TouchableOpacity
+          style={styles.tariffsLink}
+          onPress={() => Linking.openURL(orderUrl(locale)).catch(() => {})}
+          accessibilityRole="link"
+          accessibilityLabel={I18n.t('tariffsLink', { defaultValue: 'Подробнее о тарифах на сайте' })}
+        >
+          <MaterialIcons name="open-in-new" size={16} color={c.secondary} />
+          <Text style={[styles.tariffsLinkText, { color: c.secondary }]}>
+            {I18n.t('tariffsLink', { defaultValue: 'Подробнее о тарифах на сайте' })}
+          </Text>
+        </TouchableOpacity>
 
         <View
           style={[
@@ -220,6 +260,7 @@ export default function OrderScreen() {
           style={[styles.submit, elevation.brandButton, { backgroundColor: c.primary }]}
           onPress={handleSubmit}
           accessibilityRole="button"
+          accessibilityLabel={I18n.t('submit', { defaultValue: 'Отправить' })}
         >
           <MaterialIcons name="send" size={18} color="#FFFFFF" />
           <Text style={styles.submitText}>{I18n.t('submit', { defaultValue: 'Отправить' })}</Text>
@@ -263,9 +304,15 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     marginRight: spacing.md,
   },
+  // Имя, организация, почта и адрес — слова, а не числа: гарнитурой
+  // интерфейса. Моноширинная делала заявку похожей на распечатку терминала.
+  // Нулевой минимум — чтобы поле на вебе не держало ширину в двадцать знаков
+  // и не выдавливало подпись
   input: {
-    ...type.numeric,
+    ...type.body,
+    fontFamily: fontFamily.medium,
     flex: 1,
+    minWidth: 0,
     fontSize: 15,
     textAlign: 'right',
     paddingVertical: 2,
@@ -278,22 +325,44 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl,
     marginBottom: spacing.sm,
   },
-  // Варианты идут друг под другом: «Многопользовательская» — одно длинное
-  // слово, в половину ширины экрана оно не переносится и обрезается
-  licenseRow: {
+  // Четыре тарифа сеткой два на два: названия короткие, а пояснение под
+  // каждым умещается в половину ширины даже на узком телефоне
+  licenseGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
   },
   licenseChip: {
+    flexGrow: 1,
+    flexBasis: '45%',
     alignItems: 'center',
     paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     borderRadius: radius.chip,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  licenseText: {
-    fontSize: 13.5,
-    fontWeight: '600',
+  licenseName: {
+    fontSize: 16,
+    fontFamily: fontFamily.bold,
     textAlign: 'center',
+  },
+  licenseDesc: {
+    marginTop: 2,
+    fontSize: 12.5,
+    fontFamily: fontFamily.regular,
+    textAlign: 'center',
+  },
+  tariffsLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    marginTop: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  tariffsLinkText: {
+    fontSize: 14,
+    fontFamily: fontFamily.semibold,
   },
   commentCard: {
     marginTop: spacing.lg,
@@ -317,7 +386,7 @@ const styles = StyleSheet.create({
   submitText: {
     color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '700',
+    fontFamily: fontFamily.bold,
   },
   status: {
     ...type.body,

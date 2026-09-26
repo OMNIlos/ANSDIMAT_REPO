@@ -42,7 +42,7 @@ export const DEFAULT_SLUG_PARAMS = {
   rw: 0.05,   // радиус фильтра r_w, м
   rc: 0.05,   // радиус обсадной трубы r_c, м
   lw: 2,      // длина фильтра l_w, м
-  z: 5,       // расстояние от УГВ до низа фильтра, м
+  lt: 5,      // расстояние от УГВ до середины фильтра LT_w, м
   m: 10,      // обводнённая мощность пласта, м
   s0: 0,      // скачок понижения s⁰, м
 };
@@ -65,22 +65,27 @@ export const DEFAULT_LUGEON_PARAMS = {
 };
 
 /**
- * Налив в шурф в зону аэрации (формула Биндемана)
+ * Налив в шурф в зону аэрации (Болдырев и Биндеман)
  *
  * Слой воды в шурфе по методу держат около 10 см — отсюда `head`. Расход
  * можно замерить напрямую (`flow`) или получить из налитого объёма и
  * времени; заданный напрямую важнее, см. calc/vadoseFill.js.
+ *
+ * По умолчанию считается по Болдыреву (13.68): ему нужны только объём с
+ * интервалом и площадь шурфа. Биндеман (13.69) точнее, но требует ещё три
+ * величины, и начинать с формы, где половина полей пустая, незачем — метод
+ * переключается первым же выбором на экране.
  */
 export const DEFAULT_VADOSE_PARAMS = {
-  volume: 0,          // налитый объём ΔV, м³
-  interval: 10,       // интервал времени Δt, мин
-  flow: 0,            // установившийся расход Q, м³/сут; 0 — считать из объёма
-  area: 1,            // площадь шурфа F, м²
-  head: 0.1,          // высота столба воды в шурфе H, м
-  depth: 0,           // глубина зоны просачивания z, м
-  capillary: 0,       // высота капиллярного поднятия h_c, м
-  useCapillary: true, // учитывать капиллярные силы
-  lithologyId: null,  // выбранная порода справочника, если h_c взят из него
+  volume: 0,           // налитый объём ΔV, м³
+  interval: 10,        // интервал времени Δt, мин
+  flow: 0,             // установившийся расход Q, м³/сут; 0 — считать из объёма
+  area: 1,             // площадь шурфа F, м²
+  head: 0.1,           // высота столба воды в шурфе H, м
+  depth: 0,            // глубина зоны просачивания z, м
+  capillary: 0,        // высота капиллярного поднятия h_c, м
+  useCapillary: false, // учитывать капиллярные силы (Биндеман)
+  lithologyId: null,   // выбранная порода справочника, если h_c взят из него
 };
 
 /** Наборы по видам ОФР; у откачек своих параметров нет */
@@ -175,6 +180,26 @@ function normalizeStage(stage) {
  * @param {string|Object|null} stored - JSON из базы или уже разобранный объект
  * @returns {Object|null} набор величин или null, если у вида их нет
  */
+/**
+ * Положение фильтра экспресс-опробования из записи любого возраста
+ *
+ * До того как поле стало «Верх/Низ», журнал хранил z — расстояние до низа
+ * фильтра. Читать такое z как середину значило бы поднять фильтр на половину
+ * длины и молча изменить давно посчитанный k, поэтому старая запись
+ * пересчитывается: LT_w = z − l_w/2. Длина берётся из той же записи, а не из
+ * набора по умолчанию, иначе пересчёт вышел бы не про эту скважину.
+ *
+ * @param {Object} raw - запись из базы или файла
+ * @param {Object} base - набор величин по умолчанию
+ * @returns {number} расстояние от УГВ до середины фильтра, м
+ */
+function slugFilterMiddle(raw, base) {
+  if (raw.lt !== undefined) return toNumber(raw.lt, base.lt);
+  if (raw.z === undefined) return base.lt;
+  const lw = toNumber(raw.lw, base.lw);
+  return toNumber(raw.z, base.lt + lw / 2) - lw / 2;
+}
+
 export function parseParams(ofrType, stored) {
   const base = defaultParams(ofrType);
   if (!base) return null;
@@ -217,7 +242,11 @@ export function parseParams(ofrType, stored) {
       head: toNumber(raw.head, base.head),
       depth: toNumber(raw.depth, base.depth),
       capillary: toNumber(raw.capillary, base.capillary),
-      useCapillary: raw.useCapillary !== false,
+      // Метод пишется в журнал явно, и умолчание здесь — Болдырев: набор без
+      // этого поля пришёл либо из файла, собранного руками, либо из journal
+      // старее самого выбора метода, и достраивать по нему Биндемана значит
+      // подставить в расчёт незаполненные слой воды и глубину просачивания
+      useCapillary: raw.useCapillary === true,
       lithologyId:
         typeof raw.lithologyId === 'string' ? raw.lithologyId : null,
     };
@@ -227,7 +256,7 @@ export function parseParams(ofrType, stored) {
     rw: toNumber(raw.rw, base.rw),
     rc: toNumber(raw.rc, base.rc),
     lw: toNumber(raw.lw, base.lw),
-    z: toNumber(raw.z, base.z),
+    lt: slugFilterMiddle(raw, base),
     m: toNumber(raw.m, base.m),
     s0: toNumber(raw.s0, base.s0),
   };
@@ -249,7 +278,7 @@ export const PARAM_QUANTITIES = {
     rw: QUANTITIES.DISTANCE,
     rc: QUANTITIES.DISTANCE,
     lw: QUANTITIES.DISTANCE,
-    z: QUANTITIES.DISTANCE,
+    lt: QUANTITIES.DISTANCE,
     m: QUANTITIES.DISTANCE,
     s0: QUANTITIES.DRAWDOWN,
   },

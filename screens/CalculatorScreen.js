@@ -46,6 +46,7 @@ import WhpaTab from './calculator/WhpaTab';
 import { styles as shared } from './calculator/shared';
 import useReduceMotion from '../hooks/useReduceMotion';
 import { spacing, radius, fontFamily, MENU_BAR_HEIGHT } from '../theme';
+import { useContentMaxWidth } from '../lib/appPrefs';
 
 const TABS = [
   { key: 'flow', labelKey: 'tabFlow', Component: FlowTab },
@@ -54,6 +55,19 @@ const TABS = [
   { key: 'forecast', labelKey: 'tabForecast', Component: ForecastTab },
   { key: 'pit', labelKey: 'tabPit', Component: PitTab },
   { key: 'whpa', labelKey: 'tabWhpa', Component: WhpaTab },
+];
+
+/**
+ * Раскладка вкладок по рядам
+ *
+ * Два ряда по три, как попросил заказчик: при переносе «как получится» меню
+ * вставало в три ряда и съедало треть экрана до первого поля. Котлован стоит
+ * в первом ряду рядом с пересчётами, ЗСО — во втором, после расчёта
+ * понижения; порядок самих расчётов (TABS) от этого не меняется.
+ */
+const TAB_ROWS = [
+  ['flow', 'filtration', 'pit'],
+  ['params', 'forecast', 'whpa'],
 ];
 
 /** Длительность перекраски вкладки, мс */
@@ -105,7 +119,16 @@ function Tab({ label, selected, onPress }) {
         pointerEvents="none"
         style={[styles.tabFill, { backgroundColor: theme.colors.primary }, fill]}
       />
-      <Animated.Text style={[styles.tabText, text]}>{label}</Animated.Text>
+      {/* Подпись в одну строку: на узком телефоне или с крупным шрифтом она
+          ужимается, а не переносится и не раздувает ряд */}
+      <Animated.Text
+        style={[styles.tabText, text]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.8}
+      >
+        {label}
+      </Animated.Text>
     </Pressable>
   );
 }
@@ -122,8 +145,10 @@ export default function CalculatorScreen() {
   const content = useRef(null);
   const fade = useSharedValue(1);
 
-  // Та же ширина, что у карточек: контент ограничен 720 px и отбит полями
-  const contentWidth = Math.min(width, 720) - spacing.lg * 2;
+  // Та же ширина, что у карточек: контент ограничен 720 px и отбит полями.
+  // Без «Адаптации под планшет» колонки нет — содержимое во всю ширину
+  const column = useContentMaxWidth(720);
+  const contentWidth = Math.min(width, column ?? width) - spacing.lg * 2;
   const active = TABS.find((item) => item.key === tab) || TABS[0];
   const ActiveTab = active.Component;
 
@@ -151,20 +176,30 @@ export default function CalculatorScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <View style={[styles.tabBar, { borderBottomColor: theme.colors.border }]}>
-        {TABS.map((item) => (
-          <Tab
-            key={item.key}
-            label={I18n.t(item.labelKey)}
-            selected={item.key === tab}
-            onPress={() => selectTab(item.key)}
-          />
-        ))}
+        <View style={[styles.tabRows, { maxWidth: column ?? '100%' }]}>
+          {TAB_ROWS.map((row, rowIndex) => (
+            <View key={row.join('-')} style={styles.tabRow} testID={`calc-tab-row-${rowIndex}`}>
+              {row.map((key) => {
+                const item = TABS.find((entry) => entry.key === key);
+                return (
+                  <Tab
+                    key={item.key}
+                    label={I18n.t(item.labelKey)}
+                    selected={item.key === tab}
+                    onPress={() => selectTab(item.key)}
+                  />
+                );
+              })}
+            </View>
+          ))}
+        </View>
       </View>
 
       <ScrollView
         ref={content}
         contentContainerStyle={[
           shared.content,
+          { maxWidth: column ?? '100%' },
           // Плавающее меню перекрывает низ экрана: последняя карточка обязана
           // подниматься над ним, иначе результат прячется под кнопками
           { paddingBottom: Math.max(insets.bottom, 26) + MENU_BAR_HEIGHT + spacing.xl },
@@ -181,17 +216,30 @@ export default function CalculatorScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Меню плотное: ряды почти вплотную, поля тоньше прежних — два ряда
+  // занимают меньше, чем раньше занимал один ряд с отступами
   tabBar: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  tabRows: {
+    width: '100%',
+    alignSelf: 'center',
+    gap: spacing.xs,
+  },
+  tabRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  // Вкладки делят ряд между собой: свободное место раздаётся поровну, и ряды
+  // выглядят собранными, а не обрывками разной длины
   tab: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+    flexGrow: 1,
+    flexShrink: 1,
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: radius.chip,
   },
   tabFill: {

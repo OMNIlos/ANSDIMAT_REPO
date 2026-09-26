@@ -1,20 +1,55 @@
 /**
  * Контакты
  *
- * Три представительства и общая поддержка. Каждая строка — действие: почта
- * открывает письмо, телефон набирает номер, имя ведёт в профиль.
+ * Два офиса и техподдержка. Каждая строка — действие: адрес открывает карту,
+ * телефон набирает номер, почта открывает письмо.
+ *
+ * Имён сотрудников здесь нет намеренно — по просьбе заказчика экран говорит
+ * от лица офисов, а не людей.
  *
  * Экран заменил ссылку `mailto:` из «Справки»: на телефоне без настроенного
  * почтового клиента она молча не срабатывала, и «Связаться с нами» выглядело
  * как сломанная кнопка. Здесь адреса видны, их можно скопировать вручную.
  */
 
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from 'react-native';
+import React, { useContext } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Linking,
+  Platform,
+} from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import I18n from '../Localization';
+import { LanguageContext } from '../LanguageContext';
 import { spacing, radius, type, elevation, fontFamily } from '../theme';
+import { useContentMaxWidth } from '../lib/appPrefs';
+import { siteUrl } from '../lib/siteLinks';
+
+/** Адрес международного офиса пишется одинаково на обоих языках */
+const AUSTRALIA_ADDRESS = '16 Newton Street, Bayswater 6053, WA, Australia';
+
+/**
+ * Ссылка на адрес в картах
+ *
+ * На Android geo: открывает то картографическое приложение, что стоит у
+ * человека, на iOS — Apple Maps, в браузере — OpenStreetMap.
+ *
+ * @param {string} address - адрес строкой
+ * @returns {string} ссылка
+ */
+function mapUrl(address) {
+  const query = encodeURIComponent(address);
+  return Platform.select({
+    android: `geo:0,0?q=${query}`,
+    ios: `https://maps.apple.com/?q=${query}`,
+    default: `https://www.openstreetmap.org/search?query=${query}`,
+  });
+}
 
 /**
  * Открывает ссылку, молча пропуская отказ системы
@@ -29,16 +64,22 @@ function open(url) {
 
 export default function ContactUsScreen() {
   const theme = useTheme();
+  const { locale } = useContext(LanguageContext);
+  // Колонка 720 px — если включена «Адаптация под планшет»
+  const column = useContentMaxWidth(720);
   const c = theme.colors;
+
+  const russiaAddress = I18n.t('russiaAddress', {
+    defaultValue: 'РФ, Санкт-Петербург, Средний проспект В.О., д.41',
+  });
 
   const offices = [
     {
       key: 'australia',
       title: I18n.t('australiaTitle', { defaultValue: 'Австралия' }),
-      person: I18n.t('anastasiaBoronina', { defaultValue: 'Анастасия Боронина' }),
-      personUrl: 'https://www.linkedin.com/in/anastasia-boronina-48884431',
-      org: I18n.t('nevaGroundwaterConsulting', { defaultValue: 'Neva Groundwater Consulting' }),
+      office: I18n.t('australiaOffice', { defaultValue: 'Международный офис АНСДИМАТ' }),
       rows: [
+        { icon: 'place', label: AUSTRALIA_ADDRESS, url: mapUrl(AUSTRALIA_ADDRESS) },
         { icon: 'phone', label: '+61 478 633 429', url: 'tel:+61478633429' },
         { icon: 'mail-outline', label: 'support@ansdimat.com', url: 'mailto:support@ansdimat.com' },
       ],
@@ -46,11 +87,10 @@ export default function ContactUsScreen() {
     {
       key: 'russia',
       title: I18n.t('russiaTitle', { defaultValue: 'Россия' }),
-      person: I18n.t('antonNikulenkov', { defaultValue: 'Антон Никуленков' }),
-      personUrl: 'https://www.linkedin.com/in/anton-nikulenkov-274157a5/',
-      org: I18n.t('instituteOfGeoecology', { defaultValue: 'Институт геоэкологии РАН' }),
+      office: I18n.t('russiaOffice', { defaultValue: 'Центральный офис разработки АНСДИМАТ' }),
       rows: [
-        { icon: 'place', label: I18n.t('russiaAddress', { defaultValue: 'Санкт-Петербург' }) },
+        { icon: 'place', label: russiaAddress, url: mapUrl(russiaAddress) },
+        { icon: 'phone', label: '+7 905 268 06 28', url: 'tel:+79052680628' },
         {
           icon: 'mail-outline',
           label: 'support-russia@ansdimat.com',
@@ -60,16 +100,21 @@ export default function ContactUsScreen() {
     },
     {
       key: 'support',
-      title: I18n.t('websiteSupport', { defaultValue: 'Поддержка сайта' }),
+      title: I18n.t('websiteSupport', { defaultValue: 'Сайт и техническая поддержка' }),
       rows: [
-        { icon: 'mail-outline', label: 'info@ansdimat.com', url: 'mailto:info@ansdimat.com' },
+        { icon: 'mail-outline', label: 'annik@ansdimat.com', url: 'mailto:annik@ansdimat.com' },
       ],
     },
   ];
 
+  const websiteLabel = I18n.t('goToWebsite', { defaultValue: 'Перейти на сайт' });
+
   return (
     <View style={[styles.container, { backgroundColor: c.background }]}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[styles.content, { maxWidth: column ?? '100%' }]}
+        showsVerticalScrollIndicator={false}
+      >
         {offices.map((office) => (
           <View
             key={office.key}
@@ -81,22 +126,19 @@ export default function ContactUsScreen() {
           >
             <Text style={[styles.eyebrow, { color: c.primaryAccent }]}>{office.title}</Text>
 
-            {!!office.person && (
-              <TouchableOpacity
-                onPress={() => office.personUrl && open(office.personUrl)}
-                disabled={!office.personUrl}
-                accessibilityRole={office.personUrl ? 'link' : 'text'}
-              >
-                <Text style={[type.cardTitle, { color: c.text }]}>{office.person}</Text>
-              </TouchableOpacity>
-            )}
-            {!!office.org && (
-              <Text style={[type.caption, styles.org, { color: c.textSecondary }]}>
-                {office.org}
-              </Text>
+            {!!office.office && (
+              <Text style={[type.cardTitle, { color: c.text }]}>{office.office}</Text>
             )}
 
-            <View style={[styles.rows, { borderTopColor: c.border }]}>
+            {/* Линия отделяет адрес, телефон и почту от названия офиса. У
+                карточки поддержки названия нет, и линия под одним
+                надзаголовком оставляла пустую полосу */}
+            <View
+              style={[
+                styles.rows,
+                office.office ? [styles.rowsDivided, { borderTopColor: c.border }] : null,
+              ]}
+            >
               {office.rows.map((row) => (
                 <TouchableOpacity
                   key={row.label}
@@ -121,15 +163,15 @@ export default function ContactUsScreen() {
           </View>
         ))}
 
+        {/* Сайт на языке приложения: русская версия лежит в /Ru/ */}
         <TouchableOpacity
           style={[styles.website, elevation.brandButton, { backgroundColor: c.primary }]}
-          onPress={() => open('https://www.ansdimat.com/')}
+          onPress={() => open(siteUrl(locale))}
           accessibilityRole="link"
+          accessibilityLabel={websiteLabel}
         >
           <MaterialIcons name="public" size={18} color="#FFFFFF" />
-          <Text style={styles.websiteText}>
-            {I18n.t('goToWebsite', { defaultValue: 'Перейти на сайт' })}
-          </Text>
+          <Text style={styles.websiteText}>{websiteLabel}</Text>
         </TouchableOpacity>
 
         <View style={{ height: 120 }} />
@@ -153,17 +195,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   eyebrow: {
-    fontFamily: fontFamily.mono,
-    fontSize: 10.5,
-    fontWeight: '600',
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
+    ...type.eyebrow,
     marginBottom: spacing.sm,
   },
-  org: {
-    marginTop: 2,
-  },
   rows: {
+    marginTop: spacing.xs,
+  },
+  rowsDivided: {
     marginTop: spacing.md,
     paddingTop: spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -190,7 +228,8 @@ const styles = StyleSheet.create({
   },
   websiteText: {
     color: '#FFFFFF',
+    fontFamily: fontFamily.bold,
     fontSize: 15,
-    fontWeight: '700',
+    lineHeight: 20,
   },
 });

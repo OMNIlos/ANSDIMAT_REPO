@@ -5,6 +5,11 @@
  * пальцем и возвращается пружиной. Отклик короткий: это подтверждение
  * нажатия, а не эффект.
  *
+ * Под мышью (веб-сборка в браузере) карточка приподнимается на пару пикселей:
+ * без этого курсор-«рука» оставался единственным признаком того, что блок
+ * нажимается, и интерфейс ощущался мёртвым. На касании наведения не бывает, и
+ * там ничего не меняется.
+ *
  * @param {Function} onPress - обработчик нажатия
  * @param {Object|Array} style - стиль контейнера
  * @param {number} [scale] - до какого масштаба сжимать (по умолчанию 0.97)
@@ -14,6 +19,7 @@
 import React from 'react';
 import { Pressable } from 'react-native';
 import Animated, {
+  Easing,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -26,6 +32,9 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 /** Пружина без раскачки: карточка возвращается собранно, а не подпрыгивает */
 const SPRING = { damping: 18, stiffness: 260, mass: 0.6 };
 
+/** На сколько пикселей карточка приподнимается под мышью */
+const HOVER_LIFT = 2;
+
 export default function PressableScale({
   onPress,
   onLongPress,
@@ -36,12 +45,27 @@ export default function PressableScale({
   ...rest
 }) {
   const pressed = useSharedValue(0);
+  const hovered = useSharedValue(0);
   const reduceMotion = useReduceMotion();
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 - pressed.value * (1 - scale) }],
+    transform: [
+      { translateY: -HOVER_LIFT * hovered.value },
+      { scale: 1 - pressed.value * (1 - scale) },
+    ],
     opacity: 1 - pressed.value * 0.12,
   }));
+
+  const setHovered = (value) => {
+    if (reduceMotion || disabled) {
+      hovered.value = 0;
+      return;
+    }
+    hovered.value = withTiming(value ? 1 : 0, {
+      duration: value ? 160 : 220,
+      easing: Easing.out(Easing.cubic),
+    });
+  };
 
   const setPressed = (value) => {
     if (reduceMotion) {
@@ -59,6 +83,8 @@ export default function PressableScale({
       onLongPress={onLongPress}
       onPressIn={() => setPressed(true)}
       onPressOut={() => setPressed(false)}
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
       disabled={disabled}
       style={[style, animatedStyle]}
       {...rest}

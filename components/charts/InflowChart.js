@@ -28,6 +28,8 @@ import { ChartCursor, useChartCursor } from './ChartCursor';
 function tickLabel(value) {
   if (!isFinite(value)) return '';
   const abs = Math.abs(value);
+  // Ноль — просто «0»: рядом с «5k» и «10k» запись «0.0» выглядела чужой
+  if (abs < 1e-9) return '0';
   if (abs >= 1e6) return `${(value / 1e6).toFixed(1)}M`;
   if (abs >= 1000) return `${Math.round(value / 1000)}k`;
   if (abs >= 10) return value.toFixed(0);

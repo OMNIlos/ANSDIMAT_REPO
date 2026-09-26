@@ -19,6 +19,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import I18n from '../../Localization';
 import { FIT_MODES } from './fitModes';
+import Segmented from '../ui/Segmented';
 import { spacing, type, fontFamily } from '../../theme';
 
 /**
@@ -70,43 +71,16 @@ export default function ChartToolbar({
   );
 
   const chips = (
-    <View
-      style={[
-        styles.fitRow,
-        { backgroundColor: c.surfaceSunken },
-      ]}
-    >
-      {[
+    <Segmented
+      size="sm"
+      style={styles.fitRow}
+      options={[
         { key: FIT_MODES.AUTO, label: I18n.t('fitAuto', { defaultValue: 'По всем точкам' }) },
         { key: FIT_MODES.FREEDOM, label: I18n.t('fitFreedom', { defaultValue: 'Свободная прямая' }) },
-      ].map((option) => {
-        const active = option.key === fitMode;
-        return (
-          <TouchableOpacity
-            key={option.key}
-            onPress={() => onFitModeChange?.(option.key)}
-            style={[
-              styles.fitChip,
-              active && { backgroundColor: c.surface },
-            ]}
-            accessibilityRole="button"
-            accessibilityState={{ selected: active }}
-          >
-            <Text
-              style={[
-                styles.fitChipText,
-                {
-                  color: active ? c.primaryAccent : c.textSecondary,
-                  fontWeight: active ? '700' : '600',
-                },
-              ]}
-            >
-              {option.label}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
+      ]}
+      value={fitMode}
+      onChange={(next) => onFitModeChange?.(next)}
+    />
   );
 
   const resetLinks = (
@@ -151,7 +125,7 @@ export default function ChartToolbar({
         pointerEvents="box-none"
       >
         <View style={[styles.floatCaption, { backgroundColor: c.surface }]}>
-          <Text style={[type.eyebrow, { color: c.textSecondary }]}>{caption}</Text>
+          <Text style={[type.label, { color: c.textSecondary }]} numberOfLines={1}>{caption}</Text>
         </View>
 
         <View style={styles.floatGroup} pointerEvents="box-none">
@@ -175,7 +149,7 @@ export default function ChartToolbar({
   return (
     <>
       <View style={styles.header}>
-        <Text style={[type.eyebrow, { color: c.textSecondary }]}>{caption}</Text>
+        <Text style={[type.label, { color: c.textSecondary }]} numberOfLines={1}>{caption}</Text>
         <View style={styles.headerActions}>
           {iconButton('remove', I18n.t('zoomOut', { defaultValue: 'Отдалить' }), onZoomOut)}
           {iconButton('add', I18n.t('zoomIn', { defaultValue: 'Приблизить' }), onZoomIn)}
@@ -213,26 +187,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   resetLink: {
+    fontFamily: fontFamily.bold,
     fontSize: 13,
-    fontWeight: '700',
+    lineHeight: 18,
     marginLeft: 2,
   },
   fitRow: {
-    flexDirection: 'row',
-    gap: 6,
-    padding: 4,
-    borderRadius: 12,
     marginBottom: spacing.sm,
-  },
-  fitChip: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 7,
-    borderRadius: 9,
-  },
-  fitChipText: {
-    fontFamily: fontFamily.semibold,
-    fontSize: 12.5,
   },
 
   // Плавающая раскладка

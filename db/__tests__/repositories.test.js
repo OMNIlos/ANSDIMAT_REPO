@@ -73,6 +73,7 @@ jest.mock('expo-sqlite', () => {
 import { closeDatabase } from '../index';
 import {
   listProjects,
+  countProjects,
   getProject,
   createProject,
   updateProject,
@@ -183,6 +184,18 @@ describeDb('проекты', () => {
 
   test('несуществующий проект возвращает null', async () => {
     expect(await getProject('нет-такого')).toBeNull();
+  });
+
+  test('число журналов для архива не считает удалённые', async () => {
+    // База в файле общая, поэтому сверяется прирост, а не число целиком
+    const before = await countProjects();
+
+    const kept = await createProject({ name: 'В архиве' });
+    const removed = await createProject({ name: 'Удалённый' });
+    await deleteProject(removed.id);
+
+    expect(await countProjects()).toBe(before + 1);
+    expect((await listProjects()).some((project) => project.id === kept.id)).toBe(true);
   });
 });
 

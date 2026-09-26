@@ -39,14 +39,41 @@ export function niceStep(range) {
 }
 
 /**
+ * Сколько знаков после запятой нужно подписям при данном шаге сетки
+ *
+ * Шаг всегда «красивый» — 1, 2 или 5 на степень десяти, — поэтому знаков
+ * ровно столько, сколько их у самого шага: 0.5 → один, 0.05 → два, 10 → ноль.
+ *
+ * @param {number} step - шаг делений
+ * @returns {number} число знаков
+ */
+function tickDecimals(step) {
+  return Math.max(0, Math.ceil(-Math.log10(step) - 1e-9));
+}
+
+/**
  * Форматирует число для подписи оси
  *
+ * С шагом сетки все подписи оси получают одно и то же число знаков. Без шага
+ * знаки зависели от величины самого числа, и одна ось читалась как
+ * «0, 0.500, 1.00, 1.50», а другая — «0, 10.0, 20.0»: разнобой, который на
+ * чертеже прибора выглядит небрежностью. Вызов без шага оставлен для подписей
+ * вне сетки.
+ *
  * @param {number} value - значение
+ * @param {number} [step] - шаг делений оси
  * @returns {string} подпись
  */
-export function formatTick(value) {
+export function formatTick(value, step) {
   if (!isFinite(value)) return '—';
   const abs = Math.abs(value);
+  if (isFinite(step) && step > 0) {
+    if (step < 1e-4 || abs >= 1e6) return value.toExponential(1);
+    // Деление, накопленное сложением шагов, приходит с хвостом двоичного
+    // округления: вместо нуля — 1e-17, и toFixed печатал бы «−0.0»
+    const clean = abs < step / 1e6 ? 0 : value;
+    return clean.toFixed(tickDecimals(step));
+  }
   if (abs === 0) return '0';
   if (abs < 0.001 || abs >= 100000) return value.toExponential(1);
   if (abs >= 100) return value.toFixed(0);
@@ -130,6 +157,7 @@ export function buildScene({ series, view, base, plot, mode, fit, anchors }) {
       name: one.name,
       color: one.color,
       role: one.role,
+      dashed: one.dashed,
       dots,
       // Ломаная своя у каждой серии: через точки разных скважин её вести
       // нельзя — на комбинированном графике получилась бы пила
@@ -174,7 +202,7 @@ export function buildScene({ series, view, base, plot, mode, fit, anchors }) {
     for (let v = Math.ceil(safe.x0 / stepX) * stepX; v <= safe.x1 + 1e-9; v += stepX) {
       const px = toX(v);
       if (px < plot.x - 0.5 || px > plot.x + plot.w + 0.5) continue;
-      xTicks.push({ x: px, label: formatTick(v) });
+      xTicks.push({ x: px, label: formatTick(v, stepX) });
       if (xTicks.length > MAX_TICKS) break;
     }
   }
@@ -184,7 +212,7 @@ export function buildScene({ series, view, base, plot, mode, fit, anchors }) {
   for (let v = Math.ceil(safe.y0 / stepY) * stepY; v <= safe.y1 + 1e-9; v += stepY) {
     const py = toY(v);
     if (py < plot.y - 0.5 || py > plot.y + plot.h + 0.5) continue;
-    yTicks.push({ y: py, label: formatTick(v) });
+    yTicks.push({ y: py, label: formatTick(v, stepY) });
     if (yTicks.length > MAX_TICKS) break;
   }
 

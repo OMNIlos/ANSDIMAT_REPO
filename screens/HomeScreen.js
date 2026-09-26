@@ -4,13 +4,17 @@
  * Воссоздаёт экран из дизайн-прототипа один в один:
  * - надзаголовок «Основной сценарий»
  * - герой-карточка «Создать откачку» (бордовый градиент + кривая понижения)
- * - три плитки: Калькулятор, Полевой дневник, Примеры и видео
+ * - плитки: Калькулятор, Полевой дневник, Карты гидроизогипс, Архив откачек
  * - баннер десктоп-версии
+ *
+ * «Архив откачек» стоит на месте «Примеров и видео»: видеоуроки живут на
+ * сайте, а вот где искать журнал, набитый на прошлой неделе, с главной было
+ * непонятно — на ней была только кнопка «Создать».
  *
  * @param {Object} navigation - объект навигации React Navigation
  */
 
-import React from 'react';
+import React, { useCallback, useContext, useState } from 'react';
 import {
   View,
   Text,
@@ -22,22 +26,53 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
+import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import I18n from '../Localization';
+import { LanguageContext } from '../LanguageContext';
 import DrawdownWave from '../components/DrawdownWave';
 import AppearIn from '../components/ui/AppearIn';
 import PressableScale from '../components/ui/PressableScale';
 import { spacing, radius, type, elevation, brandHeader, heroGradient, fontFamily } from '../theme';
+import { useContentMaxWidth } from '../lib/appPrefs';
+import { siteUrl } from '../lib/siteLinks';
+import { countProjects } from '../db/projects';
 
 export default function HomeScreen({ navigation }) {
   const theme = useTheme();
   const c = theme.colors;
+  const { locale } = useContext(LanguageContext);
   const { width } = useWindowDimensions();
 
-  // На планшетах ограничиваем ширину контента
+  // Сколько журналов в архиве. Перечитывается при каждом возврате на
+  // главную: журнал могли только что завести или удалить
+  const [archived, setArchived] = useState(null);
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      countProjects()
+        .then((total) => {
+          if (active) setArchived(total);
+        })
+        .catch(() => {
+          // База недоступна — плитка остаётся без числа
+        });
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
+
+  const archiveSubtitle = I18n.t('pumpingArchiveSub', {
+    defaultValue: 'Ранее созданные журналы',
+  });
+
+  // На планшетах ограничиваем ширину контента — если в настройках включена
+  // «Адаптация под планшет»; выключенная отдаёт содержимому всю ширину
   const isTablet = width >= 700;
-  const contentMaxWidth = isTablet ? 620 : undefined;
+  const column = useContentMaxWidth(620);
+  const contentMaxWidth = isTablet ? column : undefined;
 
   const tiles = [
     {
@@ -68,13 +103,15 @@ export default function HomeScreen({ navigation }) {
       onPress: () => navigation.navigate('Maps'),
     },
     {
-      id: 'examples',
-      title: I18n.t('examples', { defaultValue: 'Примеры и видео' }),
-      subtitle: I18n.t('examplesDesc', { defaultValue: 'Обучающие материалы' }),
-      icon: 'play-circle-outline',
+      id: 'archive',
+      title: I18n.t('pumpingArchive', { defaultValue: 'Архив откачек' }),
+      subtitle: archived === null ? archiveSubtitle : `${archiveSubtitle} · ${archived}`,
+      icon: 'inventory-2',
       family: 'material',
       tone: c.primary,
-      onPress: () => navigation.navigate('ExamplesAndVideos'),
+      // Тот же экран, что у «Создать откачку», но сразу на списке журналов:
+      // форма нового журнала остаётся выше, до неё один жест
+      onPress: () => navigation.navigate('PumpingMain', { focus: 'archive' }),
     },
   ];
 
@@ -155,8 +192,10 @@ export default function HomeScreen({ navigation }) {
           <AppearIn index={tiles.length + 2}>
           <PressableScale
             style={[styles.banner, { backgroundColor: c.surfaceSunken, borderColor: c.border }]}
-            onPress={() => Linking.openURL('https://www.ansdimat.com/')}
+            // Сайт на языке приложения: русская версия лежит в /Ru/
+            onPress={() => Linking.openURL(siteUrl(locale))}
             accessibilityRole="link"
+            accessibilityLabel={I18n.t('desktopBannerTitle', { defaultValue: 'Версия для Windows' })}
           >
             {/* Баннер собран как обычная плитка: тот же размер значка,
                 заголовок и подпись на своих местах. Раньше он выпадал из

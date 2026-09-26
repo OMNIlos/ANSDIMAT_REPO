@@ -127,8 +127,15 @@ describe('parseParams', () => {
     );
   });
 
-  test('учёт капиллярных сил выключается только явным false', () => {
-    expect(parseParams(OFR_TYPES.VADOSE, '{}').useCapillary).toBe(true);
+  test('учёт капиллярных сил включается только явным true', () => {
+    // Умолчание — Болдырев: набор без этого поля пришёл из журнала старее
+    // самого выбора метода, и достраивать по нему Биндемана значит подставить
+    // в расчёт незаполненные слой воды и глубину просачивания
+    expect(parseParams(OFR_TYPES.VADOSE, '{}').useCapillary).toBe(false);
+    expect(
+      parseParams(OFR_TYPES.VADOSE, JSON.stringify({ useCapillary: true }))
+        .useCapillary
+    ).toBe(true);
     expect(
       parseParams(OFR_TYPES.VADOSE, JSON.stringify({ useCapillary: false }))
         .useCapillary
@@ -165,14 +172,48 @@ describe('serializeParams', () => {
   });
 });
 
+describe('экспресс-опробование: положение фильтра', () => {
+  test('запись с низом фильтра пересчитывается в середину', () => {
+    // Журнал, сохранённый до того, как поле стало «Верх/Низ»: z = 12 при
+    // фильтре 5 м — это середина на 9.5 м
+    const params = parseParams(OFR_TYPES.SLUG, {
+      rw: 0.1,
+      rc: 0.05,
+      lw: 5,
+      z: 12,
+      m: 20,
+      s0: 1,
+    });
+    expect(params.lt).toBeCloseTo(9.5, 12);
+    expect(params.z).toBeUndefined();
+  });
+
+  test('пересчёт берёт длину фильтра из той же записи', () => {
+    // Не из набора по умолчанию: иначе середина вышла бы не про эту скважину
+    const params = parseParams(OFR_TYPES.SLUG, { lw: 8, z: 12 });
+    expect(params.lt).toBeCloseTo(8, 12);
+  });
+
+  test('новая запись читается как есть', () => {
+    const params = parseParams(OFR_TYPES.SLUG, { lw: 5, lt: 9.5 });
+    expect(params.lt).toBeCloseTo(9.5, 12);
+  });
+
+  test('без положения фильтра берётся умолчание', () => {
+    const params = parseParams(OFR_TYPES.SLUG, { lw: 5 });
+    expect(params.lt).toBe(defaultParams(OFR_TYPES.SLUG).lt);
+  });
+});
+
 describe('rebaseParams', () => {
   test('переводит поля по их величине', () => {
     const doubled = rebaseParams(
       OFR_TYPES.SLUG,
-      { rw: 0.05, rc: 0.05, lw: 2, z: 5, m: 10, s0: 1 },
+      { rw: 0.05, rc: 0.05, lw: 2, lt: 5, m: 10, s0: 1 },
       (value) => value * 2
     );
     expect(doubled.rw).toBe(0.1);
+    expect(doubled.lt).toBe(10);
     expect(doubled.s0).toBe(2);
   });
 

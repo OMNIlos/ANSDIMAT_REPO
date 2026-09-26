@@ -27,6 +27,7 @@ import { useUnits } from '../UnitsContext';
 import { QUANTITIES } from '../calc/units';
 import { IMPORT_ERRORS } from '../share/format';
 import { spacing, radius, fontFamily, elevation } from '../theme';
+import { AnimatedPressable, useDialogEntrance } from './ui/dialogMotion';
 
 /** Сообщение под каждый отказ: пользователю нужна причина, а не «ошибка» */
 const ERROR_KEYS = {
@@ -86,6 +87,8 @@ export default function ImportProjectDialog() {
   const { colors } = useTheme();
   const { unitLabel, fromBase } = useUnits();
   const { pending, busy, confirm, openExisting, dismiss } = useImport();
+  // Окно подрастает на место, как и подтверждения, см. ui/dialogMotion
+  const cardMotion = useDialogEntrance(!!pending);
 
   if (!pending) return null;
 
@@ -258,16 +261,17 @@ export default function ImportProjectDialog() {
           прервать импорт на середине нечем, и закрытие оставило бы журнал
           записанным наполовину */}
       <Pressable style={styles.backdrop} onPress={isBlocking ? undefined : dismiss}>
-        <Pressable
+        <AnimatedPressable
           style={[
             styles.card,
             elevation.raised,
             { backgroundColor: colors.surface, borderColor: colors.border },
+            cardMotion,
           ]}
           onPress={() => {}}
         >
           {renderBody()}
-        </Pressable>
+        </AnimatedPressable>
       </Pressable>
     </Modal>
   );

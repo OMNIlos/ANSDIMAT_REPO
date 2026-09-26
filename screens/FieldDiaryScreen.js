@@ -45,7 +45,8 @@ import {
   addAttachment,
   deleteAttachment,
 } from '../db/attachments';
-import { spacing, radius, type, elevation, pointTypeColors, numericAt } from '../theme';
+import { spacing, radius, type, elevation, pointTypeColors, numericAt, fontFamily } from '../theme';
+import { useContentMaxWidth, usePrefs } from '../lib/appPrefs';
 
 const TYPE_OPTIONS = [
   { key: POINT_TYPES.WELL, labelKey: 'pointTypeWell' },
@@ -180,6 +181,8 @@ function PointBadge({ items, colors }) {
 
 export default function FieldDiaryScreen() {
   const theme = useTheme();
+  // Колонка 720 px — если включена «Адаптация под планшет»; карта в ней же
+  const column = useContentMaxWidth(720);
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
@@ -231,6 +234,36 @@ export default function FieldDiaryScreen() {
       load();
     }, [load])
   );
+
+  // «Автоопределение координат» из настроек: открытый дневник сам встаёт на
+  // текущее место. Только если доступ к геопозиции уже выдан — запрос
+  // разрешения при каждом открытии экрана был бы навязчивым, его задаёт
+  // кнопка «моё местоположение». Молча: не вышло — карта остаётся где была.
+  // Один раз за открытие экрана, чтобы не уводить карту из-под руки
+  const { autoLocation } = usePrefs();
+  const autoLocated = useRef(false);
+  useEffect(() => {
+    if (!autoLocation || autoLocated.current) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const permission = await Location.getForegroundPermissionsAsync?.();
+        if (cancelled || permission?.status !== 'granted') return;
+        autoLocated.current = true;
+        const position = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy?.Balanced ?? Location.Accuracy?.High,
+        });
+        if (!cancelled && position?.coords) {
+          setCenter({ lat: position.coords.latitude, lon: position.coords.longitude });
+        }
+      } catch {
+        // Сигнала нет или доступ отозван — это не ошибка открытия дневника
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [autoLocation]);
 
   /**
    * Точки, у которых описание в поле разошлось с записанным в базе
@@ -422,7 +455,14 @@ export default function FieldDiaryScreen() {
         {/* Накладки позиционируются относительно этого контейнера, а он точно
             повторяет границы карты. Иначе на полях блока кнопки съезжали
             за её край */}
-        <View style={[styles.mapArea, mapFullscreen && styles.mapAreaFull]}>
+        <View
+          style={[
+            styles.mapArea,
+            mapFullscreen
+              ? styles.mapAreaFull
+              : [styles.mapAreaInline, { maxWidth: column ? column - spacing.lg * 2 : '100%' }],
+          ]}
+        >
         <FieldMap
           points={points}
           onPressMap={addPointAt}
@@ -493,7 +533,7 @@ export default function FieldDiaryScreen() {
         style={styles.scrollFade}
         pointerEvents="none"
       />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.content, { maxWidth: column ?? '100%' }]} keyboardShouldPersistTaps="handled">
 
         {/* Статистика */}
         <View style={styles.statsRow}>
@@ -505,7 +545,7 @@ export default function FieldDiaryScreen() {
           >
             <Text style={[styles.statValue, { color: theme.colors.text }]}>{stats.total}</Text>
             <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-              {I18n.t('pointsCount', { defaultValue: 'точек' })}
+              {I18n.t('pointsCount', { count: stats.total ?? 0, defaultValue: 'точек' })}
             </Text>
           </View>
           <View
@@ -516,7 +556,7 @@ export default function FieldDiaryScreen() {
           >
             <Text style={[styles.statValue, { color: theme.colors.text }]}>{stats.types}</Text>
             <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-              {I18n.t('typesCount', { defaultValue: 'типа' })}
+              {I18n.t('typesCount', { count: stats.types ?? 0, defaultValue: 'типов' })}
             </Text>
           </View>
           <View
@@ -801,6 +841,14 @@ const styles = StyleSheet.create({
   mapAreaFull: {
     flex: 1,
   },
+  // Свёрнутая карта — в той же колонке, что и список под ней. В широком окне
+  // она растягивалась во всю ширину, а карточки стояли узкой колонкой по
+  // центру, и экран разваливался на две разные сетки
+  mapAreaInline: {
+    width: '100%',
+    maxWidth: 720 - spacing.lg * 2,
+    alignSelf: 'center',
+  },
   // Развёрнутая карта занимает всё, что осталось от экрана: сверху шапка
   // навигации, снизу меню приложения — они остаются на местах
   mapBlockFull: {
@@ -835,7 +883,7 @@ const styles = StyleSheet.create({
   },
   mapHintText: {
     fontSize: 11.5,
-    fontWeight: '600',
+    fontFamily: fontFamily.semibold,
   },
   mapLocate: {
     position: 'absolute',
@@ -864,7 +912,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   statLabel: {
-    fontSize: 11,
+    fontFamily: fontFamily.medium,
+    fontSize: 11.5,
+    lineHeight: 15,
     marginTop: 2,
   },
   newPointCard: {
@@ -906,7 +956,7 @@ const styles = StyleSheet.create({
   },
   typeChipText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: fontFamily.semibold,
   },
   sectionLabel: {
     marginTop: spacing.xl,
@@ -995,6 +1045,6 @@ const styles = StyleSheet.create({
   locateButtonText: {
     color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '700',
+    fontFamily: fontFamily.bold,
   },
 });

@@ -19,10 +19,17 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
+  Pressable,
   Platform,
   Keyboard,
 } from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { CommonActions } from '@react-navigation/native';
@@ -31,6 +38,7 @@ import { useAuth } from '../AuthContext';
 import ConfirmDialog from './ui/ConfirmDialog';
 import { navigationRef } from '../navigation/navigationRef';
 import { useMenuHidden } from './chromeVisibility';
+import useReduceMotion from '../hooks/useReduceMotion';
 import { palette, fontFamily, elevation, MENU_BAR_HEIGHT } from '../theme';
 
 /**
@@ -47,6 +55,100 @@ function resetTo(routeName) {
 // Высота полосы меню объявлена в дизайн-системе; здесь переизлучается,
 // чтобы прежние ссылки на неё продолжали работать
 export { MENU_BAR_HEIGHT };
+
+/**
+ * Шире этого меню не растягивается
+ *
+ * На телефоне оно и так уже, а в широком окне браузера и на планшете полоса
+ * во всю ширину разносила три пункта на метр друг от друга: меню читалось как
+ * подвал сайта, а не как панель прибора. Ограниченное, оно стоит по центру
+ * под колонкой содержимого.
+ */
+const MENU_MAX_WIDTH = 520;
+
+/** Цвета подписи и значка: выбранный пункт белый, прочие приглушены */
+const INK_ACTIVE = '#FFFFFF';
+const INK_IDLE = 'rgba(255,255,255,0.58)';
+const INK_HOVER = 'rgba(255,255,255,0.86)';
+
+/** Длительность смены выбранного пункта, мс */
+const SWITCH_MS = 240;
+
+/** Пружина отклика на нажатие: без раскачки, как у карточек */
+const PRESS_SPRING = { damping: 18, stiffness: 320, mass: 0.5 };
+
+/**
+ * Пункт меню
+ *
+ * Выбранный пункт лежит на светлой подложке-«таблетке». Подложка своя у
+ * каждого пункта и проявляется прозрачностью, а не едет общей меткой: общей
+ * метке нужны замеры соседей, а onLayout на вебе приходит не всегда — тот же
+ * приём, что у вкладок калькулятора.
+ *
+ * @param {Object} props
+ * @param {Object} props.item - пункт: key, label, icon, onPress
+ * @param {boolean} props.active - пункт выбран
+ * @returns {React.ReactElement} пункт
+ */
+function MenuItem({ item, active }) {
+  const reduceMotion = useReduceMotion();
+  const on = useSharedValue(active ? 1 : 0);
+  const press = useSharedValue(0);
+  const [hovered, setHovered] = React.useState(false);
+
+  React.useEffect(() => {
+    const target = active ? 1 : 0;
+    on.value = reduceMotion
+      ? target
+      : withTiming(target, { duration: SWITCH_MS, easing: Easing.out(Easing.cubic) });
+  }, [active, reduceMotion, on]);
+
+  const pill = useAnimatedStyle(() => ({
+    opacity: on.value,
+    transform: [{ scaleX: 0.86 + on.value * 0.14 }, { scaleY: 0.9 + on.value * 0.1 }],
+  }));
+
+  const body = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 - press.value * 0.06 }],
+  }));
+
+  const setPressed = (next) => {
+    if (reduceMotion) return;
+    press.value = next
+      ? withTiming(1, { duration: 90 })
+      : withSpring(0, PRESS_SPRING);
+  };
+
+  const ink = active ? INK_ACTIVE : hovered ? INK_HOVER : INK_IDLE;
+
+  return (
+    <Pressable
+      style={styles.item}
+      onPress={item.onPress}
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
+      accessibilityRole="button"
+      accessibilityLabel={item.label}
+      accessibilityState={{ selected: active }}
+    >
+      <Animated.View style={[styles.itemBody, body]}>
+        <Animated.View pointerEvents="none" style={[styles.pill, pill]} />
+        <MaterialIcons name={item.icon} size={22} color={ink} />
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.label,
+            { color: ink, fontFamily: active ? fontFamily.bold : fontFamily.semibold },
+          ]}
+        >
+          {item.label}
+        </Text>
+      </Animated.View>
+    </Pressable>
+  );
+}
 
 export default function BottomMenuBar({ active = 'home' }) {
   const insets = useSafeAreaInsets();
@@ -95,28 +197,18 @@ export default function BottomMenuBar({ active = 'home' }) {
   return (
     <>
     {/* Минимум 26: на устройствах без системного отступа меню иначе
-        прижималось к краю и полоса жеста ложилась прямо на подписи */}
-    <View style={[styles.bar, elevation.brandButton, { bottom: Math.max(insets.bottom, 26) }]}>
-      {items.map((item) => {
-        const isActive = item.key === active;
-        const color = isActive ? '#FFFFFF' : 'rgba(255,255,255,0.55)';
-        return (
-          <TouchableOpacity
-            key={item.key}
-            style={styles.item}
-            onPress={item.onPress}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel={item.label}
-            accessibilityState={{ selected: isActive }}
-          >
-            <MaterialIcons name={item.icon} size={22} color={color} />
-            <Text numberOfLines={1} style={[styles.label, { color, fontWeight: isActive ? '700' : '500' }]}>
-              {item.label}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
+        прижималось к краю и полоса жеста ложилась прямо на подписи.
+        Внешний слой во всю ширину только центрирует полосу и пропускает
+        касания мимо неё к содержимому */}
+    <View
+      pointerEvents="box-none"
+      style={[styles.dock, { bottom: Math.max(insets.bottom, 26) }]}
+    >
+      <View style={[styles.bar, elevation.brandButton]}>
+        {items.map((item) => (
+          <MenuItem key={item.key} item={item} active={item.key === active} />
+        ))}
+      </View>
     </View>
 
     <ConfirmDialog
@@ -135,7 +227,7 @@ export default function BottomMenuBar({ active = 'home' }) {
 }
 
 const styles = StyleSheet.create({
-  bar: {
+  dock: {
     // На web — fixed: absolute там считается от документа, и в мобильных
     // браузерах бар уезжает вместе со страницей при скролле.
     // На нативе fixed не поддерживается, absolute внутри корневого View
@@ -143,22 +235,43 @@ const styles = StyleSheet.create({
     position: Platform.OS === 'web' ? 'fixed' : 'absolute',
     left: 16,
     right: 16,
-    flexDirection: 'row',
-    backgroundColor: palette.wine,
-    borderRadius: 26,
-    paddingVertical: 11,
-    paddingHorizontal: 8,
+    alignItems: 'center',
     zIndex: 1000,
     elevation: 20,
   },
+  bar: {
+    width: '100%',
+    maxWidth: MENU_MAX_WIDTH,
+    flexDirection: 'row',
+    backgroundColor: palette.wine,
+    borderRadius: 26,
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    // Тонкая светлая кромка сверху отделяет полосу от бордовой карточки или
+    // шапки, если та окажется под ней
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
   item: {
     flex: 1,
+  },
+  itemBody: {
     alignItems: 'center',
     justifyContent: 'center',
     gap: 3,
+    paddingVertical: 5,
+    minHeight: MENU_BAR_HEIGHT - 12,
+  },
+  pill: {
+    ...StyleSheet.absoluteFillObject,
+    left: 6,
+    right: 6,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.13)',
   },
   label: {
-    fontFamily: fontFamily.semibold,
     fontSize: 10.5,
+    lineHeight: 14,
+    letterSpacing: 0.1,
   },
 });

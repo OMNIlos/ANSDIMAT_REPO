@@ -32,6 +32,8 @@ import * as NativeSplash from 'expo-splash-screen';
 import BottomMenuBar from './components/BottomMenuBar.js';
 import ImportProjectDialog from './components/ImportProjectDialog.js';
 import { navigationRef } from './navigation/navigationRef.js';
+import { installWebGlobalStyles, useWebFontFaces } from './lib/webPolish';
+import { loadPrefs } from './lib/appPrefs';
 import {
   useFonts,
   Manrope_400Regular,
@@ -47,20 +49,30 @@ import {
 } from '@expo-google-fonts/jetbrains-mono';
 
 /**
- * Пункт нижнего меню, соответствующий текущему маршруту.
- * Настройки и Справка подсвечивают свои пункты; все остальные экраны
- * (Главная и разделы, открытые из неё) держат активной «Главную» —
- * как в дизайн-прототипе.
+ * Пункт нижнего меню, соответствующий разделу
+ *
+ * Раздел задаёт не открытый экран, а корень стека: меню сбрасывает историю на
+ * Главную, Настройки или Справку, и всё, что открыто дальше, лежит в том же
+ * разделе. По открытому экрану вход в аккаунт из Настроек и руководство из
+ * Справки подсвечивали «Главную» — меню показывало не то место, где человек
+ * находится.
+ *
+ * @param {string} [rootName] - первый маршрут стека
+ * @returns {'home'|'settings'|'help'} ключ пункта меню
  */
-function menuKeyForRoute(routeName) {
-  if (routeName === 'Settings') return 'settings';
-  if (routeName === 'About') return 'help';
+function menuKeyForRoot(rootName) {
+  if (rootName === 'Settings') return 'settings';
+  if (rootName === 'About') return 'help';
   return 'home';
 }
 
 // Системная заставка держится до тех пор, пока не отрисуется своя:
 // без этого между ними мелькает белый экран
 NativeSplash.preventAutoHideAsync().catch(() => {});
+
+// Правила браузера, которых нет в StyleSheet: грани шрифтов, кольцо фокуса,
+// полосы прокрутки. На нативе — пустая функция
+installWebGlobalStyles();
 
 export default function App() {
   // true — показываем SplashScreen, false — основное приложение
@@ -86,16 +98,27 @@ export default function App() {
     JetBrainsMono_600SemiBold,
   });
 
+  // На вебе у каждого семейства шрифта появляются грани всех весов — без них
+  // браузер дорисовывает жирность сам, см. lib/webPolish.web.js. Пока они
+  // грузятся, держится заставка: иначе первый экран мелькнул бы синтетикой
+  const facesReady = useWebFontFaces(fontsLoaded);
+
+  // Переключатели «Данные и расчёты» читаются один раз, пока идёт заставка:
+  // экранам они нужны сразу — ширина колонки, геопозиция дневника
+  React.useEffect(() => {
+    loadPrefs();
+  }, []);
+
   const handleSplashFinish = () => {
     setIsLoading(false);
   };
 
   /**
-   * Синхронизирует подсветку нижнего меню с текущим экраном
+   * Синхронизирует подсветку нижнего меню с разделом, в котором открыт экран
    */
   const handleStateChange = () => {
-    const routeName = navigationRef.getCurrentRoute()?.name;
-    setActiveMenuKey(menuKeyForRoute(routeName));
+    const rootName = navigationRef.getRootState()?.routes?.[0]?.name;
+    setActiveMenuKey(menuKeyForRoot(rootName));
   };
 
   return (
@@ -113,7 +136,7 @@ export default function App() {
               уступит место навигатору */}
           <ImportProvider>
           <NavigationContainer ref={navigationRef} onStateChange={handleStateChange}>
-            {isLoading || (!fontsLoaded && !fontError) ? (
+            {isLoading || (!fontsLoaded && !fontError) || (fontsLoaded && !facesReady) ? (
               <SplashScreen onFinish={handleSplashFinish} />
             ) : (
               <View style={styles.root}>

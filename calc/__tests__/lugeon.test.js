@@ -16,6 +16,7 @@ import {
   lugeonClass,
   classifyLugeon,
   processLugeon,
+  lugeonLoop,
   LUGEON_PATTERNS,
   LUGEON_FORMULAS,
   LUGEON_CLASSES,
@@ -358,5 +359,69 @@ describe('processLugeon: класс трещиноватости', () => {
 
   test('без ступеней класса нет', () => {
     expect(processLugeon({ stages: [], ...GEOMETRY }).rockClass).toBeNull();
+  });
+});
+
+describe('lugeonLoop', () => {
+  /** Ступени контрольного примера в виде, в котором их отдаёт processLugeon */
+  const rows = () => processLugeon({ stages: STAGES, ...GEOMETRY }).stages;
+
+  test('петля начинается и заканчивается в нуле', () => {
+    const { rise, fall } = lugeonLoop(rows());
+    expect(rise[0]).toEqual({ pressure: 0, flow: 0 });
+    expect(fall[fall.length - 1]).toEqual({ pressure: 0, flow: 0 });
+  });
+
+  test('ветви делятся по пику давления и делят его между собой', () => {
+    const { rise, fall } = lugeonLoop(rows());
+    // Ноль плюс три ступени подъёма; спуск начинается с той же третьей
+    expect(rise).toHaveLength(4);
+    expect(fall).toHaveLength(4);
+    expect(fall[0]).toEqual(rise[rise.length - 1]);
+    // Пик — самое высокое давление опыта
+    expect(fall[0].pressure).toBeCloseTo(551580.6, 6);
+  });
+
+  test('подъём идёт по возрастанию давления, спуск по убыванию', () => {
+    const { rise, fall } = lugeonLoop(rows());
+    const pressures = (branch) => branch.map((point) => point.pressure);
+    expect(pressures(rise)).toEqual([...pressures(rise)].sort((a, b) => a - b));
+    expect(pressures(fall)).toEqual([...pressures(fall)].sort((a, b) => b - a));
+  });
+
+  test('без обратного хода спуск не дорисовывается', () => {
+    // Опыт заполнен наполовину: давление только поднимали, и возврата к нулю
+    // на графике быть не должно — его в опыте ещё не было
+    const { rise, fall } = lugeonLoop(rows().slice(0, 3));
+    expect(rise).toHaveLength(4);
+    expect(fall).toEqual([]);
+  });
+
+  test('ступень без расхода в петлю не попадает', () => {
+    const broken = rows();
+    broken[1] = { ...broken[1], flow: NaN };
+    const { rise, fall } = lugeonLoop(broken);
+    expect([...rise, ...fall]).not.toContainEqual(
+      expect.objectContaining({ pressure: 417132.8 })
+    );
+  });
+
+  test('пустой опыт петли не даёт', () => {
+    expect(lugeonLoop([])).toEqual({ rise: [], fall: [] });
+    expect(lugeonLoop(undefined)).toEqual({ rise: [], fall: [] });
+  });
+
+  test('площадка на вершине достаётся подъёму', () => {
+    // Две ступени одного наибольшего давления: спуск начинается с последней,
+    // иначе площадка разорвала бы линию посередине
+    const plateau = [
+      { pressure: 1, flow: 1 },
+      { pressure: 2, flow: 2 },
+      { pressure: 2, flow: 2.1 },
+      { pressure: 1, flow: 1.1 },
+    ];
+    const { rise, fall } = lugeonLoop(plateau);
+    expect(rise).toHaveLength(4);
+    expect(fall[0]).toEqual({ pressure: 2, flow: 2.1 });
   });
 });

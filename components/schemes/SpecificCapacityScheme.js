@@ -20,6 +20,7 @@ import Svg, { Defs, Line, Path, Pattern, Polygon, Rect } from 'react-native-svg'
 import I18n from '../../Localization';
 import { AQUIFERS } from '../../calc/specificCapacity';
 import { fontFamily, radius } from '../../theme';
+import { NO_AUTOFILL } from '../../lib/inputProps';
 import {
   QS_BOX_HEIGHT,
   QS_LABEL_HEIGHT,
@@ -60,6 +61,7 @@ function SchemeInput({ id, slot, label, value, onChange, invalid, accessibilityL
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         keyboardType="decimal-pad"
+        {...NO_AUTOFILL}
         selectTextOnFocus
         placeholder="—"
         placeholderTextColor={P.muted}

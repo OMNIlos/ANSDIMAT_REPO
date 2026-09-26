@@ -84,6 +84,15 @@ test('сохранённый русский доезжает до заставк
   expect(screenText(tree)).not.toContain("hydrogeologist's field calculator");
 });
 
+test('на заставке видно имя релиза', async () => {
+  // Имя релиза — как у версий Android: одно на все языки, переводить его не нужно
+  await AsyncStorage.setItem('appLocale', 'en');
+
+  const tree = await mount();
+
+  expect(screenText(tree)).toContain('Moonflower');
+});
+
 test('без сохранённого выбора заставка идёт за языком устройства', async () => {
   // Своего выбора пользователь не делал — LanguageProvider берёт системный
   // язык; на заставке он обязан быть тем же, что и на остальных экранах

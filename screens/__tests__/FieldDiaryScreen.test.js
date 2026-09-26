@@ -76,10 +76,13 @@ jest.mock('@react-navigation/native', () => ({
 jest.mock('../../components/FieldMap', () => 'FieldMap');
 jest.mock('expo-location', () => ({
   requestForegroundPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
+  // По умолчанию доступ ещё не выдавали: дневник не должен дёргать
+  // геопозицию сам, пока его об этом не просили
+  getForegroundPermissionsAsync: jest.fn(async () => ({ status: 'undetermined' })),
   getCurrentPositionAsync: jest.fn(async () => ({
     coords: { latitude: 55.75, longitude: 37.62 },
   })),
-  Accuracy: { High: 4 },
+  Accuracy: { High: 4, Balanced: 3 },
 }));
 
 const FieldDiaryScreen = require('../FieldDiaryScreen').default;
@@ -342,4 +345,54 @@ test('удалённое в шторке уходит из базы вместе
   });
 
   expect(deleteAttachment).toHaveBeenCalledWith('a1');
+});
+
+describe('автоопределение координат', () => {
+  const Location = require('expo-location');
+
+  /** Даёт отработать цепочке await в эффекте после монтирования */
+  const settle = () => act(async () => {});
+
+  test('с уже выданным доступом карта сама встаёт на текущее место', async () => {
+    Location.getForegroundPermissionsAsync.mockResolvedValueOnce({ status: 'granted' });
+    const tree = await mount();
+    await settle();
+
+    expect(tree.root.findByType('FieldMap').props.center).toEqual({
+      lat: 55.75,
+      lon: 37.62,
+    });
+    // Разрешение не спрашивается: его задаёт кнопка «моё местоположение»
+    expect(Location.requestForegroundPermissionsAsync).not.toHaveBeenCalled();
+  });
+
+  test('без выданного доступа дневник не запрашивает геопозицию сам', async () => {
+    const tree = await mount();
+    await settle();
+
+    expect(Location.getForegroundPermissionsAsync).toHaveBeenCalled();
+    expect(Location.getCurrentPositionAsync).not.toHaveBeenCalled();
+    expect(Location.requestForegroundPermissionsAsync).not.toHaveBeenCalled();
+    expect(tree.root.findByType('FieldMap').props.center).toBeNull();
+  });
+
+  test('выключенный в настройках переключатель карту не двигает', async () => {
+    const { setPref } = require('../../lib/appPrefs');
+    Location.getForegroundPermissionsAsync.mockResolvedValueOnce({ status: 'granted' });
+    setPref('autoLocation', false);
+    try {
+      const tree = await mount();
+      await settle();
+      expect(Location.getForegroundPermissionsAsync).not.toHaveBeenCalled();
+      expect(Location.getCurrentPositionAsync).not.toHaveBeenCalled();
+      expect(tree.root.findByType('FieldMap').props.center).toBeNull();
+    } finally {
+      setPref('autoLocation', true);
+      // Неизрасходованный ответ «granted» не должен достаться чужому тесту
+      Location.getForegroundPermissionsAsync.mockReset();
+      Location.getForegroundPermissionsAsync.mockImplementation(async () => ({
+        status: 'undetermined',
+      }));
+    }
+  });
 });

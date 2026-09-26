@@ -44,6 +44,7 @@ import { defaultParams } from '../../db/params';
 import { MENU_BAR_HEIGHT } from '../../components/BottomMenuBar';
 import { styles as shared } from '../calculator/shared';
 import { spacing, type } from '../../theme';
+import { useContentMaxWidth } from '../../lib/appPrefs';
 
 /** Задержка перед записью правки в базу, мс */
 const SAVE_DELAY = 400;
@@ -291,7 +292,9 @@ export default function OfrTestShell({
   // Через контекст, а не через хук: без провайдера хук падает, и экран
   // нельзя было бы отрисовать в тесте отдельно от приложения
   const insets = React.useContext(SafeAreaInsetsContext) ?? { bottom: 0 };
-  const contentWidth = Math.min(width, 720) - spacing.lg * 2;
+  // Колонка 720 px — если включена «Адаптация под планшет»; иначе вся ширина
+  const column = useContentMaxWidth(720);
+  const contentWidth = Math.min(width, column ?? width) - spacing.lg * 2;
   // Нужен графику: пока палец тянет полотно, прокрутка экрана блокируется
   const scrollRef = useRef(null);
 
@@ -319,6 +322,7 @@ export default function OfrTestShell({
         ref={scrollRef}
         contentContainerStyle={[
           shared.content,
+          { maxWidth: column ?? '100%' },
           { paddingBottom: Math.max(insets.bottom, 26) + MENU_BAR_HEIGHT + spacing.xl },
         ]}
         keyboardShouldPersistTaps="handled"

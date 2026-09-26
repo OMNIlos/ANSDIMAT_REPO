@@ -83,17 +83,19 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     gap: 2,
   },
+  // Подпись несёт обозначение и размерность — «T, м²/сут», «a, м²/сут».
+  // Капсом её писать нельзя: «T, М²/СУТ» читается как мега-метры, а
+  // пьезопроводность a превращается в «А»
   label: {
     fontFamily: fontFamily.semibold,
-    fontSize: 10.5,
-    fontWeight: '700',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.1,
   },
   value: {
     fontFamily: fontFamily.monoSemibold,
     fontSize: 22,
-    fontWeight: '700',
+    lineHeight: 29,
     fontVariant: ['tabular-nums'],
   },
 });

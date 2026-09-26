@@ -83,6 +83,15 @@ const MAX_ZOOM = 50;
  */
 const EMPTY = [];
 
+/**
+ * Подгонка масштаба по умолчанию — общая ссылка на весь модуль
+ *
+ * По той же причине, что и `EMPTY`: объект уходит в зависимости мемо, из
+ * которого считается базовая область, а новая базовая область на каждый
+ * рендер разносит перерисовку по всей цепочке.
+ */
+const DEFAULT_VIEWPORT = {};
+
 export default function DrawdownChart({
   /**
    * Замеры ряда: [{ t, s }]
@@ -130,9 +139,16 @@ export default function DrawdownChart({
   // Прокручиваемый контейнер, внутри которого лежит график. Пока идёт жест
   // по графику, прокрутка блокируется штатным механизмом RNGH
   scrollRef,
-  // Способ построения прямой и выбранные точки хранит экран: те же точки
-  // можно отмечать и в таблице замеров, поэтому состояние должно быть общим
-  fitMode = FIT_MODES.AUTO,
+  /**
+   * Способ построения прямой, см. FIT_MODES
+   *
+   * Хранит его экран: те же точки отмечаются и в таблице замеров, поэтому
+   * состояние должно быть общим. Умолчания у пропса нет намеренно: график,
+   * по которому прямую не ведут вовсе — петля «расход — давление» у
+   * нагнетания, — не должен предлагать выбор между способами её построения.
+   * Не задан способ — переключателей нет, как и у диагностики режима.
+   */
+  fitMode,
   onFitModeChange,
   selected = EMPTY,
   onToggleSelect,
@@ -152,6 +168,15 @@ export default function DrawdownChart({
    * ставит руками, и терять его посреди работы с журналом нельзя.
    */
   viewKey = '',
+  /**
+   * Как подогнать исходный масштаб под данные
+   *
+   * Поля по краям и привязка нуля к углу полотна, см. fitViewport. Объект
+   * должен быть неизменной ссылкой: от него зависит базовая область, а от
+   * неё — состояние масштаба, и новый объект на каждый рендер уводил бы
+   * экран в бесконечную перерисовку.
+   */
+  viewport = DEFAULT_VIEWPORT,
   /**
    * Хранилище масштабов по ключу системы координат
    *
@@ -298,7 +323,7 @@ export default function DrawdownChart({
   // Исходная видимая область с запасом по краям. Считается по всем кривым
   // сразу: кривая соседней скважины, не влезшая в масштаб основной,
   // обрезалась бы краем полотна
-  const base = useMemo(() => fitViewport(chartSeries), [chartSeries]);
+  const base = useMemo(() => fitViewport(chartSeries, viewport), [chartSeries, viewport]);
 
   /**
    * Прямая по замерам: через две отмеченные точки либо по всем сразу
@@ -522,11 +547,17 @@ export default function DrawdownChart({
    */
   const legendMark = (one) => (
     <>
+      {/* Метка повторяет саму кривую: пунктир — пунктиром её цвета. Раньше у
+          пунктира был задан только фон, а высота у него нулевая, и штрихи
+          рисовались цветом рамки по умолчанию — чёрным, на тёмной теме
+          невидимым. Сплошная серия сравнения (петля нагнетания) и в легенде
+          сплошная */}
       <View
         style={[
           styles.legendMark,
-          { backgroundColor: one.color },
-          one.role === SERIES_ROLES.REFERENCE && styles.legendMarkReference,
+          one.role === SERIES_ROLES.REFERENCE && one.dashed !== false
+            ? [styles.legendMarkReference, { borderTopColor: one.color }]
+            : { backgroundColor: one.color },
         ]}
       />
       <Text
@@ -730,10 +761,11 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   legendText: {
-    ...type.numeric,
-    fontSize: 11.5,
-    fontWeight: '600',
-    maxWidth: 120,
+    // Имена кривых — слова: гарнитурой интерфейса, как подписи чипов
+    fontFamily: fontFamily.semibold,
+    fontSize: 12,
+    lineHeight: 16,
+    maxWidth: 140,
   },
   pickHint: {
     ...type.caption,
@@ -749,7 +781,7 @@ const styles = StyleSheet.create({
   axisText: {
     ...type.numeric,
     fontSize: 11,
-    fontWeight: '600',
+    fontFamily: fontFamily.monoSemibold,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,

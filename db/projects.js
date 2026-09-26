@@ -103,6 +103,22 @@ export async function listProjects({ limit } = {}) {
 }
 
 /**
+ * Сколько журналов сохранено — для плитки «Архив откачек» на главной
+ *
+ * Отдельный запрос, а не listProjects().length: главной нужно одно число, а
+ * не все журналы с подсчётом замеров у каждого.
+ *
+ * @returns {Promise<number>} число неудалённых журналов
+ */
+export async function countProjects() {
+  const database = await getDatabase();
+  const row = await database.getFirstAsync(
+    'SELECT count(*) AS total FROM projects WHERE deleted_at IS NULL'
+  );
+  return Number(row?.total ?? 0);
+}
+
+/**
  * Возвращает проект вместе с замерами
  *
  * Журналы двух фаз отдаются раздельно: смешивать их нельзя, потому что

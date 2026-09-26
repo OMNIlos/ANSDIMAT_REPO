@@ -21,6 +21,7 @@ import { useEntitlements } from '../billing/EntitlementsContext';
 import { useAuth } from '../AuthContext';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { spacing, radius, type, elevation, fontFamily, heroGradient } from '../theme';
+import { useContentMaxWidth } from '../lib/appPrefs';
 
 /** Тарифы. Цены в долларах — как в текущем биллинге */
 const PLANS = [
@@ -66,7 +67,9 @@ export default function SubscriptionScreen() {
   const [banner, setBanner] = useState(null);
   const [cancelAsked, setCancelAsked] = useState(false);
 
-  const contentMaxWidth = width >= 700 ? 620 : undefined;
+  // «Адаптация под планшет» в настройках: колонка по центру или вся ширина
+  const column = useContentMaxWidth(620);
+  const contentMaxWidth = width >= 700 ? column : undefined;
 
   const load = useCallback(async () => {
     await refresh();
@@ -426,12 +429,12 @@ const styles = StyleSheet.create({
   priceBox: { alignItems: 'flex-end' },
   price: {
     fontSize: 20,
-    fontWeight: '700',
+    fontFamily: fontFamily.monoSemibold,
   },
   savings: {
     marginTop: spacing.sm,
     marginLeft: 36,
-    fontWeight: '600',
+    fontFamily: fontFamily.semibold,
   },
 
   cta: {

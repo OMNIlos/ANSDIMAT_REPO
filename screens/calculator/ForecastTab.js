@@ -43,14 +43,18 @@ import {
   formatValue,
   formatCompact,
   formatExponential,
+  useStorageLink,
   styles as shared,
 } from './shared';
 
-/** Расчётные схемы в порядке веб-версии */
+/**
+ * Расчётные схемы в порядке заказчика: безнапорный пласт первым — с него
+ * вкладка и открывается, это самый частый случай в поле
+ */
 const SCHEMES = [
+  { value: 'boulton', labelKey: 'wellSchemeBoulton', methodKey: 'wellMethodBoulton' },
   { value: 'theis', labelKey: 'wellSchemeTheis', methodKey: 'wellMethodTheis' },
   { value: 'hantush', labelKey: 'wellSchemeHantush', methodKey: 'wellMethodHantush' },
-  { value: 'boulton', labelKey: 'wellSchemeBoulton', methodKey: 'wellMethodBoulton' },
   { value: 'boundary', labelKey: 'wellSchemeBoundary', methodKey: 'wellMethodBoundary' },
 ];
 
@@ -84,7 +88,7 @@ export default function ForecastTab({ contentWidth }) {
   const uCond = unitLabel(QUANTITIES.CONDUCTIVITY);
   const uDiff = unitLabel(QUANTITIES.DIFFUSIVITY);
 
-  const [scheme, setScheme] = useState('theis');
+  const [scheme, setScheme] = useState('boulton');
   const [flow, setFlow] = useState('100');
   // Длительность откачки задаётся в сутках, а не в выбранной пользователем
   // размерности времени. Базовая единица времени в приложении — минута, она
@@ -102,6 +106,19 @@ export default function ForecastTab({ contentWidth }) {
   const [wellToRiver, setWellToRiver] = useState('62.05');
   const [obsToRiver, setObsToRiver] = useState('62.05');
   const [allowable, setAllowable] = useState('');
+
+  // Упругая водоотдача и пьезопроводность связаны: a = k·m/S. Правишь одну —
+  // пересчитывается другая, а при смене k или мощности — та, что не правили
+  const storage = useStorageLink({
+    values: { k, h: thickness, S: storativity, a: diffusivity },
+    setters: { setK, setH: setThickness, setS: setStorativity, setA: setDiffusivity },
+    convert: {
+      kToBase: (value) => toBase(value, QUANTITIES.CONDUCTIVITY),
+      hToBase: (value) => toBase(value, QUANTITIES.DISTANCE),
+      aToBase: (value) => toBase(value, QUANTITIES.DIFFUSIVITY),
+      aFromBase: (value) => fromBase(value, QUANTITIES.DIFFUSIVITY),
+    },
+  });
 
   const unconfined = scheme === 'boulton';
 
@@ -218,12 +235,12 @@ export default function ForecastTab({ contentWidth }) {
           onPick={applyLithology}
         />
         <Card style={styles.spaced}>
-          <Field label={I18n.t('wellConductivity')} symbol="k" value={k} onChange={setK} unit={uCond} error={hasError('k')} />
+          <Field label={I18n.t('wellConductivity')} symbol="k" value={k} onChange={storage.onK} unit={uCond} error={hasError('k')} />
           <Field
             label={unconfined ? I18n.t('wellSaturated') : I18n.t('wellThickness')}
             symbol={unconfined ? 'h₀' : 'm'}
             value={thickness}
-            onChange={setThickness}
+            onChange={storage.onH}
             unit={uLen}
             error={hasError('m') || hasError('h0')}
             hint={
@@ -235,13 +252,13 @@ export default function ForecastTab({ contentWidth }) {
           {unconfined ? (
             <Field label={I18n.t('wellYield')} symbol="Sy" value={yieldValue} onChange={setYieldValue} error={hasError('Sy')} />
           ) : null}
-          <Field label={I18n.t('wellStorativity')} symbol="S" value={storativity} onChange={setStorativity} error={hasError('S')} />
+          <Field label={I18n.t('wellStorativity')} symbol="S" value={storativity} onChange={storage.onS} error={hasError('S')} />
           {unconfined ? null : (
             <Field
               label={I18n.t('wellDiffusivity')}
               symbol="a"
               value={diffusivity}
-              onChange={setDiffusivity}
+              onChange={storage.onA}
               unit={uDiff}
               hint={I18n.t('wellDiffusivityHint')}
             />

@@ -8,7 +8,8 @@
  * каждый январь.
  *
  * Появление собрано одной последовательностью — логотип, затем название
- * и слоган: спокойный вход вместо набора разрозненных эффектов.
+ * и слоган, последним имя релиза: спокойный вход вместо набора разрозненных
+ * эффектов.
  *
  * Системный экран запуска (expo-splash-screen) показывает тот же знак того же
  * размера на том же фоне и прячется, когда этот экран уже отрисован. Раньше
@@ -29,10 +30,12 @@ import {
   AccessibilityInfo,
 } from 'react-native';
 import * as NativeSplash from 'expo-splash-screen';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import I18n from '../Localization';
 import { LanguageContext } from '../LanguageContext';
 import DrawdownCurve from './DrawdownCurve';
-import { palette, spacing, type } from '../theme';
+import { palette, spacing, type, fontFamily } from '../theme';
+import { RELEASE_NAME, RELEASE_VERSION } from '../lib/release';
 
 const SPLASH_DURATION = 2200;
 
@@ -54,12 +57,18 @@ export default function SplashScreen({ onFinish }) {
       subtitle: I18n.t('appSubtitle', {
         defaultValue: 'полевой калькулятор гидрогеолога',
       }),
+      release: I18n.t('releaseLabel', {
+        name: RELEASE_NAME,
+        version: RELEASE_VERSION,
+        defaultValue: `Релиз ${RELEASE_NAME}, версия ${RELEASE_VERSION}`,
+      }),
     }),
     [locale]
   );
 
   const logoAnim = useRef(new Animated.Value(0)).current;
   const textAnim = useRef(new Animated.Value(0)).current;
+  const releaseAnim = useRef(new Animated.Value(0)).current;
 
   // Системная заставка убирается только после первой отрисовки этой —
   // иначе между ними мелькает пустой экран
@@ -79,6 +88,7 @@ export default function SplashScreen({ onFinish }) {
       if (reduceMotion) {
         logoAnim.setValue(1);
         textAnim.setValue(1);
+        releaseAnim.setValue(1);
         return;
       }
 
@@ -89,12 +99,22 @@ export default function SplashScreen({ onFinish }) {
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
-        Animated.timing(textAnim, {
-          toValue: 1,
-          duration: 420,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
+        // Имя релиза идёт следом за названием с небольшим сдвигом, а не после
+        // него: иначе оно дочитывалось бы в последние доли секунды показа
+        Animated.stagger(160, [
+          Animated.timing(textAnim, {
+            toValue: 1,
+            duration: 420,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.timing(releaseAnim, {
+            toValue: 1,
+            duration: 320,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+        ]),
       ]).start();
     });
 
@@ -104,7 +124,7 @@ export default function SplashScreen({ onFinish }) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [onFinish, logoAnim, textAnim]);
+  }, [onFinish, logoAnim, textAnim, releaseAnim]);
 
   const rise = (anim) => ({
     opacity: anim,
@@ -153,6 +173,22 @@ export default function SplashScreen({ onFinish }) {
 
           <Text style={styles.subtitle}>{strings.subtitle}</Text>
         </Animated.View>
+
+        {/* Имя релиза, как у версий Android. Экранный диктор читает его
+            целой фразой, а не «цветок, Moonflower, точка, один…» */}
+        <Animated.View
+          style={[styles.release, rise(releaseAnim)]}
+          accessible
+          accessibilityLabel={strings.release}
+        >
+          <MaterialCommunityIcons
+            name="flower-outline"
+            size={15}
+            color="rgba(255, 255, 255, 0.85)"
+          />
+          <Text style={styles.releaseName}>{RELEASE_NAME}</Text>
+          <Text style={styles.releaseVersion}>{RELEASE_VERSION}</Text>
+        </Animated.View>
       </View>
 
       <View style={styles.footer}>
@@ -198,7 +234,7 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 34,
     lineHeight: 40,
-    fontWeight: '700',
+    fontFamily: fontFamily.bold,
     color: '#FFFFFF',
     letterSpacing: 3,
     textAlign: 'center',
@@ -214,13 +250,37 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.9)',
     textAlign: 'center',
   },
+  // Плашка релиза — контурная, чтобы не спорить с названием программы
+  release: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: spacing.xl,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255, 255, 255, 0.45)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  releaseName: {
+    fontSize: 14,
+    fontFamily: fontFamily.semibold,
+    color: '#FFFFFF',
+    letterSpacing: 0.6,
+  },
+  releaseVersion: {
+    ...type.numeric,
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
   footer: {
     alignItems: 'center',
     paddingBottom: spacing.xxl,
   },
   website: {
     fontSize: 15,
-    fontWeight: '700',
+    fontFamily: fontFamily.bold,
     color: '#FFFFFF',
     letterSpacing: 0.2,
     marginBottom: spacing.xs,

@@ -202,7 +202,12 @@ export default function ChartCanvas({
                   strokeWidth={1.5}
                   strokeLinejoin="round"
                   strokeLinecap="round"
-                  strokeDasharray="6 4"
+                  /* Пунктир отличает кривую сравнения от кривой подбора. Но
+                     серия сравнения бывает и единственными данными на
+                     полотне — ветви петли нагнетания, — и тогда пунктир
+                     говорит неправду: сравнивать не с чем, а сама кривая
+                     читается хуже сплошной */
+                  strokeDasharray={series.dashed === false ? undefined : '6 4'}
                   fill="none"
                   opacity={referenceOpacity}
                 />

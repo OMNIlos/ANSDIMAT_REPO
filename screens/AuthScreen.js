@@ -28,12 +28,15 @@ import I18n from '../Localization';
 import Segmented from '../components/ui/Segmented';
 import { useAuth } from '../AuthContext';
 import { fontFamily, spacing, radius, elevation } from '../theme';
+import { useContentMaxWidth } from '../lib/appPrefs';
 
 export default function AuthScreen({ navigation }) {
   const { colors } = useTheme();
   const { signIn, signUp, resetPassword, configured } = useAuth();
   const { width } = useWindowDimensions();
-  const contentMaxWidth = width >= 700 ? 520 : undefined;
+  // «Адаптация под планшет» в настройках: колонка по центру или вся ширина
+  const column = useContentMaxWidth(520);
+  const contentMaxWidth = width >= 700 ? column : undefined;
 
   const [mode, setMode] = useState('signIn');
   const [email, setEmail] = useState('');

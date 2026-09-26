@@ -36,9 +36,16 @@ export const OVERSCAN = 0.4;
  * @param {Object} [options]
  * @param {number} [options.padX] - запас по краям оси абсцисс, доля размаха
  * @param {number} [options.padY] - запас сверху по понижению, доля размаха
+ * @param {boolean} [options.fromOrigin] - держать начало отсчёта в углу
+ *   полотна: запас слева не добавляется. Нужно кривым, у которых ноль — не
+ *   край данных, а точка опыта: петля «расход — давление» из неё выходит и в
+ *   неё возвращается, и отодвинутая от угла она читается как обрезанная
  * @returns {{x0: number, x1: number, y0: number, y1: number}} область
  */
-export function fitViewport(seriesList, { padX = 0.08, padY = 0.12 } = {}) {
+export function fitViewport(
+  seriesList,
+  { padX = 0.08, padY = 0.12, fromOrigin = false } = {}
+) {
   let x0 = Infinity;
   let x1 = -Infinity;
   let maxY = -Infinity;
@@ -65,7 +72,9 @@ export function fitViewport(seriesList, { padX = 0.08, padY = 0.12 } = {}) {
   const pad = (x1 - x0) * padX;
 
   return {
-    x0: x0 - pad,
+    // Ноль остаётся в углу, только если данные левее него не уходят: иначе
+    // часть кривой оказалась бы за краем полотна
+    x0: fromOrigin ? Math.min(0, x0) : x0 - pad,
     x1: x1 + pad,
     // Понижение отсчитывается от нуля: так построены графики способа прямой
     // линии, и по отсечке на оси считается водоотдача

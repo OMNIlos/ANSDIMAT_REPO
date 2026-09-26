@@ -65,6 +65,8 @@ import {
 import { diagnose } from "../../calc/diagnostics";
 import ValueCard from "../../components/ui/ValueCard";
 import { MENU_BAR_HEIGHT } from "../../components/BottomMenuBar";
+import Segmented from "../../components/ui/Segmented";
+import { useContentMaxWidth } from "../../lib/appPrefs";
 import { setMenuHidden } from "../../components/chromeVisibility";
 import {
   getProject,
@@ -96,7 +98,7 @@ import { DEFAULT_CENTER } from "../../components/leafletMapHtml";
 import { distanceBetween, offsetBy } from "../../calc/geo";
 import { useUnits } from "../../UnitsContext";
 import { QUANTITIES } from "../../calc/units";
-import { spacing, radius, type, elevation, numericAt } from "../../theme";
+import { spacing, radius, type, elevation, numericAt, fontFamily } from "../../theme";
 
 /**
  * Виды графика
@@ -526,7 +528,9 @@ export default function DataProcessingScreen({ route, navigation }) {
    */
   const [finalDrawdownTexts, setFinalDrawdownTexts] = useState({});
 
-  const contentWidth = Math.min(width, 720) - spacing.lg * 2;
+  // Колонка 720 px — если включена «Адаптация под планшет»; иначе вся ширина
+  const column = useContentMaxWidth(720);
+  const contentWidth = Math.min(width, column ?? width) - spacing.lg * 2;
   // Развёрнутый график: из высоты экрана вычитаем шапку навигации,
   // собственную шапку графика с переключателями, подпись цены деления
   // и плавающее нижнее меню — иначе полотно уезжает под меню
@@ -2364,7 +2368,7 @@ export default function DataProcessingScreen({ route, navigation }) {
       <ScrollView
         ref={scrollRef}
         style={{ backgroundColor: theme.colors.background }}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { maxWidth: column ?? "100%" }]}
         keyboardShouldPersistTaps="handled"
       >
         {/* Шапка проекта */}
@@ -2398,9 +2402,11 @@ export default function DataProcessingScreen({ route, navigation }) {
             >
               {I18n.t(`ofr_${project.ofrType}`, {
                 defaultValue: project.ofrType,
-              })}{" "}
-              · {measurements.length + recoveryMeasurements.length}{" "}
-              {I18n.t("measurementsShort", { defaultValue: "замеров" })}
+              })}
+              {" · "}
+              {I18n.t("measurementsCount", {
+                count: measurements.length + recoveryMeasurements.length,
+              })}
             </Text>
           </View>
         </View>
@@ -2825,7 +2831,7 @@ export default function DataProcessingScreen({ route, navigation }) {
               >
                 <Text
                   style={[
-                    styles.modeChipText,
+                    styles.phaseChipText,
                     { color: active ? "#FFFFFF" : theme.colors.textSecondary },
                   ]}
                 >
@@ -3088,49 +3094,21 @@ export default function DataProcessingScreen({ route, navigation }) {
             времени отложено отношение t/t′, и производная по нему значила бы
             не то, что читают по её форме */}
         {!theisPlot && (
-          <View
-            style={[
-              styles.viewSwitch,
-              { backgroundColor: theme.colors.surfaceSunken },
-            ]}
-          >
-            {[
-              { key: VIEWS.FIT, labelKey: "viewFit", fallback: "Подбор прямой" },
+          <Segmented
+            style={styles.viewSwitch}
+            options={[
+              {
+                key: VIEWS.FIT,
+                label: I18n.t("viewFit", { defaultValue: "Подбор прямой" }),
+              },
               {
                 key: VIEWS.DIAGNOSTIC,
-                labelKey: "viewDiagnostic",
-                fallback: "Диагностика",
+                label: I18n.t("viewDiagnostic", { defaultValue: "Диагностика" }),
               },
-            ].map((option) => {
-              const active = option.key === chartView;
-              return (
-                <TouchableOpacity
-                  key={option.key}
-                  onPress={() => setChartView(option.key)}
-                  style={[
-                    styles.viewChip,
-                    active && { backgroundColor: theme.colors.surface },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                >
-                  <Text
-                    style={[
-                      styles.viewChipText,
-                      {
-                        color: active
-                          ? theme.colors.primaryAccent
-                          : theme.colors.textSecondary,
-                        fontWeight: active ? "700" : "600",
-                      },
-                    ]}
-                  >
-                    {I18n.t(option.labelKey, { defaultValue: option.fallback })}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+            ]}
+            value={chartView}
+            onChange={setChartView}
+          />
         )}
 
         {/* Объяснение пустого ряда. Заглушка внутри полотна показывается
@@ -3629,9 +3607,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   headCell: {
+    ...type.label,
     flex: 1,
-    fontSize: 11,
-    fontWeight: "600",
+    // Нулевой минимум — и здесь, и у полей: на вебе <input> держит свою
+    // «естественную» ширину, и колонка значений съезжала вправо от шапки
+    minWidth: 0,
   },
   tableRow: {
     flexDirection: "row",
@@ -3649,6 +3629,7 @@ const styles = StyleSheet.create({
   cellInput: {
     ...type.numeric,
     flex: 1,
+    minWidth: 0,
     fontSize: 15,
     paddingVertical: spacing.md,
   },
@@ -3670,8 +3651,9 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   addRowText: {
+    fontFamily: fontFamily.semibold,
     fontSize: 14,
-    fontWeight: "600",
+    lineHeight: 19,
   },
   // Чипов бывает пять — три оси времени и два прослеживания с расстоянием.
   // В одну строку на телефоне они не влезают, поэтому строка переносится.
@@ -3714,7 +3696,7 @@ const styles = StyleSheet.create({
   modeChipText: {
     ...type.numeric,
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fontFamily.monoSemibold,
   },
   // Карта куста: накладки позиционируются относительно этого блока, а он
   // точно повторяет границы карты
@@ -3770,7 +3752,7 @@ const styles = StyleSheet.create({
   },
   mapHintText: {
     fontSize: 12,
-    fontWeight: "600",
+    fontFamily: fontFamily.semibold,
   },
 
   // Таблица расстояний. Шапка: слева заштрихованная пустая ячейка,
@@ -3799,9 +3781,12 @@ const styles = StyleSheet.create({
     borderRightWidth: StyleSheet.hairlineWidth,
   },
   distanceHeadName: {
-    ...type.numeric,
+    // Имя скважины — слово, а не число: гарнитурой интерфейса, как и
+    // подписи в чипах, а не моноширинной
+    fontFamily: fontFamily.bold,
     fontSize: 15,
-    fontWeight: "700",
+    lineHeight: 20,
+    letterSpacing: -0.1,
     textAlign: "center",
     paddingHorizontal: spacing.md,
   },
@@ -3817,9 +3802,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   distanceWell: {
-    ...type.numeric,
+    fontFamily: fontFamily.semibold,
     fontSize: 15,
-    fontWeight: "600",
+    lineHeight: 20,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
@@ -3827,7 +3812,7 @@ const styles = StyleSheet.create({
     ...type.numeric,
     flex: 1,
     fontSize: 15,
-    fontWeight: "600",
+    fontFamily: fontFamily.monoSemibold,
     textAlign: "right",
     paddingLeft: spacing.lg,
     paddingVertical: spacing.md,
@@ -3851,7 +3836,7 @@ const styles = StyleSheet.create({
   distanceAddText: {
     color: "#FFFFFF",
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fontFamily.semibold,
   },
 
   // Скважины куста: чипы переносятся по строкам — наблюдательных может быть
@@ -3884,7 +3869,7 @@ const styles = StyleSheet.create({
   },
   visibilityChipName: {
     fontSize: 13,
-    fontWeight: '600',
+    fontFamily: fontFamily.semibold,
     maxWidth: 96,
   },
   wellChipDeletable: {
@@ -3898,10 +3883,10 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   wellChipName: {
-    ...type.numeric,
+    fontFamily: fontFamily.bold,
     flexShrink: 1,
     fontSize: 14,
-    fontWeight: "700",
+    lineHeight: 19,
   },
   // Высота набирается теми же полями, что у чипов: фиксированная не
   // совпадала с ними и «плюс» стоял выше строки
@@ -3936,7 +3921,7 @@ const styles = StyleSheet.create({
   wellAddButtonText: {
     color: "#FFFFFF",
     fontSize: 14,
-    fontWeight: "700",
+    fontFamily: fontFamily.bold,
   },
   // Своя строка у фазы: у таблицы расстояний сверху не было отступа вовсе,
   // а перед дебитом он складывался вдвое
@@ -3948,10 +3933,17 @@ const styles = StyleSheet.create({
   phaseChip: {
     flex: 1,
     alignItems: "center",
-    paddingVertical: spacing.md,
+    paddingVertical: 11,
     paddingHorizontal: spacing.md,
     borderRadius: radius.chip,
     borderWidth: StyleSheet.hairlineWidth,
+  },
+  // Фаза опыта — слово, а не обозначение: гарнитурой интерфейса. Моноширинная
+  // «Откачка» рядом с моноширинными «lg t» читалась как ещё одна ось
+  phaseChipText: {
+    fontFamily: fontFamily.bold,
+    fontSize: 14,
+    lineHeight: 19,
   },
   hint: {
     marginBottom: spacing.md,
@@ -3968,19 +3960,7 @@ const styles = StyleSheet.create({
   },
   // Переключатель вида графика: сегменты в общей подложке, как в калькуляторе
   viewSwitch: {
-    flexDirection: "row",
-    padding: 3,
-    borderRadius: radius.chip,
     marginBottom: spacing.md,
-  },
-  viewChip: {
-    flex: 1,
-    alignItems: "center",
-    paddingVertical: spacing.sm,
-    borderRadius: radius.chip - 3,
-  },
-  viewChipText: {
-    fontSize: 13,
   },
   // Карточек четыре: T и a в первой строке, S и наклон во второй. В одну
   // строку они на телефоне не влезают, а перенос внутри строки развалил бы
@@ -3997,7 +3977,7 @@ const styles = StyleSheet.create({
   },
   resultLabel: {
     fontSize: 11,
-    fontWeight: "700",
+    fontFamily: fontFamily.bold,
     letterSpacing: 1,
     textTransform: "uppercase",
     color: "rgba(255,255,255,0.8)",
@@ -4011,7 +3991,7 @@ const styles = StyleSheet.create({
   missing: {
     marginTop: spacing.md,
     lineHeight: 18,
-    fontWeight: "600",
+    fontFamily: fontFamily.semibold,
   },
   methodNote: {
     ...type.caption,

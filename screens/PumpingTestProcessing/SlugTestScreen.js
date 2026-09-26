@@ -42,18 +42,20 @@ import {
   Card,
   Collapsible,
   Field,
+  FittedFormula,
+  FittedStatRow,
   Formula,
   Note,
   Notices,
   ResultCard,
   SectionLabel,
   StatRow,
-  formatValue,
   parseNumber,
   useCalcUnits,
 } from '../calculator/shared';
 import OfrTestShell, { useOfrParams, useParamFields } from './OfrTestShell';
 import JournalTable from './JournalTable';
+import { spacing } from '../../theme';
 
 /** Знаков, до которых режется число при показе в поле журнала */
 const SHOWN_PRECISION = 6;
@@ -191,7 +193,7 @@ export default function SlugTestScreen({ route }) {
         rw: params?.rw,
         rc: params?.rc,
         lw: params?.lw,
-        z: params?.z,
+        lt: params?.lt,
         m: params?.m,
         selected: fitMode === FIT_MODES.AUTO ? selectedPoints : undefined,
         freeLine: manualLine,
@@ -283,10 +285,25 @@ export default function SlugTestScreen({ route }) {
   const notes = [];
   notes.push(result.partial ? 'slugSchemePartial' : 'slugSchemeFull');
   if (result.capped) notes.push('slugThicknessCapped');
+  // Про излом говорится только там, где его искали: прямую по отметкам и
+  // проведённую руками разбиение не трогает
+  if (result.split !== null) notes.push('slugTwoSegments');
   if (isFinite(params?.lw) && isFinite(params?.rw) && params.rw > 0) {
     const beta = params.lw / params.rw;
     if (beta < 1 || beta > 2000) notes.push('slugBetaClamped');
   }
+
+  // В радиус влияния идут не все три коэффициента разом: у фильтра короче
+  // пласта — A₁ и A₂, у фильтра во всю мощность — один A₃. Показывать заодно
+  // и неиспользованные значит звать сверять расчёт не с теми числами.
+  // Каждый на своей строке и во столько цифр, сколько в неё влезает: сверка
+  // с настольным АНСДИМАТ идёт по дальним знакам
+  const coefficients = result.partial
+    ? [
+        { label: 'A₁', value: result.A1 },
+        { label: 'A₂', value: result.A2 },
+      ]
+    : [{ label: 'A₃', value: result.A3 }];
 
   return (
     <OfrTestShell
@@ -369,12 +386,12 @@ export default function SlugTestScreen({ route }) {
               error={!(params?.lw > 0)}
             />
             <Field
-              label={I18n.t('slugFilterBottom')}
-              symbol="z"
+              label={I18n.t('slugFilterMiddle')}
+              symbol="LT_w"
               unit={uLen}
-              value={text('z', QUANTITIES.DISTANCE)}
-              onChange={change('z', QUANTITIES.DISTANCE)}
-              error={!(params?.z > 0)}
+              value={text('lt', QUANTITIES.DISTANCE)}
+              onChange={change('lt', QUANTITIES.DISTANCE)}
+              error={!(params?.lt > 0)}
             />
             <Field
               label={I18n.t('slugThickness')}
@@ -397,7 +414,7 @@ export default function SlugTestScreen({ route }) {
 
         <AppearIn index={1}>
           <SectionLabel>{I18n.t('slugJournalTitle')}</SectionLabel>
-          <Note>{I18n.t('slugJournalNote')}</Note>
+          <Note lead>{I18n.t('slugJournalNote')}</Note>
           <JournalTable
             rows={rows}
             onChange={editRow}
@@ -439,24 +456,52 @@ export default function SlugTestScreen({ route }) {
         <AppearIn index={3}>
           <Notices codes={problems} tone="error" />
           <ResultCard
-            title={I18n.t('quantityConductivity')}
+            title={I18n.t('resultConductivity')}
             label="k"
             value={out(result.k, QUANTITIES.CONDUCTIVITY)}
             unit={uCond}
           />
-          <Card>
-            <StatRow
+          <Card style={styles.afterResult}>
+            <FittedStatRow
               label={I18n.t('slugInfluenceRadius')}
-              value={formatValue(result.influenceLog)}
+              value={result.influenceLog}
+              testID="slug-influence-log"
             />
-            <StatRow label={I18n.t('slugBeta')} value={formatValue(result.beta)} />
+            <FittedStatRow
+              label={I18n.t('slugBeta')}
+              value={result.beta}
+              testID="slug-beta"
+            />
+            {/* Тот же k, что в карточке выше, но во всех знаках, какие влезают
+                в строку: настольный АНСДИМАТ подписывает k семью значащими
+                цифрами, и по четырём из карточки сверить расчёт нельзя —
+                расхождение в пятом знаке выглядит как «близко, но не то» */}
+            <FittedStatRow
+              label={`k, ${uCond}`}
+              value={fromBase(result.k, QUANTITIES.CONDUCTIVITY)}
+              testID="slug-k-precise"
+            />
+            {/* Низ фильтра считается из середины: показан, чтобы схему было
+                видно числом, а не только по подписи поля */}
+            <StatRow
+              label={I18n.t('slugFilterBottom')}
+              value={`${out(result.z, QUANTITIES.DISTANCE)} ${uLen}`}
+            />
+            {/* Первый участок в ответ не идёт, но его k показывают рядом:
+                настольный АНСДИМАТ подписывает на чертеже обе прямые, и
+                сверять расчёт удобнее, когда видно оба числа */}
+            {isFinite(result.firstK) ? (
+              <FittedStatRow
+                label={`${I18n.t('slugFirstSegmentK')}, ${uCond}`}
+                value={fromBase(result.firstK, QUANTITIES.CONDUCTIVITY)}
+                testID="slug-first-k"
+              />
+            ) : null}
           </Card>
 
           <Collapsible title={I18n.t('ofrMethodTitle')} note="ƒ">
             <Formula>{I18n.t('slugMethod')}</Formula>
-            <Formula>
-              {`A₁ = ${formatValue(result.A1)} · A₂ = ${formatValue(result.A2)} · A₃ = ${formatValue(result.A3)}`}
-            </Formula>
+            <FittedFormula lines={coefficients} testID="slug-coefficients" />
             <Note>{I18n.t('slugLineNote')}</Note>
           </Collapsible>
         </AppearIn>
@@ -467,6 +512,11 @@ export default function SlugTestScreen({ route }) {
 }
 
 const styles = StyleSheet.create({
+  // Карточка подробностей под карточкой результата: без зазора синяя и
+  // тёмная сливались краями в один неровный блок
+  afterResult: {
+    marginTop: spacing.md,
+  },
   firstLabel: {
     marginTop: 0,
   },

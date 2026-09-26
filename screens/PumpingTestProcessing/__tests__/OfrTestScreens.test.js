@@ -102,6 +102,17 @@ const mount = async (Screen) => {
 const screenText = (tree) => textOf(tree.toJSON());
 
 /**
+ * Подпись поля так, как она стоит в ячейке
+ *
+ * Переводы опытов несут обозначение в конце — «Слой воды в шурфе H», — а
+ * ячейка его не повторяет: обозначение у неё строкой ниже, см. Field
+ *
+ * @param {string} key - ключ перевода
+ * @returns {string} подпись без обозначения
+ */
+const shownLabel = (key) => I18n.t(key).replace(/ \S+$/, '');
+
+/**
  * Поле ввода по обозначению величины
  *
  * По обозначению, а не по подписи: подпись величины встречается на экране и
@@ -211,8 +222,8 @@ describe('Налив в шурф', () => {
     const tree = await mount(VadoseFillScreen);
     const text = screenText(tree);
     // В формуле (13.68) их нет, и держать поля значило бы обещать влияние
-    expect(text).not.toContain(I18n.t('vadoseDepth'));
-    expect(text).not.toContain(I18n.t('vadoseHead'));
+    expect(text).not.toContain(shownLabel('vadoseDepth'));
+    expect(text).not.toContain(shownLabel('vadoseHead'));
   });
 
   test('у Болдырева не требует глубину просачивания', async () => {
@@ -226,7 +237,7 @@ describe('Налив в шурф', () => {
     mockProject.params.useCapillary = false;
     const tree = await mount(VadoseFillScreen);
     const text = screenText(tree);
-    expect(text).not.toContain(I18n.t('vadoseCapillary'));
+    expect(text).not.toContain(shownLabel('vadoseCapillary'));
     expect(text).not.toContain(I18n.t('capillarySandyLoam'));
   });
 
@@ -234,9 +245,9 @@ describe('Налив в шурф', () => {
     // От метода зависит, сколько на экране полей вообще, и выбирать его
     // после того, как половина заполнена, поздно
     const text = screenText(await mount(VadoseFillScreen));
-    expect(text.indexOf(I18n.t('vadoseMethodName'))).toBeLessThan(
-      text.indexOf(I18n.t('vadoseVolume'))
-    );
+    const volume = text.indexOf(shownLabel('vadoseVolume'));
+    expect(volume).toBeGreaterThan(-1);
+    expect(text.indexOf(I18n.t('vadoseMethodName'))).toBeLessThan(volume);
   });
 
   test('переключение на Биндемана открывает его поля', async () => {
@@ -246,9 +257,9 @@ describe('Налив в шурф', () => {
       optionRow(tree).props.onChange(true);
     });
     const text = screenText(tree);
-    expect(text).toContain(I18n.t('vadoseHead'));
-    expect(text).toContain(I18n.t('vadoseDepth'));
-    expect(text).toContain(I18n.t('vadoseCapillary'));
+    expect(text).toContain(shownLabel('vadoseHead'));
+    expect(text).toContain(shownLabel('vadoseDepth'));
+    expect(text).toContain(shownLabel('vadoseCapillary'));
   });
 
   test('расход считается по объёму с интервалом и стоит прямо в поле', async () => {
@@ -692,5 +703,100 @@ describe('Экспресс-опробование', () => {
     // расчёта не дошли ни замеры, ни геометрия
     const text = screenText(tree);
     expect(text).toMatch(/k[\s\S]{0,40}\d/);
+  });
+
+  describe('коэффициенты A и ln(R/r_w)', () => {
+    /**
+     * Раскрывает блок «Как считается»: коэффициенты лежат в нём
+     *
+     * @param {Object} tree - дерево рендера
+     */
+    const openMethod = async (tree) => {
+      const [collapsible] = tree.root.findAll(
+        (node) => node.props?.title === I18n.t('ofrMethodTitle'),
+        { deep: true }
+      );
+      const [head] = collapsible.findAll(
+        (node) => typeof node.props?.onPress === 'function'
+      );
+      await act(async () => {
+        head.props.onPress();
+      });
+    };
+
+    /**
+     * Сообщает блоку его ширину, как это делает разметка на устройстве
+     *
+     * @param {Object} tree - дерево рендера
+     * @param {string} testID - метка блока
+     * @param {number} width - ширина, px
+     */
+    const layout = async (tree, testID, width) => {
+      const [slot] = tree.root.findAll(
+        (node) =>
+          node.props?.testID === testID && typeof node.props?.onLayout === 'function'
+      );
+      await act(async () => {
+        slot.props.onLayout({ nativeEvent: { layout: { x: 0, y: 0, width, height: 20 } } });
+      });
+    };
+
+    test('фильтр во всю мощность: на экране только A₃', async () => {
+      mockProject.params = { rw: 0.05, rc: 0.05, lw: 8, lt: 3.9, m: 8, s0: 3.45 };
+      const tree = await mount(SlugTestScreen);
+      await openMethod(tree);
+      const text = screenText(tree);
+      expect(text).toContain(I18n.t('slugSchemeFull'));
+      expect(text).toContain('A₃ = ');
+      expect(text).not.toContain('A₁ = ');
+      expect(text).not.toContain('A₂ = ');
+    });
+
+    test('фильтр короче пласта: на экране A₁ и A₂, без A₃', async () => {
+      mockProject.params = { rw: 0.05, rc: 0.05, lw: 7.9, lt: 4, m: 8, s0: 3.45 };
+      const tree = await mount(SlugTestScreen);
+      await openMethod(tree);
+      const text = screenText(tree);
+      expect(text).toContain(I18n.t('slugSchemePartial'));
+      expect(text).toContain('A₁ = ');
+      expect(text).toContain('A₂ = ');
+      expect(text).not.toContain('A₃ = ');
+    });
+
+    test('A — столько знаков, сколько влезает в строку', async () => {
+      mockProject.params = { rw: 0.05, rc: 0.05, lw: 7.9, lt: 4, m: 8, s0: 3.45 };
+      const { bouwerRiceCoefficients } = require('../../../calc/slugTest');
+      const { A1, A2 } = bouwerRiceCoefficients(158);
+      const tree = await mount(SlugTestScreen);
+      await openMethod(tree);
+
+      // Кегль формулы 12, системный множитель шрифта в тестовой среде 2:
+      // знак 14.4 px. В 400 px — 27 знаков, после «A₁ = » остаётся 22, и
+      // число показывается во все пятнадцать значащих цифр
+      await layout(tree, 'slug-coefficients', 400);
+      let text = screenText(tree);
+      expect(text).toContain(`A₁ = ${Number(A1.toPrecision(15))}`);
+      expect(text).toContain(`A₂ = ${Number(A2.toPrecision(15))}`);
+      expect(text).toContain('A₁ = 5.45276308870136');
+
+      // В 200 px — 13 знаков, на число 8: запись сокращается округлением
+      await layout(tree, 'slug-coefficients', 200);
+      text = screenText(tree);
+      expect(text).toMatch(/A₁ = 5\.452763(?!\d)/);
+      expect(text).toMatch(/A₂ = 0\.928226(?!\d)/);
+    });
+
+    test('ln(R/r_w) — столько знаков, сколько влезает в строку', async () => {
+      mockProject.params = { rw: 0.05, rc: 0.05, lw: 7.9, lt: 4, m: 8, s0: 3.45 };
+      const tree = await mount(SlugTestScreen);
+
+      // Кегль значения 14, множитель 2: знак 16.8 px. В 300 px — 17 знаков
+      await layout(tree, 'slug-influence-log', 300);
+      expect(screenText(tree)).toContain('3.97581770124749');
+
+      // В 120 px — 7 знаков: 3.9758177… округляется до 3.97582
+      await layout(tree, 'slug-influence-log', 120);
+      expect(screenText(tree)).toMatch(/3\.97582(?!\d)/);
+    });
   });
 });
