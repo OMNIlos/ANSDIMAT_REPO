@@ -24,8 +24,10 @@ export const LanguageContext = React.createContext({
 });
 
 export const LanguageProvider = ({ children }) => {
-  // Состояние текущего языка (по умолчанию русский)
-  const [locale, setLocale] = React.useState("ru");
+  // Системный язык уже определён и выставлен в I18n при загрузке модуля,
+  // отсюда и берём начальное значение: иначе первый рендер шёл бы по-русски
+  // независимо от языка устройства
+  const [locale, setLocale] = React.useState(I18n.locale);
   // Состояние загрузки (используется для предотвращения мерцания при инициализации)
   const [isLoading, setIsLoading] = React.useState(true);
 
@@ -42,28 +44,14 @@ export const LanguageProvider = ({ children }) => {
    */
   const getSystemLanguage = () => {
     try {
-      // Пробуем получить локаль из expo-localization
-      if (Localization && Localization.locale) {
-        const locale = Localization.locale;
-        
-        // Проверяем, что locale существует и является строкой
-        if (locale && typeof locale === 'string') {
-          const languageCode = locale.split('-')[0]; // Получаем код языка (например, 'ru' из 'ru-RU')
-          
-          // Если язык русский, используем русский, иначе английский
+      const locales = Localization.getLocales();
+      if (Array.isArray(locales) && locales.length > 0) {
+        const languageCode = locales[0]?.languageCode;
+        if (languageCode && typeof languageCode === 'string') {
           return languageCode === 'ru' ? 'ru' : 'en';
         }
       }
-      
-      // Fallback: проверяем доступные локали
-      if (Localization && Localization.locales && Localization.locales.length > 0) {
-        const firstLocale = Localization.locales[0];
-        if (firstLocale && typeof firstLocale === 'string') {
-          const languageCode = firstLocale.split('-')[0];
-          return languageCode === 'ru' ? 'ru' : 'en';
-        }
-      }
-      
+
       console.warn('Could not determine system language, using default');
       return 'en'; // По умолчанию английский
     } catch (error) {
@@ -77,12 +65,9 @@ export const LanguageProvider = ({ children }) => {
    * Вызывается один раз при инициализации компонента
    */
   React.useEffect(() => {
-    // Добавляем небольшую задержку для инициализации expo-localization
-    const timer = setTimeout(() => {
-      loadLanguagePreference();
-    }, 100);
-    
-    return () => clearTimeout(timer);
+    // Задержка на инициализацию expo-localization больше не нужна: язык
+    // устройства определяется синхронно в Localization.js
+    loadLanguagePreference();
   }, []);
 
   /**
@@ -102,11 +87,12 @@ export const LanguageProvider = ({ children }) => {
         setLocale(savedLocale);
         I18n.locale = savedLocale;
       } else {
-        // Если нет сохраненного языка, используем системный
+        // Своего выбора пользователь не делал — идём за системой и НЕ пишем
+        // язык в хранилище: записанный, он навсегда закрепил бы язык первого
+        // запуска, и смена языка телефона на приложение уже не влияла бы
         const systemLanguage = getSystemLanguage();
         setLocale(systemLanguage);
         I18n.locale = systemLanguage;
-        await AsyncStorage.setItem('appLocale', systemLanguage);
       }
     } catch (error) {
       console.error('Error loading language preference:', error);
@@ -138,9 +124,28 @@ export const LanguageProvider = ({ children }) => {
     }
   };
 
+  /**
+   * Устанавливает конкретный язык напрямую
+   *
+   * Нужен экрану настроек с сегментами RU/EN, где язык выбирается явно,
+   * а не переключается по кругу.
+   *
+   * @param {'ru'|'en'} newLocale - выбранный язык
+   */
+  const setLanguage = async (newLocale) => {
+    if (newLocale !== 'ru' && newLocale !== 'en') return;
+    setLocale(newLocale);
+    I18n.locale = newLocale;
+    try {
+      await AsyncStorage.setItem('appLocale', newLocale);
+    } catch (error) {
+      console.error('Error saving language preference:', error);
+    }
+  };
+
   // Предоставляем контекст всем дочерним компонентам
   return (
-    <LanguageContext.Provider value={{ locale, toggleLanguage, isLoading }}>
+    <LanguageContext.Provider value={{ locale, toggleLanguage, setLanguage, isLoading }}>
       {children}
     </LanguageContext.Provider>
   );

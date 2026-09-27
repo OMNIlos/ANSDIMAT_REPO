@@ -1,0 +1,619 @@
+/*
+ * Приведение AnsSurf к виду приложения
+ *
+ * Построитель карт приходит собранным веб-приложением со своей палитрой
+ * (коралловый акцент), своими радиусами и десктопной вёрсткой. Внутри
+ * приложения он должен читаться как его раздел, а не как вставленный сайт.
+ *
+ * Работа идёт через токены, а не через перебивание классов: страница собрана
+ * на Tailwind с переменными (`--color-*`, `--radius-*`, `--font-sans`), и
+ * подмена значений перекрашивает её целиком. Это переживает обновление
+ * поставки — точечные правки по классам не пережили бы, классы там
+ * сгенерированы сборщиком.
+ *
+ * Правил «по месту» здесь ровно столько, сколько нужно на две вещи, которые
+ * токенами не чинятся: ошибку в CSS поставки и мобильную эргономику.
+ *
+ * Подключается сборкой `tools/build-anssurf.js`, шрифты — из
+ * `tools/anssurf-fonts.css`.
+ */
+
+/* ── Типографика ───────────────────────────────────────────────────────
+ * Сама поставка уже просит Manrope — ей просто неоткуда её взять в WebView.
+ * Шрифты встроены рядом, остаётся снять десктопную подмену на Segoe UI
+ * и увести моноширинный на гарнитуру приложения: числа, координаты и
+ * уровни в приложении набраны JetBrains Mono, и разнобой здесь заметнее
+ * всего — именно числа человек и сверяет глазами.
+ */
+:root,
+:host {
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+html.hydro-desktop,
+html.hydro-desktop body {
+  font-family: var(--font-sans);
+}
+
+/* ── Палитра, светлая тема ─────────────────────────────────────────────
+ * Бордовый вместо кораллового, тёплая «бумага» вместо холодного серого:
+ * в приложении цвет несёт смысл, и бордовый означает бренд и ввод данных.
+ */
+:root {
+  --color-bg: #fbfafa;
+  --color-paper: #ffffff;
+  --color-surface: #ffffff;
+  --color-surface-2: #ffffff;
+  --color-surface-3: #f4f1f2;
+  --color-fg: #1a0710;
+  --color-ink: #1a0710;
+  --color-muted: #6b6169;
+  --color-subtle: #8a8087;
+  --color-primary: #72002f;
+  --color-primary-fg: #ffffff;
+  --color-primary-soft: #fbf0f4;
+  --color-border: #e8e4e6;
+  --color-border-strong: #d6cfd2;
+  --color-danger: #b3261e;
+
+  /* Бордовый как текст и контур и тональная кнопка — wineText, wineWash и
+     wineBorder из theme.js. В светлой теме текст и заливка совпадают, в
+     тёмной расходятся (см. ниже) */
+  --ansd-wine-text: #72002f;
+  --ansd-wine-line: #72002f;
+  --ansd-wine-wash: #fbf0f4;
+  --ansd-wine-border: #e1d6db;
+
+  /* Скругления приложения: 12 — поля и кнопки, 16–18 — карточки */
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 18px;
+  --radius-xl: 22px;
+}
+
+/* ── Палитра, тёмная тема ──────────────────────────────────────────────
+ * Тёплый чёрный, а не холодный: тёмная тема приложения уведена в бордовый
+ * подтон, и нейтрально-серая вставка в ней читается как чужая.
+ *
+ * Бордовый — как в приложении: заливка кнопок остаётся глубоким #72002F
+ * (под белым текстом он контрастен и на тёмном), а текст, контуры и ползунки
+ * берут осветлённый — глубокий бордовый буквами на тёмном фоне не прочесть.
+ * Раньше осветлённым было всё сразу, и кнопки здесь выходили розовыми рядом
+ * с тёмно-бордовыми кнопками остальных экранов.
+ */
+html.dark {
+  --color-bg: #121013;
+  --color-paper: #1c191c;
+  --color-surface: #1c191c;
+  --color-surface-2: #252126;
+  --color-surface-3: #2e2930;
+  --color-fg: #f5f2f4;
+  --color-ink: #f5f2f4;
+  --color-muted: #a79fa4;
+  --color-subtle: #8e858b;
+  --color-primary: #72002f;
+  --color-primary-fg: #ffffff;
+  --color-primary-soft: #33121f;
+  --color-border: #332d31;
+  --color-border-strong: #4a4248;
+  --color-danger: #e0736c;
+
+  --ansd-wine-text: #d98baa;
+  --ansd-wine-line: #a8446a;
+  --ansd-wine-wash: rgba(168, 68, 106, 0.16);
+  --ansd-wine-border: #4a2733;
+}
+
+/* Где поставка красит бордовым текст и контуры — осветлённый бордовый.
+   Заливки (`bg-primary`) не трогаются: у них свой токен */
+html.hydro-desktop .text-primary,
+html.hydro-desktop .hover\:text-primary:hover {
+  color: var(--ansd-wine-text);
+}
+
+html.hydro-desktop .border-primary,
+html.hydro-desktop .hover\:border-primary:hover,
+html.hydro-desktop .focus\:border-primary:focus {
+  border-color: var(--ansd-wine-line);
+}
+
+html.hydro-desktop .border-primary\/50 {
+  border-color: color-mix(in srgb, var(--ansd-wine-line) 50%, transparent);
+}
+
+html.hydro-desktop .border-primary\/30 {
+  border-color: color-mix(in srgb, var(--ansd-wine-line) 30%, transparent);
+}
+
+html.hydro-desktop .border-t-primary {
+  border-top-color: var(--ansd-wine-line);
+}
+
+/* Заполненная часть ползунка и полоса прогресса интерполяции — тонкие
+   линии, а не заливка под текстом: в тёмной теме им тоже нужен светлый */
+html.hydro-desktop .rounded-full.bg-surface-3 > .bg-primary {
+  background-color: var(--ansd-wine-line);
+}
+
+/* ── Ошибка в CSS поставки ─────────────────────────────────────────────
+ * Десктопная тема задаёт фон рабочей области как `var(--bg, #f4f6f8)`,
+ * а токен называется `--color-bg`. Переменной `--bg` не существует, поэтому
+ * всегда берётся запасное светло-серое значение: в тёмной теме получалась
+ * светлая подложка под светлым текстом, и заголовок шага было не прочесть.
+ */
+html.hydro-desktop #root > div > main {
+  background: var(--color-bg);
+}
+
+/* ── Лента шагов ───────────────────────────────────────────────────────
+ * Модуль рисует её как нижнюю панель вкладок; десктопная тема поднимает
+ * её наверх, красит в #252525 и сжимает до 32 px с кнопками по 24 —
+ * меню окна Windows под мышь. Внутри приложения это вторая полоса сразу под
+ * его шапкой: чужого цвета и слишком мелкая для пальца.
+ *
+ * Приводим к вкладкам калькулятора — тот же ряд под шапкой на фоне экрана,
+ * те же отступы 8/12 и таблетки высотой 30 со скруглением 20, выбранная
+ * залита бордовым с белой подписью, недоступная приглушена. Высоты поставки
+ * заданы с `!important`, поэтому и здесь без него не обойтись; тёмная тема
+ * перечислена отдельно — её правило в поставке весомее на класс.
+ */
+html.hydro-desktop #root > div > nav.sticky,
+html.dark.hydro-desktop #root > div > nav.sticky {
+  background: var(--color-bg) !important;
+  border-bottom: 1px solid var(--color-border) !important;
+  border-top: 0;
+  display: flex;
+  justify-content: center !important;
+  gap: 6px;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 8px 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+html.hydro-desktop #root > div > nav.sticky::-webkit-scrollbar {
+  display: none;
+}
+
+/* Сегменты делят ряд поровну, как вкладки калькулятора. Предел ширины — для
+   широкого окна: четыре подписи, растянутые на весь монитор, читаются как
+   четыре кнопки, а не как один переключатель */
+html.hydro-desktop #root > div > nav.sticky > button {
+  flex: 1 1 0 !important;
+  max-width: 180px;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  white-space: nowrap !important;
+  padding: 6px 10px !important;
+  border-radius: 20px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  line-height: 18px !important;
+  color: var(--color-muted);
+}
+
+/* Значок шага — только на широком экране. На телефоне четыре подписи и без
+   значков занимают полосу целиком, а со значками сегменты не влезают и лента
+   уезжает в горизонтальную прокрутку, обрезая выбранный шаг */
+@media (max-width: 767px) {
+  html.hydro-desktop #root > div > nav.sticky > button svg {
+    display: none !important;
+  }
+
+  html.hydro-desktop #root > div > nav.sticky > button {
+    padding: 6px 4px !important;
+  }
+}
+
+/* Выбранный шаг — заливка бренда, как выбранная вкладка калькулятора */
+html.hydro-desktop #root > div > nav.sticky > button.text-primary {
+  background: var(--color-primary) !important;
+  color: var(--color-primary-fg) !important;
+}
+
+html.hydro-desktop #root > div > nav.sticky > button:disabled {
+  opacity: 0.4;
+}
+
+/* ── Управляющие элементы ──────────────────────────────────────────────
+ * Кнопки и поля приложения выше и мягче: палец в перчатке промахивается
+ * по сорока четырём пикселям, и на этом экране данные вводят именно в поле.
+ */
+html.hydro-desktop button:not(nav.sticky > button),
+html.hydro-desktop select,
+html.hydro-desktop input[type="text"],
+html.hydro-desktop input[type="number"],
+html.hydro-desktop input:not([type]) {
+  font-family: var(--font-sans);
+}
+
+/* Моноширинный — только у чисел, как в приложении: шаг сетки, уровни,
+   толщины линий и код цвета рядом с палитрой. Заголовок карты, организация
+   и автор — текст, и набранные моноширинным они выглядели как код. Числовые
+   поля поставки узнаются по типу или по цифровой клавиатуре */
+html.hydro-desktop input[type="number"],
+html.hydro-desktop input[inputmode="decimal"],
+html.hydro-desktop input[inputmode="numeric"],
+html.hydro-desktop input[type="color"] + input {
+  font-family: var(--font-mono);
+}
+
+/* Выпадающие списки не шире колонки. Сетка настроек на телефоне — одна
+   колонка авторазмера, и она подстраивалась под самую длинную подпись
+   («Географические WGS 84 (градусы десятичные)»): списки вылезали за правый
+   край на девять пикселей, мимо кнопок над и под ними. Нулевой минимум
+   ширины у ячеек сетки возвращает колонку в границы, а длинная подпись в
+   самом списке обрезается многоточием */
+html.hydro-desktop .grid > * {
+  min-width: 0;
+}
+
+html.hydro-desktop [role="combobox"] > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Полотно карты ─────────────────────────────────────────────────────
+ * Рычаги масштаба и слоёв — поверхности приложения, а не белые квадраты
+ * Leaflet со скруглением в четыре пикселя.
+ */
+html.hydro-desktop .leaflet-bar,
+html.hydro-desktop .leaflet-control-layers {
+  border: 1px solid var(--color-border) !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(26, 7, 16, 0.12) !important;
+}
+
+html.hydro-desktop .leaflet-bar a {
+  background: var(--color-surface) !important;
+  color: var(--color-fg) !important;
+  border-bottom-color: var(--color-border) !important;
+}
+
+html.hydro-desktop .leaflet-bar a:hover {
+  background: var(--color-surface-3) !important;
+}
+
+/* ── Телефон: карта и панель шага ──────────────────────────────────────
+ * Здесь была не косметика, а неработающий экран.
+ *
+ * Десктопная тема поставки задаёт рабочей области `height:100%` и
+ * `overflow:hidden` — это вёрстка «карта слева, панель настроек справа», и
+ * на широком экране она верна. На телефоне те же правила достаются колонке:
+ * карта забирает всю высоту как `flex-1`, панель сжимается до полусотни
+ * пикселей, а `overflow:hidden` обрезает остаток. Список скважин, настройки
+ * интерполяции и кнопки выгрузки становятся недостижимы — не «неудобны»,
+ * а недостижимы: прокручивать нечего, всё обрезано.
+ *
+ * Ниже порога, на котором сама поставка переключается на колонку (768 px),
+ * возвращаем нормальный поток: карта получает предсказуемую высоту, панель
+ * встаёт под ней, прокручивается рабочая область целиком.
+ */
+@media (max-width: 767px) {
+  html.hydro-desktop .hydro-stage {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Чуть больше половины экрана: карта остаётся главным, но под ней видно
+     начало панели — иначе непонятно, что там вообще что-то есть.
+     Высота задаётся жёстко: у полотна стоит `flex-1`, и без своей высоты
+     в колонке с автоматической высотой оно схлопывается в ноль */
+  html.hydro-desktop .hydro-stage > .hydro-map-pane {
+    flex: 0 0 auto !important;
+    height: 56vh !important;
+    min-height: 260px !important;
+  }
+
+  html.hydro-desktop .hydro-stage > aside {
+    flex: 0 0 auto !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+}
+
+/* ── Место у нижнего края экрана ───────────────────────────────────────
+ * Плавающее меню приложения на картах спрятано, но приложение рисуется от
+ * края до края: снизу под страницей лежит системная полоса навигации
+ * Android. Последняя строка панели — как правило кнопка выгрузки — не должна
+ * уходить под системные кнопки.
+ *
+ * Отступ задаётся переменной: её выставляет приложение, потому что высота
+ * системной полосы известна только ему. Имя переменной осталось с тех пор,
+ * как под ней было меню, — его знает мост `components/anssurfBridge.js`.
+ */
+html.hydro-desktop #root > div > main {
+  padding-bottom: var(--ansd-menu-inset, 0px);
+}
+
+/* На карте отступ снимается: полотну лучше уходить под системную полосу
+   целиком, чем обрываться полосой фона. Панель под картой своё место
+   внизу получает отдельно */
+html.hydro-desktop .hydro-stage {
+  margin-bottom: calc(-1 * var(--ansd-menu-inset, 0px));
+}
+
+html.hydro-desktop .hydro-stage > aside {
+  padding-bottom: calc(2rem + var(--ansd-menu-inset, 0px));
+}
+
+/* ── Мелочи, которые выдают вставку ────────────────────────────────────
+ * Подсказки и рамки поставки нарисованы холодным серым; здесь они уже
+ * взяты из токенов, но пунктир задан отдельным цветом мимо них.
+ */
+html.hydro-desktop [class*="border-dashed"] {
+  border-color: var(--color-border-strong);
+}
+
+/* ── Полосы прокрутки ──────────────────────────────────────────────────
+ * Десктопная тема поставки рисует классические полосы шириной 12 px со
+ * светлой дорожкой (`main::-webkit-scrollbar{width:12px}`). Как только у
+ * полосы задана ширина, браузер перестаёт рисовать тонкую накладную и
+ * отводит под классическую место справа: в тёмной теме это светло-серая
+ * дорожка вдоль всего экрана.
+ *
+ * Прячутся все полосы и при любом указателе. Раньше правило стояло только
+ * для касания, и в узком окне браузера с мышью дорожка оставалась. Прокрутка
+ * работает как работала; во всём остальном приложении полос тоже нет.
+ */
+html.hydro-desktop,
+html.hydro-desktop * {
+  scrollbar-width: none !important;
+}
+
+html.hydro-desktop::-webkit-scrollbar,
+html.hydro-desktop *::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* ── Кто над кем: ленты, окна и панели ─────────────────────────────────
+ * Окна поставки — `position: fixed` с большим z-index, но рендерятся внутри
+ * слоёв со своим контекстом наложения: окно скважины — в карте
+ * (`relative z-0`), привязка растра и параметры кригинга — в панели шага
+ * (`relative z-10`). z-index окна действует только внутри такого слоя.
+ *
+ * Отсюда два наложения. Панель шага (z 10) рисовалась поверх окна скважины
+ * вместе с его кнопками. Лента шагов (z 45) рисовалась поверх любого окна из
+ * панели и срезала ему верх.
+ *
+ * Лента опускается ниже панели: она стоит над колонкой, а не поверх неё, и
+ * перекрывать ей нечего. Карта, пока в ней открыто окно или меню, встаёт
+ * выше панели.
+ */
+html.hydro-desktop #root > div > nav.sticky {
+  z-index: 5 !important;
+}
+
+html.hydro-desktop .hydro-stage > .hydro-map-pane:has(.hydro-well-modal-bg, .hydro-well-ctx) {
+  z-index: 60 !important;
+}
+
+/* Затемнение под окном. У поставки оно на 45 % и в тёмной теме почти не
+   видно: страница под окном читалась как есть, и заголовок панели казался
+   наехавшим на окно */
+html.hydro-desktop .hydro-well-modal-bg {
+  background: rgba(10, 6, 8, 0.62) !important;
+}
+
+html.hydro-desktop .hydro-well-modal,
+html.hydro-desktop .hydro-raster-dlg {
+  border-color: var(--color-border-strong) !important;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45) !important;
+}
+
+html.hydro-desktop .hydro-well-modal {
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+}
+
+/* На телефоне окно скважины встаёт наверх. Поле имени получает фокус сразу,
+   и клавиатура закрывает нижнюю половину экрана: окно по центру теряло под
+   ней кнопки «Добавить» и «Отмена» */
+@media (max-width: 767px) {
+  html.hydro-desktop .hydro-well-modal-bg:not(.hydro-raster-scrim) {
+    place-items: start center !important;
+    padding-top: 12px;
+  }
+}
+
+/* ── Надписи поверх карты ──────────────────────────────────────────────
+ * Плашка «Нажмите на карту…» и сводка «20 скважин» стоят в левом верхнем
+ * углу карты — ровно там, где кнопки масштаба и линейка Leaflet. Плашка
+ * закрывала «+» и «−» целиком. Надписи сдвигаются вправо от кнопок, как
+ * поставка сама делает с подсказкой линейки (`left-12`).
+ */
+html.hydro-desktop .hydro-map-pane:has(.leaflet-container) > .pointer-events-none.absolute.top-3 {
+  left: 3rem !important;
+}
+
+/* ── Всплывающие подсказки и списки ────────────────────────────────────
+ * Подсказка «ⓘ» и раскрытый список залиты тем же цветом, что карточки под
+ * ними, а тень у поставки рассчитана на светлый фон. В тёмной теме
+ * подсказка сливалась с полями и выглядела наехавшим на них блоком.
+ */
+html.hydro-desktop [role="tooltip"],
+html.hydro-desktop [data-radix-popper-content-wrapper] > * {
+  background: var(--color-surface-3) !important;
+  border-color: var(--color-border-strong) !important;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* ── Поля ───────────────────────────────────────────────────────────────
+ * Длинная подпись («Толщина второстепенных») переносится на вторую строку
+ * и сдвигает своё поле вниз: в паре колонок поля стояли лесенкой. Ячейки
+ * прижимаются к низу — поля встают в одну линию.
+ */
+html.hydro-desktop .hydro-stage > aside .grid.grid-cols-2 {
+  align-items: end;
+}
+
+/* Выбранное значение списка — по левому краю и в одну строку. Кнопка
+   списка центрирует текст по умолчанию, и длинное «Географические WGS 84
+   (градусы десятичные)» вставало в две строки посередине, в отличие от
+   соседних списков */
+html.hydro-desktop button[role="combobox"] {
+  text-align: left;
+}
+
+html.hydro-desktop button[role="combobox"] > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Подсказка в пустом поле бледнее введённого значения */
+html.hydro-desktop input::placeholder {
+  color: var(--color-subtle);
+  opacity: 0.75;
+}
+
+/* Системные ползунки и флажки — в цвет бренда, а не синие. Контурный
+   бордовый: в тёмной теме глубокий на тёмной дорожке не виден */
+html.hydro-desktop {
+  accent-color: var(--ansd-wine-line);
+}
+
+/* Подпись «Проект» под кнопками «Сохранить» и «Загрузить» стояла впритык */
+html.hydro-desktop .hydro-stage > aside > .grid.grid-cols-2 + p {
+  margin-top: 6px;
+}
+
+/* ── Кнопка учебного примера ───────────────────────────────────────────
+ * Поставка привлекает к ней внимание кольцом, которое переливается из
+ * оранжевого в синий, и значком того же перелива — два чужих цвета на
+ * бордовом экране. Кольцо остаётся, но бренд-цвета.
+ */
+@keyframes ansd-sample-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--ansd-wine-line) 35%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--ansd-wine-line) 75%, transparent),
+      0 0 14px color-mix(in srgb, var(--ansd-wine-line) 25%, transparent);
+  }
+}
+
+html.hydro-desktop .hydro-sample-btn {
+  animation-name: ansd-sample-ring !important;
+}
+
+/* Значок и кольцо — контурным бордовым: глубокий на тёмной кнопке пропадал */
+html.hydro-desktop .hydro-sample-icon {
+  animation: none !important;
+  color: var(--ansd-wine-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.hydro-desktop .hydro-sample-btn {
+    animation: none !important;
+  }
+}
+
+/* ── Тумблеры ──────────────────────────────────────────────────────────
+ * Выключенный тумблер поставки — бегунок цвета текста на светлой дорожке.
+ * В светлой теме это тёмный кружок, и выключенные «Доп. карты» читались
+ * включёнными — сильнее, чем по-настоящему включённые бордовые. Здесь, как
+ * у системных тумблеров Android и в настройках приложения: белый бегунок на
+ * серой дорожке.
+ */
+html.hydro-desktop button[role="switch"][data-state="unchecked"] {
+  background: var(--color-border-strong);
+  border-color: transparent;
+}
+
+html.hydro-desktop button[role="switch"][data-state="unchecked"] > span {
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(26, 7, 16, 0.3);
+}
+
+/* ── Кнопки выгрузки ───────────────────────────────────────────────────
+ * На шаге «Выгрузка» восемь кнопок форматов подряд залиты бордовым — сплошная
+ * стена, в которой не за что зацепиться глазом. Форматы равноправны, поэтому
+ * они тональные, как второстепенные кнопки приложения, а залитой остаётся
+ * одна — выгрузка в настольный АНСДИМАТ, ради которой карту и строят внутри
+ * приложения.
+ */
+html.hydro-desktop .flex-col:has(> #export-ansdimat) > button.bg-primary:not(#export-ansdimat) {
+  background: var(--ansd-wine-wash);
+  color: var(--ansd-wine-text);
+  box-shadow: inset 0 0 0 1px var(--ansd-wine-border);
+}
+
+/* ── Удаление скважины из списка ───────────────────────────────────────
+ * Крестик в строке списка — голый символ в девять пикселей: пальцем в него
+ * не попасть, а промах уходит в соседнюю строку. Поле нажатия 32 × 32,
+ * строка при этом не растёт — лишнее съедают отрицательные поля.
+ */
+html.hydro-desktop td > button.text-danger {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin: -6px -8px -6px 0;
+  border-radius: 8px;
+  font-size: 18px;
+  line-height: 1;
+}
+
+html.hydro-desktop td > button.text-danger:active {
+  background: color-mix(in srgb, var(--color-danger) 14%, transparent);
+}
+
+/* ── Раскрывающиеся блоки ──────────────────────────────────────────────
+ * Стрелка у заголовка («▾», «▸») — символ, которого нет в Manrope: его
+ * добирает запасной шрифт, и в десять пикселей он превращался в точку у
+ * правого края. Стрелка рисуется рамкой и поворачивается при раскрытии.
+ */
+html.hydro-desktop details > summary::after {
+  content: "" !important;
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin: 0 5px 3px auto;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  font-size: 0;
+  opacity: 0.6;
+  transform: rotate(45deg);
+  transition: transform 0.15s ease-out;
+}
+
+html.hydro-desktop details:not([open]) > summary::after {
+  margin-bottom: 0;
+  transform: rotate(-45deg);
+}
+
+/* ── Раскрытый список ──────────────────────────────────────────────────
+ * Список раскрывается по ширине самого длинного пункта: «Географические
+ * WGS 84 (градусы десятичные)» уводила его за правый край телефона вместе с
+ * отметкой выбранного. Список не шире экрана, длинный пункт переносится —
+ * при выборе его нужно прочесть целиком, многоточие тут не годится.
+ */
+html.hydro-desktop [data-radix-popper-content-wrapper] {
+  min-width: 0 !important;
+  max-width: calc(100vw - 32px);
+}
+
+html.hydro-desktop [data-radix-popper-content-wrapper] [role="listbox"] {
+  max-width: calc(100vw - 32px);
+}
+
+html.hydro-desktop [role="option"] {
+  white-space: normal;
+}

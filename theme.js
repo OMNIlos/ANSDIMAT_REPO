@@ -1,132 +1,454 @@
 /**
- * Конфигурация тем приложения АНСДИМАТ
- * 
- * Этот файл определяет:
- * - Цветовую палитру приложения на основе дизайна ans.html
- * - Светлую и темную темы с использованием Material Design 3
- * - Кастомные цвета для специфичных элементов интерфейса
- * - Функцию для получения названий тем на разных языках
- * 
- * Цветовая схема основана на корпоративных цветах:
- * - Основной: бордовый (#72002F)
- * - Вторичный: синий (#031888)
- * 
+ * Дизайн-система АНСДИМАТ
+ *
+ * Направление — «полевой прибор»: приложение должно читаться как точный
+ * измерительный инструмент, а не как потребительское приложение.
+ *
+ * Логика цвета:
+ * - Бордовый (wine) — бренд и ввод данных (журнал, создание, шапки)
+ * - Синий (abyss) — обработка и анализ. Цвет несёт смысл, а не украшает:
+ *   если элемент синий, он ведёт к расчётам и графикам
+ * - Фон — тёплая «бумага», а не стерильный белый; границы тёплые серые,
+ *   поэтому карточки держатся контуром, а не тяжёлыми тенями
  */
 
 import { MD3LightTheme, MD3DarkTheme } from 'react-native-paper';
 
 /**
- * Основная цветовая палитра приложения
- * 
- * Цвета взяты из дизайна ans.html и адаптированы для React Native Paper
- * Каждый цвет имеет свое назначение в интерфейсе
+ * Базовая палитра
  */
-const colors = {
-  reverseText: '#00000', // Цвет текста для светлых элементов на темном фоне
-  primary: '#72002F', // Основной бордовый цвет - используется для кнопок, заголовков
-  primaryLight: '#A56981', // Светлый бордовый - для hover состояний и акцентов
-  secondary: '#031888', // Синий акцент - для ссылок и дополнительных элементов
-  secondaryLight: '#021784', // Темно-синий - для активных состояний
-  background: '#FFFFFF', // Белый фон - основной фон приложения
-  surface: '#F5F5F5', // Светло-серый фон - для карточек и панелей
-  accent: '#E0E0E0', // Серый акцент - для разделителей и неактивных элементов
-  text: '#000000', // Черный текст - основной цвет текста
-  textSecondary: '#727272', // Серый текст - для подписей и второстепенного текста
-  border: '#919191', // Серая граница - для рамок и разделителей
-  white: '#FFFFFF', // Белый цвет - для контрастных элементов
-  shadow: 'rgba(0, 0, 0, 0.1)', // Тень - для эффектов глубины
-  d4d4d4: '#d4d4d4', // Светло-серый - для неактивных элементов
-  d3d3d3: '#3d3d3d', // Темно-серый - для темной темы
+const palette = {
+  // Бренд
+  wine: '#72002F',        // Основной бордовый — кнопки, шапки, акценты
+  wineDeep: '#4A001F',    // Нажатые состояния и градиентный край
+  wineSoft: '#A8446A',    // Бордовый на тёмном фоне, вторичные акценты
+  wineWash: '#FBF0F4',    // Едва заметная подложка выделенных состояний
+
+  // Анализ
+  abyss: '#031888',       // Синий — обработка, графики, расчёты
+  abyssSoft: '#5B6CD9',   // Синий для тёмной темы
+
+  // Нейтральные (тёплые, в тон бордового)
+  ink: '#1A0710',         // Основной текст — почти чёрный с бордовым подтоном
+  slate: '#6B6169',       // Второстепенный текст
+  hairline: '#E8E4E6',    // Границы карточек и разделители
+  paper: '#FBFAFA',       // Фон экрана — «бумага»
+  surface: '#FFFFFF',     // Карточки поверх фона
+  surfaceSunken: '#F4F1F2', // Утопленные блоки: инфо-карточки, поля
+
+  // Тёмная тема (тёплый чёрный, а не холодный #121212)
+  inkDark: '#121013',
+  surfaceDark: '#1C191C',
+  surfaceSunkenDark: '#252126',
+  hairlineDark: '#332D31',
+  textDark: '#F5F2F4',
+  slateDark: '#A79FA4',
+
+  // Служебные
+  white: '#FFFFFF',
+  gold: '#E0A83C',        // Избранное
+  danger: '#B3261E',
 };
 
 /**
- * Светлая тема приложения
- * 
- * Основана на Material Design 3 Light Theme с кастомными цветами
- * Используется для светлого режима интерфейса
+ * Гарнитуры
+ *
+ * Manrope — заголовки и интерфейс, JetBrains Mono — числа, координаты,
+ * результаты и подписи осей. Имена соответствуют пакетам
+ * @expo-google-fonts/*. На случай, если шрифты ещё не загрузились,
+ * значения безопасно откатываются на системные (RN игнорирует
+ * несуществующее семейство и берёт дефолтное).
+ */
+export const fontFamily = {
+  regular: 'Manrope_400Regular',
+  medium: 'Manrope_500Medium',
+  semibold: 'Manrope_600SemiBold',
+  bold: 'Manrope_700Bold',
+  extrabold: 'Manrope_800ExtraBold',
+  mono: 'JetBrainsMono_400Regular',
+  monoMedium: 'JetBrainsMono_500Medium',
+  monoSemibold: 'JetBrainsMono_600SemiBold',
+};
+
+/**
+ * Шкала отступов (сетка 4pt)
+ */
+export const spacing = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+  xxl: 32,
+};
+
+/**
+ * Высота полосы нижнего меню без системного отступа снизу
+ *
+ * Нужна экранам, которые кладут поверх содержимого свои плавающие кнопки и
+ * прокручиваемые списки: без общей константы отступ подбирался на глаз, и на
+ * телефонах с жестовой навигацией содержимое уходило под меню.
+ *
+ * Живёт здесь, а не в самом меню: за меню тянется авторизация и навигация, и
+ * ради одного числа экран подтягивал бы половину приложения.
+ */
+export const MENU_BAR_HEIGHT = 61;
+
+/**
+ * Радиусы скругления (по дизайн-хендоффу)
+ */
+export const radius = {
+  sm: 12,
+  md: 16,    // Карточки
+  card: 18,  // Карточки с крупным содержимым
+  lg: 22,    // Герой-блоки и крупные карточки
+  chip: 20,  // Чипы и сегменты
+  pill: 26,  // Кнопки-пилюли
+  round: 999,
+};
+
+/**
+ * Цвета типов точек полевого дневника
+ *
+ * Тип точки узнаётся по цвету маркера на карте, поэтому оттенки заданы
+ * отдельно от палитры интерфейса и одинаковы в обеих темах.
+ */
+export const pointTypeColors = {
+  well: '#031888',         // Скважина
+  spring: '#2E9B8F',       // Родник
+  pit: '#72002F',          // Шурф
+  observation: '#E0A83C',  // Точка наблюдения
+};
+
+/**
+ * Типографическая шкала
+ *
+ * Гарнитура задана в каждом токене: Manrope — текст и интерфейс, JetBrains
+ * Mono — числа и надзаголовки, как в дизайн-прототипе. Раньше токены несли
+ * только кегль и вес, и всё, что на них собрано, — подписи, пояснения,
+ * надзаголовки калькулятора — выходило системным шрифтом: на одном экране
+ * стояли две разные гарнитуры.
+ *
+ * Вес несёт само семейство (Manrope_700Bold и т. п.), поэтому fontWeight в
+ * токенах нет: на Android вес поверх жирного семейства дорисовывается
+ * синтетически, а на вебе грани весов раскладывает lib/webPolish.web.js.
+ *
+ * numeric — табличные цифры: в приложении про замеры колонки чисел
+ * обязаны выравниваться по разрядам.
+ */
+export const type = {
+  display: {
+    fontFamily: fontFamily.bold,
+    fontSize: 28,
+    lineHeight: 34,
+    letterSpacing: -0.5,
+  },
+  title: {
+    fontFamily: fontFamily.bold,
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: -0.3,
+  },
+  cardTitle: {
+    fontFamily: fontFamily.bold,
+    fontSize: 17,
+    lineHeight: 22,
+    letterSpacing: -0.2,
+  },
+  body: {
+    fontFamily: fontFamily.regular,
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  caption: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  // Надзаголовок секции: моноширинный, КАПСОМ, разрежённый — как в
+  // прототипе. Только для слов: обозначения величин и размерности капсом
+  // меняют смысл (s — понижение, S — водоотдача; м — метр, М — мега),
+  // поэтому формулы и единицы в надзаголовок не кладутся
+  eyebrow: {
+    fontFamily: fontFamily.monoSemibold,
+    fontSize: 10.5,
+    lineHeight: 14,
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+  },
+  // Подпись с обозначениями: «s — lg t», «t, мин», «T, м²/сут». Та же
+  // моноширинная строка, что у надзаголовка, но в том регистре, в каком
+  // написана, — регистр здесь часть формулы
+  label: {
+    fontFamily: fontFamily.monoSemibold,
+    fontSize: 11.5,
+    lineHeight: 15,
+    letterSpacing: 0.2,
+  },
+  numeric: {
+    fontFamily: fontFamily.monoMedium,
+    fontSize: 15,
+    lineHeight: 20,
+    fontVariant: ['tabular-nums'],
+  },
+};
+
+/** Отношение высоты строки к кеглю для крупных чисел */
+const NUMERIC_LINE_RATIO = 1.3;
+
+/**
+ * Числовой стиль заданного кегля
+ *
+ * Токен `numeric` несёт высоту строки под свой кегль 15 px. Стиль вида
+ * `{ ...type.numeric, fontSize: 30 }` наследовал lineHeight 20 — цифра
+ * в 30 px не помещалась в строку и обрезалась снизу. На вебе это сходило
+ * с рук, на Android обрезка видна сразу, и именно она вылезала на карточках
+ * результата после сборки.
+ *
+ * Хелпер держит высоту строки пропорциональной кеглю, поэтому кегль здесь
+ * задаётся только через него, а не переопределением поверх токена.
+ *
+ * @param {number} fontSize - кегль, px
+ * @returns {{fontSize: number, lineHeight: number}} размеры для стиля
+ */
+export function numericAt(fontSize) {
+  return {
+    ...type.numeric,
+    fontSize,
+    lineHeight: Math.round(fontSize * NUMERIC_LINE_RATIO),
+  };
+}
+
+/**
+ * Тени — почти невидимые в светлой теме (границы делают работу),
+ * заметнее в тёмной, где границ недостаточно
+ */
+export const elevation = {
+  // Карточки: 0 10px 24px -18px rgba(20,7,14,.3)
+  card: {
+    shadowColor: '#14070E',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  // Бордовые кнопки: 0 12px 24px -12px rgba(114,0,47,.5)
+  brandButton: {
+    shadowColor: '#72002F',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.32,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  // Синие кнопки и карточки результата
+  dataButton: {
+    shadowColor: '#031888',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  // Плавающее меню: 0 12px 30px -8px rgba(74,0,31,.55)
+  raised: {
+    shadowColor: '#4A001F',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.42,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+};
+
+/**
+ * Светлая тема
  */
 export const lightTheme = {
-  ...MD3LightTheme, // Наследуем базовую светлую тему Material Design 3
+  ...MD3LightTheme,
   colors: {
-    ...MD3LightTheme.colors, // Наследуем стандартные цвета MD3
-    // Основные цвета приложения
-    primary: colors.primary, // Основной бордовый цвет
-    reverseText: '#FFFFFF', // Белый текст для темных элементов
-    secondary: colors.secondary, // Синий акцент
-    
-    // Цвета фона и поверхностей
-    background: colors.background, // Белый фон
-    surface: colors.surface, // Светло-серый фон для карточек
-    text: colors.text, // Черный текст
-    onSurface: colors.text, // Цвет текста на поверхностях
-    
-    // Цвета для элементов интерфейса
-    placeholder: colors.textSecondary, // Цвет placeholder в полях ввода
-    outline: colors.border, // Цвет границ и контуров
-    surfaceVariant: colors.accent, // Вариант поверхности для карточек
-    
-    // Кастомные цвета для специфичных элементов
-    primaryLight: colors.primaryLight, // Светлый бордовый
-    secondaryLight: colors.secondaryLight, // Темно-синий
-    textSecondary: colors.textSecondary, // Серый текст
-    border: colors.border, // Серая граница
-    white: colors.white, // Белый цвет
-    shadow: colors.shadow, // Тень
-    d4d4d4: colors.d4d4d4, // Светло-серый
+    ...MD3LightTheme.colors,
+
+    // Бренд
+    primary: palette.wine,
+    primaryAccent: palette.wine,
+    primaryDeep: palette.wineDeep,
+    primaryLight: palette.wineSoft,
+    primaryWash: palette.wineWash,
+    onPrimary: palette.white,
+
+    // Анализ
+    secondary: palette.abyss,
+    secondaryLight: palette.abyssSoft,
+
+    // Поверхности
+    background: palette.paper,
+    surface: palette.surface,
+    surfaceSunken: palette.surfaceSunken,
+    surfaceVariant: palette.surfaceSunken,
+    elevation: {
+      ...MD3LightTheme.colors.elevation,
+      level0: 'transparent',
+      level1: palette.surface,
+      level2: palette.surface,
+      level3: palette.surface,
+    },
+
+    // Текст
+    text: palette.ink,
+    onSurface: palette.ink,
+    textSecondary: palette.slate,
+    onSurfaceVariant: palette.slate,
+    placeholder: palette.slate,
+    faint: '#8A8087',        // Приглушённый (иконки-шевроны, подписи)
+
+    // Линии
+    border: palette.hairline,
+    outline: palette.hairline,
+    outlineVariant: palette.hairline,
+
+    // Бордовый как текст/граница на светлой поверхности
+    wineText: palette.wine,
+    wineBorder: '#E1D6DB',
+
+    // Выбранный сегмент переключателя: приподнятая «таблетка» на утопленной
+    // дорожке. Светлее дорожки в обеих темах — иначе выбор читается как
+    // провал, а не как выпуклость
+    segment: palette.surface,
+    segmentBorder: 'rgba(20, 7, 14, 0.06)',
+
+    // Плашка-чип, фон превью видео, фон области графика
+    chip: 'rgba(255,255,255,0.92)',
+    thumb: '#EDE3E7',
+    thumbStripe: 'rgba(114,0,47,0.08)',
+    plotBg: '#FCFBFC',
+
+    // Служебные
+    white: palette.white,
+    reverseText: palette.white,
+    gold: palette.gold,
+    success: '#2E9B8F',
+    error: palette.danger,
+    errorFill: palette.danger,
+    errorWash: '#FDF1F0',
+    // Тот же фон, но прозрачный: нужен градиентам растворения у краёв
+    // прокручиваемых лент — сплошной цвет там даёт видимую ступеньку
+    backgroundClear: 'rgba(251, 250, 250, 0)',
+    shadow: 'rgba(42, 10, 24, 0.08)',
+    d4d4d4: palette.surfaceSunken,
   },
 };
 
 /**
- * Темная тема приложения
- * 
- * Основана на Material Design 3 Dark Theme с кастомными цветами
- * Используется для темного режима интерфейса
+ * Тёмная тема
  */
 export const darkTheme = {
-  ...MD3DarkTheme, // Наследуем базовую темную тему Material Design 3
+  ...MD3DarkTheme,
   colors: {
-    ...MD3DarkTheme.colors, // Наследуем стандартные цвета MD3
-    // Основные цвета приложения (те же, что и в светлой теме)
-    primary: colors.primary, // Основной бордовый цвет
-    secondary: colors.secondary, // Синий акцент
-    
-    // Цвета фона и поверхностей для темной темы
-    background: '#121212', // Темно-серый фон (стандарт Material Design)
-    surface: '#1E1E1E', // Темно-серый фон для карточек
-    text: '#FFFFFF', // Белый текст
-    onSurface: '#FFFFFF', // Белый текст на поверхностях
-    placeholder: '#A0A0A0', // Светло-серый placeholder
-    outline: colors.border, // Серая граница
-    surfaceVariant: '#2A2A2A', // Темно-серый вариант поверхности
-    onSurfaceVariant: '#A0A0A0', // Светло-серый текст на вариантах поверхности
-    
-    // Кастомные цвета для темной темы
-    primaryLight: colors.primaryLight, // Светлый бордовый
-    secondaryLight: colors.secondaryLight, // Темно-синий
-    textSecondary: '#A0A0A0', // Светло-серый текст
-    border: colors.border, // Серая граница
-    white: colors.white, // Белый цвет
-    shadow: 'rgba(255, 255, 255, 0.1)', // Светлая тень для темной темы
-    d4d4d4: colors.d3d3d3, // Темно-серый (адаптированный для темной темы)
+    ...MD3DarkTheme.colors,
+
+    // Бренд. primary остаётся глубоким бордовым и в тёмной теме: это фон
+    // под белым текстом, он контрастен в обоих режимах и держит узнаваемость.
+    // Осветлённый вариант живёт отдельно в primaryAccent — для случаев,
+    // когда бордовый выступает текстом или иконкой на тёмной поверхности.
+    primary: palette.wine,
+    primaryAccent: palette.wineSoft,
+    primaryDeep: palette.wineDeep,
+    primaryLight: palette.wineSoft,
+    primaryWash: 'rgba(168, 68, 106, 0.16)',
+    onPrimary: palette.white,
+
+    // Анализ
+    secondary: palette.abyssSoft,
+    secondaryLight: palette.abyssSoft,
+
+    // Поверхности
+    background: palette.inkDark,
+    surface: palette.surfaceDark,
+    surfaceSunken: palette.surfaceSunkenDark,
+    surfaceVariant: palette.surfaceSunkenDark,
+    elevation: {
+      ...MD3DarkTheme.colors.elevation,
+      level0: 'transparent',
+      level1: palette.surfaceDark,
+      level2: palette.surfaceDark,
+      level3: palette.surfaceDark,
+    },
+
+    // Текст
+    text: palette.textDark,
+    onSurface: palette.textDark,
+    textSecondary: palette.slateDark,
+    onSurfaceVariant: palette.slateDark,
+    placeholder: palette.slateDark,
+    faint: '#8A8087',
+
+    // Линии
+    border: palette.hairlineDark,
+    outline: palette.hairlineDark,
+    outlineVariant: palette.hairlineDark,
+
+    // Бордовый на тёмной поверхности осветляем, иначе проваливается
+    wineText: '#D98BAA',
+    wineBorder: '#4A2733',
+
+    // Выбранный сегмент: в тёмной теме поверхность карточки темнее дорожки,
+    // и выбранный вариант проваливался в неё. Здесь он светлее дорожки
+    segment: '#39323A',
+    segmentBorder: 'rgba(255, 255, 255, 0.07)',
+
+    // Плашка-чип, фон превью видео, фон области графика
+    chip: 'rgba(28,25,28,0.92)',
+    thumb: '#241A1F',
+    thumbStripe: 'rgba(216,139,170,0.10)',
+    plotBg: '#191518',
+
+    // Служебные
+    white: palette.white,
+    reverseText: palette.ink,
+    gold: palette.gold,
+    success: '#3FB7A8',
+    // error — для текста и иконок на тёмном фоне, errorFill — заливка кнопок:
+    // светло-розовый годится как надпись, но не как фон под белым текстом
+    error: '#F2B8B5',
+    errorFill: '#C2352B',
+    errorWash: 'rgba(194, 53, 43, 0.14)',
+    backgroundClear: 'rgba(18, 16, 19, 0)',
+    shadow: 'rgba(0, 0, 0, 0.5)',
+    d4d4d4: palette.surfaceSunkenDark,
   },
 };
+
+/**
+ * Градиент герой-карточки «Создать откачку»
+ * linear-gradient(160deg, #8A0A3D 0%, #72002F 55%, #4A001F 100%)
+ * Одинаков в обеих темах — это фирменный акцент.
+ */
+export const heroGradient = {
+  colors: ['#8A0A3D', '#72002F', '#4A001F'],
+  locations: [0, 0.55, 1],
+  // 160deg в CSS ≈ вектор вправо-вниз
+  start: { x: 0.1, y: 0 },
+  end: { x: 0.9, y: 1 },
+};
+
+/**
+ * Шапка экрана всегда фирменно-бордовая — и в светлой, и в тёмной теме.
+ * Это якорь бренда: пользователь узнаёт приложение по бордовой полосе сверху.
+ */
+export const brandHeader = palette.wine;
+
+export { palette };
 
 // Экспортируем светлую тему как тему по умолчанию
 export default lightTheme;
 
 /**
  * Возвращает название темы на указанном языке
- * 
- * Используется для отображения текущей темы в интерфейсе
- * Поддерживает русский и английский языки
- * 
+ *
  * @param {string} themeMode - Режим темы ('light', 'dark', 'system')
  * @param {string} locale - Язык интерфейса ('ru' или 'en')
  * @returns {string} Название темы на указанном языке
  */
 export function getThemeSwitchLabel(themeMode, locale = 'ru') {
   if (locale === 'en') {
-    // Английские названия тем
     switch (themeMode) {
       case 'light':
         return 'Light theme';
@@ -138,12 +460,11 @@ export function getThemeSwitchLabel(themeMode, locale = 'ru') {
         return 'System theme';
     }
   } else {
-    // Русские названия тем
     switch (themeMode) {
       case 'light':
         return 'Светлая тема';
       case 'dark':
-        return 'Темная тема';
+        return 'Тёмная тема';
       case 'system':
         return 'Системная тема';
       default:

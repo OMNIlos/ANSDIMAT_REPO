@@ -37,3 +37,7 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+.env
+
+# Служебные файлы Superpowers (журнал прогона, брифы, пакеты ревью)
+.superpowers/

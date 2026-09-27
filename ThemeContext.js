@@ -17,6 +17,7 @@ import { PaperProvider } from 'react-native-paper';
 import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { lightTheme, darkTheme } from './theme.js';
+import { syncWebSurface } from './lib/webPolish';
 
 // Создаем контекст с дефолтными значениями
 export const ThemeContext = React.createContext({
@@ -82,6 +83,23 @@ export function ThemeProvider({ children }) {
   };
 
   /**
+   * Устанавливает конкретный режим темы напрямую
+   *
+   * Нужен экрану настроек, где тема выбирается сегментами
+   * «Светлая / Тёмная / Системная», а не циклическим переключением.
+   *
+   * @param {'light'|'dark'|'system'} mode - выбранный режим
+   */
+  const setMode = async (mode) => {
+    setThemeMode(mode);
+    try {
+      await AsyncStorage.setItem('themeMode', mode);
+    } catch (error) {
+      console.error('Error saving theme preference:', error);
+    }
+  };
+
+  /**
    * Определяет текущую тему на основе настроек пользователя
    * 
    * Логика определения:
@@ -106,15 +124,22 @@ export function ThemeProvider({ children }) {
   };
 
   // Мемоизируем значение контекста для оптимизации производительности
-  const value = React.useMemo(() => ({ 
-    themeMode, 
+  const value = React.useMemo(() => ({
+    themeMode,
     toggleTheme,
-    systemColorScheme 
+    setMode,
+    systemColorScheme
   }), [themeMode, systemColorScheme]);
   
   // Получаем текущую тему для применения
   const currentTheme = getCurrentTheme();
-  
+
+  // Фон самой веб-страницы — под тему: он проступает при прокрутке с
+  // оттяжкой и в момент смены экранов. На нативе вызов пустой
+  React.useEffect(() => {
+    if (!isLoading) syncWebSurface(currentTheme);
+  }, [currentTheme, isLoading]);
+
   // Показываем загрузочный экран пока загружаются настройки
   // Используем светлую тему как fallback во время загрузки
   if (isLoading) {

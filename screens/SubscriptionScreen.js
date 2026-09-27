@@ -1,543 +1,474 @@
-import React, { useState, useEffect, useContext } from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  Alert,
-  Platform,
-  BackHandler,
-} from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
-import I18n from "../Localization";
-import { LanguageContext } from "../LanguageContext";
-import { SubscriptionManager } from "../utils/SubscriptionManager";
-import { useTheme } from "react-native-paper";
+/**
+ * Подписка
+ *
+ * Экран переписан под дизайн-систему приложения: раньше здесь были
+ * захардкоженные цвета и белые карточки, из-за чего в тёмной теме экран
+ * выглядел чужим, а Alert.alert в вебе не показывал кнопок.
+ *
+ * Тарифы выбираются как сегменты, покупка подтверждается баннером,
+ * отмена — общим диалогом подтверждения.
+ */
 
+import React, { useCallback, useContext, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { useTheme } from 'react-native-paper';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialIcons } from '@expo/vector-icons';
+import I18n from '../Localization';
+import { LanguageContext } from '../LanguageContext';
+import { useEntitlements } from '../billing/EntitlementsContext';
+import { useAuth } from '../AuthContext';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
+import { spacing, radius, type, elevation, fontFamily, heroGradient } from '../theme';
+import { useContentMaxWidth } from '../lib/appPrefs';
 
-export default function SubscriptionScreen({ navigation }) {
-  const theme = useTheme();
-  const [subscriptionStatus, setSubscriptionStatus] = useState("inactive");
-  const [subscriptionType, setSubscriptionType] = useState(null);
-  const [expiryDate, setExpiryDate] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
+/** Тарифы. Цены в долларах — как в текущем биллинге */
+const PLANS = [
+  {
+    key: 'monthly',
+    price: '$9.99',
+    periodKey: 'perMonth',
+    titleKey: 'monthlySubscription',
+  },
+  {
+    key: 'yearly',
+    price: '$99.99',
+    periodKey: 'perYear',
+    titleKey: 'yearlySubscription',
+    recommended: true,
+    // 12 × 9.99 − 99.99
+    savings: '$19.89',
+  },
+];
+
+const FEATURES = [
+  { icon: 'map', key: 'clusterMapFeature' },
+  { icon: 'all-inclusive', key: 'unlimitedProjects' },
+  { icon: 'insights', key: 'advancedAnalytics' },
+  { icon: 'tune', key: 'advancedFunctionality' },
+  { icon: 'file-download', key: 'exportAllFormats' },
+];
+
+export default function SubscriptionScreen() {
+  const { colors } = useTheme();
+  const { width } = useWindowDimensions();
   const { locale } = useContext(LanguageContext);
 
+  const { entitlements, refresh } = useEntitlements();
+  const { session } = useAuth();
 
+  const isActive = entitlements.premium;
+  const activeType = entitlements.source === 'promo' ? 'promo' : entitlements.source;
+  const expiryDate = entitlements.expiresAt ? new Date(entitlements.expiresAt) : null;
+
+  const [selectedPlan, setSelectedPlan] = useState('yearly');
+  const [isLoading, setIsLoading] = useState(false);
+  const [banner, setBanner] = useState(null);
+  const [cancelAsked, setCancelAsked] = useState(false);
+
+  // «Адаптация под планшет» в настройках: колонка по центру или вся ширина
+  const column = useContentMaxWidth(620);
+  const contentMaxWidth = width >= 700 ? column : undefined;
+
+  const load = useCallback(async () => {
+    await refresh();
+  }, [refresh]);
 
   useFocusEffect(
-    React.useCallback(() => {
-      loadSubscriptionStatus();
-    }, [])
+    useCallback(() => {
+      load();
+    }, [load])
   );
 
-  async function loadSubscriptionStatus() {
-    try {
-      const status = await SubscriptionManager.getSubscriptionStatus();
-      setSubscriptionStatus(status.isActive ? "active" : "inactive");
-      setSubscriptionType(status.type);
-      setExpiryDate(status.expiryDate);
-    } catch (error) {
-      console.error("Error loading subscription status:", error);
+  /**
+   * Оформление тарифа
+   *
+   * Покупка идёт через магазин приложений, и подтверждает её сервер по чеку —
+   * клиент не может выдать себе премиум сам. Пока платёжный провайдер не
+   * подключён, объясняем это прямо, а не имитируем оплату: показывать
+   * заказчику фальшивое «оплачено» хуже, чем честную заглушку.
+   */
+  const purchase = async () => {
+    if (!session) {
+      setBanner({ kind: 'error', text: I18n.t('subscribeNeedsAccount', {
+        defaultValue: 'Войдите в аккаунт: подписка привязывается к учётной записи.',
+      }) });
+      return;
     }
-  }
-
-  async function simulatePurchase(subscriptionType) {
     setIsLoading(true);
-
-    // Симуляция процесса покупки
-    setTimeout(async () => {
-      try {
-        const now = new Date();
-        const expiryDate = new Date(now);
-
-        if (subscriptionType === "monthly") {
-          expiryDate.setMonth(expiryDate.getMonth() + 1);
-        } else if (subscriptionType === "yearly") {
-          expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-        }
-
-        await SubscriptionManager.setSubscriptionStatus(
-          "active",
-          subscriptionType,
-          expiryDate
-        );
-
-        setSubscriptionStatus("active");
-        setSubscriptionType(subscriptionType);
-        setExpiryDate(expiryDate);
-
-        Alert.alert(I18n.t("success"), I18n.t("purchaseSuccessful"), [
-          { text: I18n.t("ok") },
-        ]);
-      } catch (error) {
-        Alert.alert(I18n.t("error"), I18n.t("purchaseFailed"), [
-          { text: I18n.t("ok") },
-        ]);
-      } finally {
-        setIsLoading(false);
-      }
-    }, 2000);
-  }
-
-  async function cancelSubscription() {
-    Alert.alert(
-      I18n.t("cancelSubscription"),
-              I18n.t("cancelSubscriptionConfirm"),
-      [
-        { text: I18n.t("cancel"), style: "cancel" },
-        {
-          text: I18n.t("yes"),
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await SubscriptionManager.cancelSubscription();
-
-              setSubscriptionStatus("inactive");
-              setSubscriptionType(null);
-              setExpiryDate(null);
-
-              Alert.alert(I18n.t("success"), I18n.t("subscriptionCancelled"), [
-                { text: I18n.t("ok") },
-              ]);
-            } catch (error) {
-              Alert.alert(I18n.t("error"), I18n.t("cancelSubscriptionError"));
-            }
-          },
-        },
-      ]
-    );
-  }
-
-  async function restorePurchases() {
-    setIsLoading(true);
-
-    // Симуляция восстановления покупок
+    setBanner(null);
+    // Задержка — не имитация запроса, а пауза перед показом объяснения:
+    // без неё сообщение появляется раньше, чем палец отпустил кнопку
     setTimeout(() => {
-      Alert.alert(I18n.t("info"), I18n.t("subscriptionRestored"), [
-        { text: I18n.t("ok") },
-      ]);
       setIsLoading(false);
-    }, 1500);
-  }
+      setBanner({ kind: 'info', text: I18n.t('billingPending', {
+        defaultValue: 'Оплата подключается через App Store и Google Play. Для доступа сейчас используйте промокод в разделе «Аккаунт».',
+      }) });
+    }, 400);
+  };
 
-  function formatDate(date) {
-    if (!date) return "";
-    return date.toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
+  const confirmCancel = async () => {
+    setCancelAsked(false);
+    setBanner({ kind: 'info', text: I18n.t('cancelViaStore', {
+      defaultValue: 'Подписка отменяется в настройках App Store или Google Play — так требуют правила магазинов.',
+    }) });
+  };
+
+  /**
+   * @param {Date|null} date - дата окончания подписки
+   * @returns {string} дата в локали интерфейса
+   */
+  const formatDate = (date) => {
+    if (!date) return '';
+    return date.toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
     });
-  }
-
-  function getStatusColor() {
-    switch (subscriptionStatus) {
-      case "active":
-        return "#4CAF50";
-      case "expired":
-        return "#FF9800";
-      default:
-        return "#F44336";
-    }
-  }
-
-  function getStatusText() {
-    switch (subscriptionStatus) {
-      case "active":
-        return I18n.t("subscriptionActive");
-      case "expired":
-        return I18n.t("subscriptionExpires");
-      default:
-        return I18n.t("subscriptionInactive");
-    }
-  }
+  };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContainer}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Существующий контент */}
-        <View style={styles.content}>
-          <View style={{...styles.header, backgroundColor: theme.colors.primary, borderRadius: 12, margin: 16}}>
-            <Text style={styles.title}>{I18n.t("subscriptionTitle")}</Text>
-            <Text style={styles.description}>
-              {I18n.t("subscriptionDescription")}
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <View style={[styles.content, contentMaxWidth && { maxWidth: contentMaxWidth }]}>
+          {/* Герой-блок в фирменном градиенте */}
+          <LinearGradient
+            colors={heroGradient.colors}
+            locations={heroGradient.locations}
+            start={heroGradient.start}
+            end={heroGradient.end}
+            style={[styles.hero, elevation.brandButton]}
+          >
+            <View style={styles.heroIcon}>
+              <MaterialIcons name="workspace-premium" size={26} color="#FFFFFF" />
+            </View>
+            <Text style={[type.title, styles.heroTitle]}>{I18n.t('subscriptionTitle')}</Text>
+            <Text style={[type.caption, styles.heroSubtitle]}>
+              {I18n.t('subscriptionDescription')}
             </Text>
-          </View>
+          </LinearGradient>
 
-          {/* Текущий статус подписки */}
-          <View style={{...styles.statusCard, backgroundColor: theme.colors.surface }}>
-            <Text style={{...styles.statusTitle, color: theme.colors.text}}>{I18n.t("currentPlan")}</Text>
-            <View style={styles.statusContent}>
+          {/* Текущий статус */}
+          <View
+            style={[
+              styles.card,
+              elevation.card,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <Text style={[type.eyebrow, { color: colors.textSecondary }]}>
+              {I18n.t('currentPlan')}
+            </Text>
+            <View style={styles.statusRow}>
               <View
                 style={[
-                  styles.statusIndicator,
-                  { backgroundColor: getStatusColor() },
+                  styles.statusDot,
+                  { backgroundColor: isActive ? colors.success : colors.faint },
                 ]}
               />
-              <View style={styles.statusInfo}>
-                <Text style={{...styles.statusText, color: theme.colors.text}}>{getStatusText()}</Text>
-                {subscriptionType && (
-                  <Text style={styles.subscriptionType}>
-                    {subscriptionType === "monthly"
-                      ? I18n.t("monthlySubscription")
-                      : I18n.t("yearlySubscription")}
-                  </Text>
-                )}
-                {expiryDate && (
-                  <Text style={styles.expiryDate}>
-                    {I18n.t("subscriptionExpires")}: {formatDate(expiryDate)}
+              <View style={styles.statusBox}>
+                <Text style={[type.cardTitle, { color: colors.text }]}>
+                  {isActive ? I18n.t('subscriptionActive') : I18n.t('subscriptionInactive')}
+                </Text>
+                {isActive && !!activeType && (
+                  <Text style={[type.caption, { color: colors.textSecondary }]}>
+                    {activeType === 'monthly'
+                      ? I18n.t('monthlySubscription')
+                      : I18n.t('yearlySubscription')}
+                    {expiryDate ? ` · ${I18n.t('subscriptionExpires')} ${formatDate(expiryDate)}` : ''}
                   </Text>
                 )}
               </View>
             </View>
 
-            {subscriptionStatus === "active" && (
+            {isActive && (
               <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={cancelSubscription}
+                style={[styles.ghostButton, { borderColor: colors.border }]}
+                onPress={() => setCancelAsked(true)}
+                accessibilityRole="button"
               >
-                <Text style={styles.cancelButtonText}>
-                  {I18n.t("cancelSubscription")}
+                <Text style={[styles.ghostButtonText, { color: colors.error }]}>
+                  {I18n.t('cancelSubscription')}
                 </Text>
               </TouchableOpacity>
             )}
           </View>
 
-          {/* Планы подписки */}
-          {subscriptionStatus !== "active" && (
-            <View style={styles.plansContainer}>
-              <Text style={styles.sectionTitle}>{I18n.t("upgradeToPremium")}</Text>
-
-              {/* Месячная подписка */}
-              <View style={styles.planCard}>
-                <View style={styles.planHeader}>
-                  <Text style={styles.planTitle}>
-                    {I18n.t("monthlySubscription")}
-                  </Text>
-                  <View style={styles.priceContainer}>
-                    <Text style={styles.price}>$9.99</Text>
-                    <Text style={styles.pricePeriod}>{I18n.t("perMonth")}</Text>
-                  </View>
-                </View>
-                <TouchableOpacity
-                  style={[
-                    styles.subscribeButton,
-                    isLoading && styles.disabledButton,
-                  ]}
-                  onPress={() => simulatePurchase("monthly")}
-                  disabled={isLoading}
-                >
-                  <Text style={styles.subscribeButtonText}>
-                    {isLoading ? I18n.t("loading") : I18n.t("subscribe")}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Годовая подписка */}
-              <View style={[styles.planCard, styles.recommendedPlan]}>
-                <View style={styles.recommendedBadge}>
-                  <Text style={styles.recommendedText}>
-                    {I18n.t("saveWithYearly")}
-                  </Text>
-                </View>
-                <View style={styles.planHeader}>
-                  <Text style={styles.planTitle}>
-                    {I18n.t("yearlySubscription")}
-                  </Text>
-                  <View style={styles.priceContainer}>
-                    <Text style={styles.price}>$99.99</Text>
-                    <Text style={styles.pricePeriod}>{I18n.t("perYear")}</Text>
-                  </View>
-                </View>
-                <Text style={styles.savingsText}>Экономия $19.89 в год</Text>
-                <TouchableOpacity
-                  style={[
-                    styles.subscribeButton,
-                    styles.recommendedButton,
-                    isLoading && styles.disabledButton,
-                  ]}
-                  onPress={() => simulatePurchase("yearly")}
-                  disabled={isLoading}
-                >
-                  <Text style={styles.subscribeButtonText}>
-                    {isLoading ? I18n.t("loading") : I18n.t("subscribe")}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+          {!!banner && (
+            <View
+              style={[
+                styles.banner,
+                {
+                  backgroundColor: colors.surfaceSunken,
+                  borderLeftColor: banner.kind === 'error' ? colors.error : colors.primaryAccent,
+                },
+              ]}
+            >
+              <Text style={[type.caption, { color: colors.text }]}>{banner.text}</Text>
             </View>
           )}
 
-          {/* Возможности подписки */}
-          <View style={styles.featuresContainer}>
-            <Text style={styles.sectionTitle}>
-              {I18n.t("subscriptionFeatures")}
-            </Text>
-
-            <View style={styles.featureItem}>
-              <Text style={styles.featureIcon}>✓</Text>
-              <Text style={styles.featureText}>{I18n.t("unlimitedProjects")}</Text>
-            </View>
-
-            <View style={styles.featureItem}>
-              <Text style={styles.featureIcon}>✓</Text>
-              <Text style={styles.featureText}>{I18n.t("advancedAnalytics")}</Text>
-            </View>
-
-            <View style={styles.featureItem}>
-              <Text style={styles.featureIcon}>✓</Text>
-              <Text style={styles.featureText}>
-                {I18n.t("advancedFunctionality")}
+          {/* Тарифы */}
+          {!isActive && (
+            <>
+              <Text style={[type.eyebrow, styles.sectionLabel, { color: colors.textSecondary }]}>
+                {I18n.t('upgradeToPremium')}
               </Text>
-            </View>
 
-            <View style={styles.featureItem}>
-              <Text style={styles.featureIcon}>✓</Text>
-              <Text style={styles.featureText}>{I18n.t("exportAllFormats")}</Text>
-            </View>
+              {PLANS.map((plan) => {
+                const selected = plan.key === selectedPlan;
+                return (
+                  <TouchableOpacity
+                    key={plan.key}
+                    onPress={() => setSelectedPlan(plan.key)}
+                    activeOpacity={0.85}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected }}
+                    style={[
+                      styles.plan,
+                      elevation.card,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: selected ? colors.primaryAccent : colors.border,
+                        borderWidth: selected ? 2 : StyleSheet.hairlineWidth,
+                      },
+                    ]}
+                  >
+                    {plan.recommended && (
+                      <View style={[styles.badge, { backgroundColor: colors.primaryAccent }]}>
+                        <Text style={styles.badgeText}>{I18n.t('saveWithYearly')}</Text>
+                      </View>
+                    )}
+
+                    <View style={styles.planHead}>
+                      <MaterialIcons
+                        name={selected ? 'radio-button-checked' : 'radio-button-unchecked'}
+                        size={20}
+                        color={selected ? colors.primaryAccent : colors.faint}
+                      />
+                      <Text style={[type.cardTitle, styles.planTitle, { color: colors.text }]}>
+                        {I18n.t(plan.titleKey)}
+                      </Text>
+                      <View style={styles.priceBox}>
+                        <Text style={[type.numeric, styles.price, { color: colors.text }]}>
+                          {plan.price}
+                        </Text>
+                        <Text style={[type.caption, { color: colors.textSecondary }]}>
+                          {I18n.t(plan.periodKey)}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {!!plan.savings && (
+                      <Text style={[type.caption, styles.savings, { color: colors.primaryAccent }]}>
+                        {I18n.t('yearlySavings', {
+                          amount: plan.savings,
+                          defaultValue: `Экономия ${plan.savings} в год`,
+                        })}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+
+              <TouchableOpacity
+                style={[
+                  styles.cta,
+                  elevation.brandButton,
+                  { backgroundColor: colors.primary, opacity: isLoading ? 0.6 : 1 },
+                ]}
+                onPress={purchase}
+                disabled={isLoading}
+                accessibilityRole="button"
+              >
+                <Text style={styles.ctaText}>
+                  {isLoading ? I18n.t('loading') : I18n.t('subscribe')}
+                </Text>
+                {!isLoading && <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />}
+              </TouchableOpacity>
+            </>
+          )}
+
+          {/* Что даёт подписка */}
+          <Text style={[type.eyebrow, styles.sectionLabel, { color: colors.textSecondary }]}>
+            {I18n.t('subscriptionFeatures')}
+          </Text>
+          <View
+            style={[
+              styles.card,
+              elevation.card,
+              { backgroundColor: colors.surface, borderColor: colors.border, gap: spacing.md },
+            ]}
+          >
+            {FEATURES.map((feature) => (
+              <View key={feature.key} style={styles.feature}>
+                <View style={[styles.featureIcon, { backgroundColor: colors.primaryWash }]}>
+                  <MaterialIcons name={feature.icon} size={18} color={colors.primaryAccent} />
+                </View>
+                <Text style={[type.body, styles.featureText, { color: colors.text }]}>
+                  {I18n.t(feature.key)}
+                </Text>
+              </View>
+            ))}
           </View>
 
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              Подписка автоматически продлевается, если не отменена за 24 часа до
-              окончания периода.
-            </Text>
-          </View>
+          <Text style={[type.caption, styles.footer, { color: colors.faint }]}>
+            {I18n.t('subscriptionAutoRenew', {
+              defaultValue:
+                'Подписка продлевается автоматически, если не отменить её не позднее чем за 24 часа до конца оплаченного периода.',
+            })}
+          </Text>
         </View>
-
-        {/* Нижний отступ */}
-        <View style={{ height: 100 }} />
       </ScrollView>
 
-
+      <ConfirmDialog
+        visible={cancelAsked}
+        title={I18n.t('cancelSubscription')}
+        message={I18n.t('cancelSubscriptionConfirm')}
+        confirmLabel={I18n.t('yes')}
+        destructive
+        onConfirm={confirmCancel}
+        onCancel={() => setCancelAsked(false)}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    padding: 20,
-    alignItems: "center",
+  container: { flex: 1 },
+  scroll: {
+    padding: spacing.lg,
+    paddingBottom: 128,
+    alignItems: 'center',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#fff",
-    marginBottom: 8,
+  content: { width: '100%' },
+
+  hero: {
+    borderRadius: radius.lg,
+    padding: spacing.xl,
+    gap: spacing.sm,
   },
-  description: {
-    fontSize: 16,
-    color: "#fff",
-    textAlign: "center",
-    opacity: 0.9,
+  heroIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.round,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
   },
-  statusCard: {
-    margin: 16,
-    padding: 20,
-    borderRadius: 12,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+  heroTitle: { color: '#FFFFFF' },
+  heroSubtitle: { color: 'rgba(255,255,255,0.82)' },
+
+  card: {
+    marginTop: spacing.lg,
+    borderRadius: radius.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: spacing.lg,
   },
-  statusTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 16,
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginTop: spacing.md,
   },
-  statusContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
+  statusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: radius.round,
   },
-  statusIndicator: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 12,
+  statusBox: { flex: 1, gap: 2 },
+
+  ghostButton: {
+    marginTop: spacing.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.pill,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
   },
-  statusInfo: {
-    flex: 1,
-  },
-  statusText: {
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  subscriptionType: {
+  ghostButtonText: {
+    fontFamily: fontFamily.bold,
     fontSize: 14,
-    color: "#666",
-    marginTop: 4,
-  },
-  expiryDate: {
-    fontSize: 14,
-    color: "#666",
-    marginTop: 4,
-  },
-  cancelButton: {
-    backgroundColor: "#f44336",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  cancelButtonText: {
-    color: "#fff",
-    fontWeight: "600",
-  },
-  plansContainer: {
-    margin: 16,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#800020",
-    marginBottom: 16,
-  },
-  planCard: {
-    backgroundColor: "#fff",
-    padding: 20,
-    borderRadius: 12,
-    marginBottom: 16,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  recommendedPlan: {
-    borderWidth: 2,
-    borderColor: "#800020",
-    position: "relative",
-  },
-  recommendedBadge: {
-    position: "absolute",
-    top: -10,
-    right: 20,
-    backgroundColor: "#800020",
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  recommendedText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  planHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  planTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  priceContainer: {
-    alignItems: "flex-end",
-  },
-  price: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#800020",
-  },
-  pricePeriod: {
-    fontSize: 14,
-    color: "#666",
-  },
-  savingsText: {
-    fontSize: 14,
-    color: "#4CAF50",
-    fontWeight: "600",
-    marginBottom: 16,
-  },
-  subscribeButton: {
-    backgroundColor: "#800020",
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  recommendedButton: {
-    backgroundColor: "#800020",
-  },
-  disabledButton: {
-    opacity: 0.6,
-  },
-  subscribeButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  featuresContainer: {
-    backgroundColor: "#fff",
-    margin: 16,
-    padding: 20,
-    borderRadius: 12,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  featureItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  featureIcon: {
-    fontSize: 18,
-    color: "#4CAF50",
-    marginRight: 12,
-    fontWeight: "bold",
-  },
-  featureText: {
-    fontSize: 16,
-    color: "#333",
-    flex: 1,
-  },
-  restoreButton: {
-    backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: "#800020",
-    margin: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  restoreButtonText: {
-    color: "#800020",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  footer: {
-    padding: 16,
-    marginBottom: 20,
-  },
-  footerText: {
-    fontSize: 12,
-    color: "#666",
-    textAlign: "center",
-    lineHeight: 18,
-  },
-  container: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContainer: {
-    paddingVertical: 20,
-  },
-  content: {
-    // Существующие стили контента
+    fontWeight: '700',
   },
 
+  banner: {
+    marginTop: spacing.lg,
+    borderLeftWidth: 3,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+  },
+
+  sectionLabel: { marginTop: spacing.xl },
+
+  plan: {
+    marginTop: spacing.md,
+    borderRadius: radius.card,
+    padding: spacing.lg,
+  },
+  badge: {
+    alignSelf: 'flex-start',
+    borderRadius: radius.chip,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 3,
+    marginBottom: spacing.md,
+  },
+  badgeText: {
+    fontFamily: fontFamily.bold,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    color: '#FFFFFF',
+  },
+  planHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  planTitle: { flex: 1 },
+  priceBox: { alignItems: 'flex-end' },
+  price: {
+    fontSize: 20,
+    fontFamily: fontFamily.monoSemibold,
+  },
+  savings: {
+    marginTop: spacing.sm,
+    marginLeft: 36,
+    fontFamily: fontFamily.semibold,
+  },
+
+  cta: {
+    marginTop: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    borderRadius: radius.pill,
+    paddingVertical: spacing.lg,
+  },
+  ctaText: {
+    fontFamily: fontFamily.bold,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+
+  feature: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  featureIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.round,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  featureText: { flex: 1 },
+
+  footer: {
+    marginTop: spacing.xl,
+    textAlign: 'center',
+  },
 });

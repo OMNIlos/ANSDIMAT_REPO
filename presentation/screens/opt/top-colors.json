@@ -1,0 +1,62 @@
+{
+  "01-home.png": {
+    "hex": "#72002F",
+    "dark": true
+  },
+  "02-projects.png": {
+    "hex": "#72002F",
+    "dark": true
+  },
+  "03-journal.png": {
+    "hex": "#72002F",
+    "dark": true
+  },
+  "04-chart.png": {
+    "hex": "#FBFBFB",
+    "dark": false
+  },
+  "05-calculator.png": {
+    "hex": "#72002F",
+    "dark": true
+  },
+  "06-barrage.png": {
+    "hex": "#72002F",
+    "dark": true
+  },
+  "07-leakage.png": {
+    "hex": "#72002F",
+    "dark": true
+  },
+  "08-diary.png": {
+    "hex": "#72002F",
+    "dark": true
+  },
+  "09-videos.png": {
+    "hex": "#72002F",
+    "dark": true
+  },
+  "10-about.png": {
+    "hex": "#72002F",
+    "dark": true
+  },
+  "11-manual.png": {
+    "hex": "#72002F",
+    "dark": true
+  },
+  "12-settings.png": {
+    "hex": "#72002F",
+    "dark": true
+  },
+  "13-subscription.png": {
+    "hex": "#72002F",
+    "dark": true
+  },
+  "14-auth.png": {
+    "hex": "#72002F",
+    "dark": true
+  },
+  "15-recovery.png": {
+    "hex": "#FBFBFB",
+    "dark": false
+  }
+}
