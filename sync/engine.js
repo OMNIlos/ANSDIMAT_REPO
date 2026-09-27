@@ -17,7 +17,7 @@
 
 import { getDatabase } from '../db';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { SYNC_TABLES } from './tables';
+import { SYNC_TABLES, toMs } from './tables';
 
 /** Сколько строк отправляем за один запрос */
 const BATCH = 200;
@@ -85,36 +85,43 @@ async function pullTable({ database, supabase }, spec) {
 
   for (const remoteRow of data) {
     const local = await database.getFirstAsync(
-      `SELECT id, updated_at, dirty FROM ${spec.name} WHERE id = ?`,
+      `SELECT updated_at, dirty, remote_updated_at FROM ${spec.name} WHERE id = ?`,
       [remoteRow.id]
     );
     const incoming = spec.toLocal(remoteRow);
 
-    // Обе стороны меняли одну запись — решение за пользователем
-    if (local?.dirty === 1 && local.updated_at !== incoming.updated_at) {
-      conflicts.push({
-        table: spec.name,
-        id: remoteRow.id,
-        localUpdatedAt: local.updated_at,
-        remoteUpdatedAt: incoming.updated_at,
-      });
-      blocked = true;
-      continue;
+    if (local?.dirty === 1) {
+      // Обе стороны меняли запись, если сервер ушёл от версии, с которой
+      // начиналась местная правка. С местным updated_at сравнивать нельзя:
+      // серверное время ставит триггер, и своя же отправленная строка
+      // выглядела бы чужой правкой
+      if (local.remote_updated_at !== incoming.updated_at) {
+        conflicts.push({
+          table: spec.name,
+          id: remoteRow.id,
+          localUpdatedAt: local.updated_at,
+          remoteUpdatedAt: incoming.updated_at,
+        });
+        blocked = true;
+        continue;
+      }
+      // Иначе пришла та самая версия, от которой идёт правка, — её отправит push
+    } else {
+      const cols = spec.columns;
+      const placeholders = cols.map(() => '?').join(', ');
+      const updates = cols
+        .filter((c) => c !== 'id')
+        .map((c) => `${c} = excluded.${c}`)
+        .join(', ');
+
+      await database.runAsync(
+        `INSERT INTO ${spec.name} (${cols.join(', ')}, dirty, remote_updated_at)
+         VALUES (${placeholders}, 0, ?)
+         ON CONFLICT(id) DO UPDATE SET ${updates}, dirty = 0,
+           remote_updated_at = excluded.remote_updated_at`,
+        [...cols.map((c) => incoming[c] ?? null), incoming.updated_at]
+      );
     }
-
-    const cols = spec.columns;
-    const placeholders = cols.map(() => '?').join(', ');
-    const updates = cols
-      .filter((c) => c !== 'id')
-      .map((c) => `${c} = excluded.${c}`)
-      .join(', ');
-
-    await database.runAsync(
-      `INSERT INTO ${spec.name} (${cols.join(', ')}, dirty)
-       VALUES (${placeholders}, 0)
-       ON CONFLICT(id) DO UPDATE SET ${updates}, dirty = 0`,
-      cols.map((c) => incoming[c] ?? null)
-    );
 
     if (!blocked && remoteRow.updated_at > newest) newest = remoteRow.updated_at;
   }
@@ -147,14 +154,25 @@ async function pushTable({ database, supabase, ownerId }, spec, skipIds = []) {
   if (!rows.length) return 0;
 
   const payload = rows.map((row) => spec.toRemote(row, ownerId));
-  const { error } = await supabase.from(spec.remote).upsert(payload, { onConflict: 'id' });
+  const { data, error } = await supabase
+    .from(spec.remote)
+    .upsert(payload, { onConflict: 'id' })
+    .select('id, updated_at');
   if (error) throw new Error(`Не удалось отправить ${spec.name}: ${error.message}`);
 
-  const ids = rows.map((r) => r.id);
-  await database.runAsync(
-    `UPDATE ${spec.name} SET dirty = 0 WHERE id IN (${ids.map(() => '?').join(',')})`,
-    ids
-  );
+  // Время, поставленное сервером, становится базой следующей правки. Метку
+  // снимаем, только если строку не тронули, пока шёл запрос: иначе правка,
+  // сделанная во время отправки, считалась бы отправленной и не уехала бы
+  const sent = new Map(rows.map((r) => [r.id, r.updated_at]));
+  for (const { id, updated_at } of data) {
+    await database.runAsync(
+      `UPDATE ${spec.name}
+          SET remote_updated_at = ?,
+              dirty = CASE WHEN updated_at = ? THEN 0 ELSE dirty END
+        WHERE id = ?`,
+      [toMs(updated_at), sent.get(id), id]
+    );
+  }
   return rows.length;
 }
 
@@ -211,22 +229,24 @@ export async function resolveConflict(conflict, winner) {
   if (!spec) return;
 
   if (winner === 'local') {
-    // Оставляем свою версию: при следующей отправке она перезапишет серверную
+    // Оставляем свою версию. Серверную, которую пользователь видел и
+    // отверг, делаем базой правки: pull её больше не оспорит, и при
+    // следующей отправке своя версия её перезапишет
     await database.runAsync(
-      `UPDATE ${spec.name} SET dirty = 1, updated_at = ? WHERE id = ?`,
-      [Date.now(), conflict.id]
+      `UPDATE ${spec.name} SET dirty = 1, updated_at = ?, remote_updated_at = ? WHERE id = ?`,
+      [Date.now(), conflict.remoteUpdatedAt, conflict.id]
     );
     return;
   }
 
   // Берём серверную: снимаем dirty и откатываем отметку, чтобы строка
-  // пришла заново на ближайшем pull
+  // пришла заново на ближайшем pull. Только назад: отметка стоит перед
+  // первым нерешённым расхождением, и сдвиг вперёд спрятал бы остальные
   await database.runAsync(`UPDATE ${spec.name} SET dirty = 0 WHERE id = ?`, [conflict.id]);
-  await setLastPulled(
-    database,
-    spec.name,
-    new Date(conflict.remoteUpdatedAt - 1000).toISOString()
-  );
+  const before = conflict.remoteUpdatedAt - 1000;
+  if (Date.parse(await getLastPulled(database, spec.name)) > before) {
+    await setLastPulled(database, spec.name, new Date(before).toISOString());
+  }
 }
 
 /**

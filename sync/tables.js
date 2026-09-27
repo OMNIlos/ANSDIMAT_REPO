@@ -20,7 +20,7 @@ const toIso = (ms) => (ms ? new Date(ms).toISOString() : null);
  * @param {string|null} iso - ISO-строка
  * @returns {number|null} миллисекунды epoch или null
  */
-const toMs = (iso) => (iso ? new Date(iso).getTime() : null);
+export const toMs = (iso) => (iso ? new Date(iso).getTime() : null);
 
 export const SYNC_TABLES = [
   {

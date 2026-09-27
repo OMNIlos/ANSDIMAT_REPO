@@ -473,6 +473,28 @@ export const MIGRATIONS = [
   CREATE INDEX IF NOT EXISTS idx_attachments_point
     ON point_attachments (point_id);
   `,
+
+  // v14 — серверная версия, от которой идёт местная правка.
+  //
+  // updated_at на сервере ставит триггер, поэтому после отправки там лежит
+  // не то время, что у нас. Pull сравнивал его с местным updated_at и
+  // принимал нашу же отправленную строку за чужую правку, стоило тронуть
+  // запись до следующего обмена. Теперь сравнение идёт с этой колонкой:
+  // расхождение есть, только если сервер менялся после неё.
+  //
+  // У строк, заведённых до этой версии, база неизвестна. Берём местное
+  // время — первый обмен после обновления решит ровно так же, как раньше.
+  `
+  ALTER TABLE projects ADD COLUMN remote_updated_at INTEGER;
+  ALTER TABLE wells ADD COLUMN remote_updated_at INTEGER;
+  ALTER TABLE measurements ADD COLUMN remote_updated_at INTEGER;
+  ALTER TABLE observation_points ADD COLUMN remote_updated_at INTEGER;
+
+  UPDATE projects SET remote_updated_at = updated_at;
+  UPDATE wells SET remote_updated_at = updated_at;
+  UPDATE measurements SET remote_updated_at = updated_at;
+  UPDATE observation_points SET remote_updated_at = updated_at;
+  `,
 ];
 
 /** Значения настроек по умолчанию */
