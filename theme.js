@@ -435,6 +435,22 @@ export const heroGradient = {
  */
 export const brandHeader = palette.wine;
 
+/** Затемнение экрана под диалогом */
+const SCRIM_RGB = [20, 7, 14];
+const SCRIM_ALPHA = 0.45;
+export const scrim = `rgba(${SCRIM_RGB.join(', ')}, ${SCRIM_ALPHA})`;
+
+/**
+ * Бордовый шапки под затемнением диалога. Строку состояния в Expo Go на
+ * Android красит система, поверх приложения, и слой диалога её не накрывает:
+ * на время диалога строка берёт этот цвет, иначе над тёмным экраном горела бы
+ * яркая полоса.
+ */
+export const scrimOverHeader = `rgb(${brandHeader
+  .match(/[0-9a-f]{2}/gi)
+  .map((hex, i) => Math.round(SCRIM_RGB[i] * SCRIM_ALPHA + parseInt(hex, 16) * (1 - SCRIM_ALPHA)))
+  .join(', ')})`;
+
 export { palette };
 
 // Экспортируем светлую тему как тему по умолчанию

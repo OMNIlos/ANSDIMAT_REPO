@@ -12,7 +12,6 @@
 import React from 'react';
 import {
   ActivityIndicator,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -26,8 +25,9 @@ import { useImport } from '../share/ImportContext';
 import { useUnits } from '../UnitsContext';
 import { QUANTITIES } from '../calc/units';
 import { IMPORT_ERRORS } from '../share/format';
-import { spacing, radius, fontFamily, elevation } from '../theme';
+import { spacing, radius, fontFamily, elevation, scrim } from '../theme';
 import { AnimatedPressable, useDialogEntrance } from './ui/dialogMotion';
+import DialogLayer from './ui/DialogLayer';
 
 /** Сообщение под каждый отказ: пользователю нужна причина, а не «ошибка» */
 const ERROR_KEYS = {
@@ -251,16 +251,9 @@ export default function ImportProjectDialog() {
   };
 
   return (
-    // Затемнение на весь экран, как у ConfirmDialog: без флагов окно Modal
-    // при отрисовке от края до края не доходило до низа экрана
-    <Modal
-      visible
-      transparent
-      animationType="fade"
-      statusBarTranslucent
-      navigationBarTranslucent
-      onRequestClose={isBlocking ? undefined : dismiss}
-    >
+    // Слой на весь экран поверх приложения, как у ConfirmDialog; на Android —
+    // без окна Modal, которое открывалось пустым, см. DialogLayer
+    <DialogLayer visible onRequestClose={isBlocking ? undefined : dismiss}>
       {/* Пока идёт чтение или запись, нажатие мимо окна ничего не делает:
           прервать импорт на середине нечем, и закрытие оставило бы журнал
           записанным наполовину */}
@@ -277,14 +270,14 @@ export default function ImportProjectDialog() {
           {renderBody()}
         </AnimatedPressable>
       </Pressable>
-    </Modal>
+    </DialogLayer>
   );
 }
 
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(20, 7, 14, 0.45)',
+    backgroundColor: scrim,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.xl,

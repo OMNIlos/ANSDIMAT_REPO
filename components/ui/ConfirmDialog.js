@@ -15,11 +15,12 @@
  */
 
 import React from 'react';
-import { Modal, View, Text, StyleSheet, TouchableOpacity, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import I18n from '../../Localization';
 import { AnimatedPressable, useDialogEntrance } from './dialogMotion';
-import { spacing, radius, fontFamily, elevation } from '../../theme';
+import DialogLayer from './DialogLayer';
+import { spacing, radius, fontFamily, elevation, scrim } from '../../theme';
 
 export default function ConfirmDialog({
   visible,
@@ -35,17 +36,9 @@ export default function ConfirmDialog({
   const cardMotion = useDialogEntrance(visible);
 
   return (
-    // Затемнение — на весь экран, под системные полосы. Приложение рисуется от
-    // края до края, а окно Modal без этих флагов на Android кончалось раньше:
-    // низ экрана оставался светлым, и диалог выглядел наклеенным на страницу
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      statusBarTranslucent
-      navigationBarTranslucent
-      onRequestClose={onCancel}
-    >
+    // Слой на весь экран поверх приложения; на Android — без окна Modal,
+    // которое открывалось пустым, см. DialogLayer
+    <DialogLayer visible={visible} onRequestClose={onCancel}>
       {/* Нажатие мимо окна закрывает его — привычное поведение */}
       <Pressable style={styles.backdrop} onPress={onCancel}>
         <AnimatedPressable
@@ -88,14 +81,14 @@ export default function ConfirmDialog({
           </View>
         </AnimatedPressable>
       </Pressable>
-    </Modal>
+    </DialogLayer>
   );
 }
 
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(20, 7, 14, 0.45)',
+    backgroundColor: scrim,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.xl,

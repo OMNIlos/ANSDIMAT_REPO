@@ -22,14 +22,9 @@ import {
   Pressable,
   Platform,
   Keyboard,
-} from 'react-native';
-import Animated, {
+  Animated,
   Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { CommonActions } from '@react-navigation/native';
@@ -79,6 +74,16 @@ const SWITCH_MS = 240;
 const PRESS_SPRING = { damping: 18, stiffness: 320, mass: 0.5 };
 
 /**
+ * Нативный драйвер анимаций — везде, кроме веба
+ *
+ * Анимации меню — на Animated из самого React Native, а не на Reanimated:
+ * пружина нажатия на «Выход» шла, пока открывалось окно подтверждения, и на
+ * Android (новая архитектура, Reanimated 3.17 из Expo SDK 53) прозрачное
+ * окно Modal открывалось пустым и невидимым — см. components/ui/AppearIn.js
+ */
+const NATIVE = Platform.OS !== 'web';
+
+/**
  * Пункт меню
  *
  * Выбранный пункт лежит на светлой подложке-«таблетке». Подложка своя у
@@ -93,31 +98,44 @@ const PRESS_SPRING = { damping: 18, stiffness: 320, mass: 0.5 };
  */
 function MenuItem({ item, active }) {
   const reduceMotion = useReduceMotion();
-  const on = useSharedValue(active ? 1 : 0);
-  const press = useSharedValue(0);
+  const on = React.useRef(new Animated.Value(active ? 1 : 0)).current;
+  const press = React.useRef(new Animated.Value(0)).current;
   const [hovered, setHovered] = React.useState(false);
 
   React.useEffect(() => {
     const target = active ? 1 : 0;
-    on.value = reduceMotion
-      ? target
-      : withTiming(target, { duration: SWITCH_MS, easing: Easing.out(Easing.cubic) });
+    if (reduceMotion) {
+      on.setValue(target);
+      return undefined;
+    }
+    const animation = Animated.timing(on, {
+      toValue: target,
+      duration: SWITCH_MS,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: NATIVE,
+    });
+    animation.start();
+    return () => animation.stop();
   }, [active, reduceMotion, on]);
 
-  const pill = useAnimatedStyle(() => ({
-    opacity: on.value,
-    transform: [{ scaleX: 0.86 + on.value * 0.14 }, { scaleY: 0.9 + on.value * 0.1 }],
-  }));
+  const pill = {
+    opacity: on,
+    transform: [
+      { scaleX: on.interpolate({ inputRange: [0, 1], outputRange: [0.86, 1] }) },
+      { scaleY: on.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }) },
+    ],
+  };
 
-  const body = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 - press.value * 0.06 }],
-  }));
+  const body = {
+    transform: [{ scale: press.interpolate({ inputRange: [0, 1], outputRange: [1, 0.94] }) }],
+  };
 
   const setPressed = (next) => {
     if (reduceMotion) return;
-    press.value = next
-      ? withTiming(1, { duration: 90 })
-      : withSpring(0, PRESS_SPRING);
+    const animation = next
+      ? Animated.timing(press, { toValue: 1, duration: 90, useNativeDriver: NATIVE })
+      : Animated.spring(press, { toValue: 0, ...PRESS_SPRING, useNativeDriver: NATIVE });
+    animation.start();
   };
 
   const ink = active ? INK_ACTIVE : hovered ? INK_HOVER : INK_IDLE;
