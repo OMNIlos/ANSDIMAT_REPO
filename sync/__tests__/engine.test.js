@@ -7,8 +7,8 @@
  * а своя же отправленная правка расхождением не считается.
  *
  * Сервер подменён хранилищем в памяти. Как и настоящий триггер
- * touch_updated_at, оно само ставит время при обновлении строки — на этом
- * движок и спотыкался. База — настоящий SQLite.
+ * touch_updated_at, оно само ставит время правки, а присланное клиентом
+ * отбрасывает — на этом движок и спотыкался. База — настоящий SQLite.
  */
 
 const hasNodeSqlite = (() => {
@@ -59,9 +59,9 @@ jest.mock('../../lib/supabase', () => ({
 /**
  * Сервер в памяти
  *
- * Время правки ставит как touch_updated_at: только при обновлении, новая
- * строка сохраняет время клиента. Часы идут шагом в минуту, чтобы соседние
- * правки не слипались при сравнении отметок.
+ * Время правки ставит как touch_updated_at: и при вставке, и при
+ * обновлении, присланное клиентом отбрасывает. Часы идут шагом в минуту,
+ * чтобы соседние правки не слипались при сравнении отметок.
  *
  * @returns {Object} хранилище с интерфейсом для заглушки supabase
  */
@@ -98,8 +98,7 @@ function createServer() {
     upsert(name, payload) {
       const at = now();
       for (const row of payload) {
-        const existing = table(name).get(row.id);
-        table(name).set(row.id, existing ? { ...existing, ...row, updated_at: at } : row);
+        table(name).set(row.id, { ...table(name).get(row.id), ...row, updated_at: at });
       }
       return payload.map(({ id }) => ({ id, updated_at: table(name).get(id).updated_at }));
     },
@@ -219,15 +218,17 @@ describeSync('сервер сам ставит время правки', () => {
     ({ synchronize, resolveConflict } = require('../engine'));
   });
 
+  /** Новый журнал — так его заводит createProject */
+  const createLocally = (id, name = 'журнал') =>
+    mockDatabase.runAsync(
+      `INSERT INTO projects (id, name, ofr_type, q, starred, created_at, updated_at, dirty)
+       VALUES (?, ?, 'single', 100, 0, 1, ?, 1)`,
+      [id, name, LOCAL]
+    );
+
   /** Журналы, которые уже съездили на сервер и вернулись оттуда */
   async function synced(...ids) {
-    for (const id of ids) {
-      await mockDatabase.runAsync(
-        `INSERT INTO projects (id, name, ofr_type, q, starred, created_at, updated_at, dirty)
-         VALUES (?, 'журнал', 'single', 100, 0, 1, ?, 1)`,
-        [id, LOCAL]
-      );
-    }
+    for (const id of ids) await createLocally(id);
     await synchronize();
     await synchronize();
   }
@@ -295,5 +296,27 @@ describeSync('сервер сам ставит время правки', () => {
     expect(after.conflicts.map((c) => c.id)).toEqual([ID]);
     expect(mockServer.get('projects', ID).name).toBe('первый с планшета');
     expect((await localRow(OTHER)).name).toBe('второй с планшета');
+  });
+
+  test('журнал с телефона, у которого отстают часы, доходит до планшета', async () => {
+    const phone = mockDatabase;
+    const tablet = openDatabase();
+
+    // Планшет уже забрал свежую правку: его отметка стоит на серверном времени
+    await synced(ID);
+    mockServer.edit('projects', ID, { name: 'правка с сервера' });
+    mockDatabase = tablet;
+    await synchronize();
+
+    // Часы телефона на семь недель позади серверных
+    mockDatabase = phone;
+    await createLocally(OTHER, 'новый журнал');
+    await synchronize();
+
+    mockDatabase = tablet;
+    await synchronize();
+
+    const row = await tablet.getFirstAsync('SELECT name FROM projects WHERE id = ?', [OTHER]);
+    expect(row?.name).toBe('новый журнал');
   });
 });
