@@ -546,8 +546,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 15,
   },
-  toggleLeft: { flexDirection: "row", alignItems: "center", gap: 13, flex: 1 },
+  // Подпись переносится, а не уезжает под тумблер: «Автоопределение
+  // координат» на телефоне шириной 360 dp в строку с ним не помещается
+  toggleLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 13,
+    flex: 1,
+    marginRight: 12,
+  },
   toggleLabel: {
+    flexShrink: 1,
     fontFamily: fontFamily.semibold,
     fontSize: 14.5,
     fontWeight: "600",

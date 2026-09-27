@@ -12,7 +12,7 @@
  * onRequestClose ловит аппаратную кнопку «назад».
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Modal,
   View,
@@ -30,6 +30,7 @@ import I18n from '../Localization';
 import AudioWave from './AudioWave';
 import PhotoViewer from './PhotoViewer';
 import ConfirmDialog from './ui/ConfirmDialog';
+import SettingsLink from './ui/SettingsLink';
 import usePhotoCapture from '../hooks/usePhotoCapture';
 import useVoiceRecorder from '../hooks/useVoiceRecorder';
 import useVoicePlayback from '../hooks/useVoicePlayback';
@@ -46,7 +47,8 @@ const COLUMNS = 3;
  * @param {Array} props.attachments - вложения этой точки
  * @param {boolean} props.visible - показана ли шторка
  * @param {Function} props.onClose - закрытие
- * @param {Function} props.onAdd - новое вложение: {kind, uri, durationMillis?, waveform?}
+ * @param {Function} props.onAdd - новое вложение: {kind, uri, durationMillis?, waveform?,
+ *   pointId?} — pointId у голосовой заметки: точка, у которой её начали записывать
  * @param {Function} props.onDelete - удаление вложения
  */
 export default function PointSheet({ point, attachments, visible, onClose, onAdd, onDelete }) {
@@ -66,16 +68,63 @@ export default function PointSheet({ point, attachments, visible, onClose, onAdd
   // Сбой записи: отказ микрофона, занятое устройство, отказ хранилища
   const [recordFailed, setRecordFailed] = useState(false);
 
-  // Скрытая шторка не должна доигрывать заметку в пустоту: скрыть её может
-  // не только кнопка, но и экран, переключившийся на другую точку
+  // Точка, у которой начали запись. Шторку могут закрыть или переключить на
+  // другую точку раньше, чем запись остановят, — заметка всё равно должна
+  // лечь туда, где её начали
+  const recordingPointRef = useRef(null);
+
+  /**
+   * Останавливает запись и сохраняет заметку к точке, у которой её начали
+   *
+   * @returns {Promise<void>}
+   */
+  const finishRecording = async () => {
+    // Запасной вариант — текущая точка: запись могла начаться до того, как
+    // шторка запомнила свою (например, после горячей перезагрузки)
+    const pointId = recordingPointRef.current ?? point?.id ?? null;
+    recordingPointRef.current = null;
+    const recorded = await recorder.stop();
+    if (!recorded || !pointId) return;
+    await onAdd({
+      kind: ATTACHMENT_KINDS.AUDIO,
+      uri: recorded.uri,
+      durationMillis: recorded.durationMillis,
+      waveform: recorded.waveform,
+      pointId,
+    });
+  };
+
+  /**
+   * Запись, которую никто не остановил, — останавливается и сохраняется
+   *
+   * Закрытая шторка раньше глушила только проигрывание: микрофон продолжал
+   * писать невидимо, и заметка выходила на пять минут вместо нескольких
+   * секунд. Сохраняем, а не выбрасываем: лишнюю заметку удалить можно,
+   * потерянную в поле не восстановить.
+   */
+  const finishRef = useRef(finishRecording);
+  finishRef.current = finishRecording;
+  const settleRecording = () => {
+    if (!recorder.isRecording) return;
+    finishRef.current().catch(() => setRecordFailed(true));
+  };
+  const settleRef = useRef(settleRecording);
+  settleRef.current = settleRecording;
+
+  // Скрытая шторка не должна ни доигрывать заметку в пустоту, ни писать
+  // дальше: скрыть её может не только кнопка, но и экран, переключившийся на
+  // другую точку
   const stopPlayback = playback.stop;
   useEffect(() => {
-    if (!visible) stopPlayback();
+    if (visible) return;
+    stopPlayback();
+    settleRef.current();
   }, [visible, stopPlayback]);
 
-  /** Закрывает шторку, заглушив проигрывание */
+  /** Закрывает шторку, заглушив проигрывание и остановив запись */
   const close = () => {
     playback.stop();
+    settleRecording();
     onClose();
   };
 
@@ -108,18 +157,12 @@ export default function PointSheet({ point, attachments, visible, onClose, onAdd
         // Запись и проигрывание делят аудиосессию: заметка, игравшая под
         // запись, попала бы в неё же через микрофон
         playback.stop();
+        recordingPointRef.current = point?.id ?? null;
         await recorder.start();
         return;
       }
 
-      const recorded = await recorder.stop();
-      if (!recorded) return;
-      await onAdd({
-        kind: ATTACHMENT_KINDS.AUDIO,
-        uri: recorded.uri,
-        durationMillis: recorded.durationMillis,
-        waveform: recorded.waveform,
-      });
+      await finishRecording();
     } catch {
       setRecordFailed(true);
     }
@@ -212,6 +255,8 @@ export default function PointSheet({ point, attachments, visible, onClose, onAdd
                 {denialNotice}
               </Text>
             )}
+            {/* Отказ в доступе чинится только в системных настройках */}
+            {(!!photoDenied || recorder.denied) && <SettingsLink color={colors.error} />}
 
             {recorder.isRecording ? (
               <View style={[styles.recordingRow, { borderColor: colors.error }]}>

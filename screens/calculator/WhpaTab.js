@@ -44,8 +44,9 @@ import FieldMap from '../../components/FieldMap';
 import { BELT_COLORS } from '../../components/schemes/WhpaPlan';
 import AppearIn from '../../components/ui/AppearIn';
 import PressableScale from '../../components/ui/PressableScale';
+import SettingsLink from '../../components/ui/SettingsLink';
 import { setMenuHidden } from '../../components/chromeVisibility';
-import { spacing, elevation, type, fontFamily } from '../../theme';
+import { spacing, elevation, type, fontFamily, brandHeader } from '../../theme';
 import {
   Card,
   Collapsible,
@@ -125,6 +126,8 @@ export default function WhpaTab({ contentWidth }) {
   // Отказ в геопозиции показывается плашкой на самой карте, а не Alert:
   // на вебе тот не выводится вовсе, и отказ выглядел бы сломанной кнопкой
   const [mapNotice, setMapNotice] = useState('');
+  // Сообщение — отказ в доступе к геопозиции: к нему идёт ссылка на настройки
+  const [mapNoticeDenied, setMapNoticeDenied] = useState(false);
   const [mapCenter, setMapCenter] = useState(null);
 
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, bottom: 0 };
@@ -276,11 +279,13 @@ export default function WhpaTab({ contentWidth }) {
    */
   const placeAtMyLocation = async () => {
     setMapNotice('');
+    setMapNoticeDenied(false);
     setLocating(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         setMapNotice(I18n.t('locationDenied'));
+        setMapNoticeDenied(true);
         return;
       }
       const position = await Location.getCurrentPositionAsync({
@@ -375,6 +380,7 @@ export default function WhpaTab({ contentWidth }) {
             ]}
           >
             <Text style={[type.caption, { color: theme.colors.text }]}>{mapNotice}</Text>
+            {mapNoticeDenied && <SettingsLink color={theme.colors.primaryAccent} />}
           </View>
         ) : null}
 
@@ -409,6 +415,13 @@ export default function WhpaTab({ contentWidth }) {
             color="#FFFFFF"
           />
         </PressableScale>
+
+        {/* Под строкой состояния — бордовая полоса, как у шапки любого
+            экрана: развёрнутая карта заходит под строку, и белые значки
+            терялись на светлых тайлах */}
+        {fullscreen ? (
+          <View pointerEvents="none" style={[styles.statusStrip, { height: insets.top }]} />
+        ) : null}
       </View>
     );
   };
@@ -869,6 +882,13 @@ const styles = StyleSheet.create({
   },
   mapFull: {
     flex: 1,
+  },
+  statusStrip: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: brandHeader,
   },
   fullscreen: {
     flex: 1,

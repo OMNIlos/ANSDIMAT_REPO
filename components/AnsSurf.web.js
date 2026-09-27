@@ -17,12 +17,15 @@
  * @param {boolean} dark - тёмная тема
  * @param {number} [menuInset] - высота плавающего меню приложения, px
  * @param {Function} [onError] - что-то не получилось: (текст)
+ * @param {Function} [onWorkChange] - на карте появилась или пропала работа,
+ *   которую жалко потерять: (есть ли)
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { anssurfPageUri } from './anssurfAsset';
+import { hasMapWork } from './anssurfBridge';
 
 /** Ключ, которым страница хранит выбранную тему */
 const THEME_KEY = 'hydro-theme';
@@ -44,7 +47,7 @@ function rememberTheme(dark) {
   }
 }
 
-export default function AnsSurf({ locale, dark, menuInset = 0, onError }) {
+export default function AnsSurf({ locale, dark, menuInset = 0, onError, onWorkChange }) {
   const theme = useTheme();
   const frameRef = useRef(null);
 
@@ -98,6 +101,28 @@ export default function AnsSurf({ locale, dark, menuInset = 0, onError }) {
       // Окно ещё не готово — отступ встанет на onLoad
     }
   }, [menuInset, loading]);
+
+  // Есть ли на карте работа — прямо из хранилища страницы: окно iframe того
+  // же происхождения, моста тут нет. Отписка — при уходе с экрана
+  useEffect(() => {
+    if (loading || !onWorkChange) return undefined;
+    let store;
+    try {
+      store = frameRef.current?.contentWindow?.__hydroZ;
+    } catch {
+      return undefined;
+    }
+    if (!store || typeof store.subscribe !== 'function') return undefined;
+    let last = null;
+    const report = (state) => {
+      const has = hasMapWork(state);
+      if (has === last) return;
+      last = has;
+      onWorkChange(has);
+    };
+    report(store.getState());
+    return store.subscribe(report);
+  }, [loading, onWorkChange]);
 
   const onLoad = useCallback(() => setLoading(false), []);
 

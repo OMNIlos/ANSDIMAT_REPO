@@ -311,7 +311,7 @@ const i18n = new I18n({
     manualMapsStep1:
       "«Данные» — загрузите таблицу уровней (TXT, DAT, XYZ, CSV, XLS, XLSX: колонки X, Y и УГВ), укажите скважины на карте вручную или откройте сохранённый проект. Для знакомства есть пример на 20 скважин.",
     manualMapsStep2: "«Скважины» — проверьте точки и поправьте ошибочные.",
-    manualMapsStep3: "«Изогипсы» — постройте карту изолиний уровня по скважинам.",
+    manualMapsStep3: "«Изолинии» — постройте карту изолиний уровня по скважинам.",
     manualMapsStep4: "«Выгрузка» — сохраните или отправьте файлы для настольной программы.",
     manualMapsNote: "Подложке карты нужен интернет; скважины и изолинии от него не зависят.",
     manualDiaryTitle: "Полевой дневник",
@@ -398,7 +398,10 @@ const i18n = new I18n({
     timeFromPumpStop: "t′ от остановки насоса, %{unit}",
     columnTime: "t, %{unit}",
     columnDrawdown: "s, %{unit}",
-    columnRecovery: "восстановление, %{unit}",
+    // Мягкий перенос: в узкой колонке «восстановление,» моноширинным не
+    // влезает в строку, и Android рвал слово где придётся, без дефиса. Своих
+    // правил переноса для русского в Android 9 нет — место разрыва задано здесь
+    columnRecovery: "восстанов\u00ADление, %{unit}",
     recoveryNoDuration:
       "Укажите, сколько длилась откачка — без этого восстановление не построить.",
     recoveryTimeTooSmall:
@@ -468,6 +471,8 @@ const i18n = new I18n({
       other: "%{count} замера",
     },
     noMeasurements: "замеров нет",
+    journalShow: "Показать",
+    journalHidePumping: "Свернуть журнал откачки",
     createFailed: "Не удалось создать журнал. Попробуйте ещё раз.",
 
     // ===== АККАУНТ =====
@@ -957,8 +962,10 @@ const i18n = new I18n({
     galleryDenied: "Нет доступа к галерее. Разрешите его в настройках телефона.",
     microphoneDenied: "Нет доступа к микрофону. Разрешите его в настройках телефона.",
     recordingFailed: "Запись не удалась. Попробуйте ещё раз.",
-    photoCount: "снимков",
-    voiceNoteCount: "записей",
+    photoCount: { one: "%{count} снимок", few: "%{count} снимка", many: "%{count} снимков", other: "%{count} снимка" },
+    voiceNoteCount: { one: "%{count} запись", few: "%{count} записи", many: "%{count} записей", other: "%{count} записи" },
+    noAttachments: "нет вложений",
+    openSettings: "Открыть настройки",
     markMyLocation: "Отметить моё местоположение",
     centerOnMyLocation: "Показать моё местоположение на карте",
     mapExpand: "Развернуть карту на весь экран",
@@ -1131,6 +1138,9 @@ const i18n = new I18n({
     mapsExportShared: "Готово: файлов — %{count}. Окно «Поделиться» откроется на каждый.",
     mapsExportSaved: "Сохранено файлов: %{count}.",
     mapsFailed: "Не удалось. Попробуйте ещё раз.",
+    mapsLeaveTitle: "Уйти с карты?",
+    mapsLeaveMessage: "Скважины и построенная карта не сохранятся. Чтобы вернуться к ним позже, сохраните проект на шаге «Выгрузка».",
+    mapsLeaveConfirm: "Уйти",
     subscriptionDesc: "Управление подпиской",
     settingsDesc: "Настройки приложения",
     fieldDesc: "Точки наблюдения с координатами",
@@ -2167,7 +2177,7 @@ const i18n = new I18n({
     manualMapsStep1:
       "“Data” — load a table of levels (TXT, DAT, XYZ, CSV, XLS, XLSX: columns X, Y and water level), place wells on the map by hand or open a saved project. There is a 20-well example to get started.",
     manualMapsStep2: "“Wells” — check the points and fix wrong ones.",
-    manualMapsStep3: "“Contours” — build the water level contour map from the wells.",
+    manualMapsStep3: "“Isolines” — build the water level contour map from the wells.",
     manualMapsStep4: "“Export” — save or send the files for the desktop program.",
     manualMapsNote: "The map background needs the internet; wells and contours do not.",
     manualDiaryTitle: "Field diary",
@@ -2324,6 +2334,8 @@ const i18n = new I18n({
       other: "%{count} readings",
     },
     noMeasurements: "no readings",
+    journalShow: "Show",
+    journalHidePumping: "Collapse the pumping log",
     createFailed: "Could not create the journal. Please try again.",
 
     // ===== ACCOUNT =====
@@ -2807,8 +2819,10 @@ const i18n = new I18n({
     galleryDenied: "No gallery access. Allow it in your phone settings.",
     microphoneDenied: "No microphone access. Allow it in your phone settings.",
     recordingFailed: "Recording failed. Please try again.",
-    photoCount: "photos",
-    voiceNoteCount: "recordings",
+    photoCount: { one: "%{count} photo", other: "%{count} photos" },
+    voiceNoteCount: { one: "%{count} recording", other: "%{count} recordings" },
+    noAttachments: "no attachments",
+    openSettings: "Open settings",
     markMyLocation: "Mark my location",
     centerOnMyLocation: "Show my location on the map",
     tapMapToMark: "Tap the map to mark a point",
@@ -2981,6 +2995,9 @@ const i18n = new I18n({
     mapsExportShared: "Done: %{count} file(s). The share sheet opens for each one.",
     mapsExportSaved: "Files saved: %{count}.",
     mapsFailed: "That didn't work. Try again.",
+    mapsLeaveTitle: "Leave the map?",
+    mapsLeaveMessage: "The wells and the map you built will not be kept. To come back to them later, save the project on the Export step.",
+    mapsLeaveConfirm: "Leave",
     subscriptionDesc: "Subscription management",
     settingsDesc: "Application settings",
     field: "Field diary",

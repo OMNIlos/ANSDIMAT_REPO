@@ -38,6 +38,7 @@ import { toggleSelection, freeLine } from '../../calc/chartGeometry';
 import { processSlugTest } from '../../calc/slugTest';
 import { OFR_TYPES } from '../../db/schema';
 import { replaceMeasurements } from '../../db/projects';
+import { createId } from '../../db';
 import {
   Card,
   Collapsible,
@@ -59,6 +60,9 @@ import { spacing } from '../../theme';
 
 /** Знаков, до которых режется число при показе в поле журнала */
 const SHOWN_PRECISION = 6;
+
+/** Через сколько после последней правки журнал уходит в базу, мс */
+const JOURNAL_SAVE_DELAY = 400;
 
 export default function SlugTestScreen({ route }) {
   const theme = useTheme();
@@ -115,9 +119,15 @@ export default function SlugTestScreen({ route }) {
    * Строки без времени или понижения не сохраняются: пустая строка — это
    * место под замер, а не замер со значением ноль.
    *
+   * Записи идут строго по очереди. Раньше каждый набранный знак сразу
+   * переписывал журнал, записи накладывались друг на друга — транзакция
+   * expo-sqlite их не разделяет, — сбои глотались, и после выхода с экрана
+   * журнал оказывался пустым.
+   *
    * @param {Array<Object>} next - строки таблицы
    */
-  const save = useCallback(
+  const saveChain = useRef(Promise.resolve());
+  const writeRows = useCallback(
     (next) => {
       if (!projectId) return;
       const measurements = next
@@ -127,11 +137,41 @@ export default function SlugTestScreen({ route }) {
           s: toBase(parseNumber(row.sText), QUANTITIES.DRAWDOWN),
         }))
         .filter((row) => isFinite(row.t) && isFinite(row.s));
-      replaceMeasurements(projectId, measurements).catch(() => {
-        // Правка остаётся на экране: ронять ввод из-за отказа базы незачем
-      });
+      saveChain.current = saveChain.current
+        .then(() => replaceMeasurements(projectId, measurements))
+        .catch(() => {
+          // Правка остаётся на экране: ронять ввод из-за отказа базы незачем
+        });
     },
     [projectId, toBase]
+  );
+
+  // Пишем не на каждый знак, а когда ввод затих, — как величины опыта в
+  // OfrTestShell. Уходя с экрана, недописанное дописываем
+  const saveTimer = useRef(null);
+  const pendingRows = useRef(null);
+  const save = useCallback(
+    (next) => {
+      pendingRows.current = next;
+      clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => {
+        saveTimer.current = null;
+        const rowsToWrite = pendingRows.current;
+        pendingRows.current = null;
+        if (rowsToWrite) writeRows(rowsToWrite);
+      }, JOURNAL_SAVE_DELAY);
+    },
+    [writeRows]
+  );
+  useEffect(
+    () => () => {
+      clearTimeout(saveTimer.current);
+      if (pendingRows.current) {
+        writeRows(pendingRows.current);
+        pendingRows.current = null;
+      }
+    },
+    [writeRows]
   );
 
   const editRow = useCallback(
@@ -147,11 +187,11 @@ export default function SlugTestScreen({ route }) {
     [save]
   );
 
+  // Строка получает свой id сразу: без него каждая запись заводила бы в
+  // базе новую строку, а прежнюю помечала удалённой
   const addRow = useCallback(() => {
-    setRows((previous) => [
-      ...previous,
-      { key: `new-${Date.now()}`, tText: '', sText: '' },
-    ]);
+    const id = createId();
+    setRows((previous) => [...previous, { key: id, id, tText: '', sText: '' }]);
   }, []);
 
   const removeRow = useCallback(

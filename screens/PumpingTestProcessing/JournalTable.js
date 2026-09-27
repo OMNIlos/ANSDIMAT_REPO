@@ -10,7 +10,7 @@
  * пользователя: перевод, как и везде, на границе ввода и вывода.
  */
 
-import React, { useCallback } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -39,11 +39,55 @@ export default function JournalTable({
 }) {
   const theme = useTheme();
 
-  const cell = useCallback(
-    (index, field, value) => (
+  // Поля строк по ключу. «Далее» на клавиатуре ведёт t → s → t следующей
+  // строки, а на заполненной последней заводит новую и ставит в неё курсор —
+  // как в журнале откачки. Раньше на каждый замер уходило четыре касания
+  const inputs = useRef(new Map());
+  const focusNewRow = useRef(false);
+  const bindInput = (key, field) => (element) => {
+    const entry = inputs.current.get(key) ?? {};
+    if (element) entry[field] = element;
+    else delete entry[field];
+    if (entry.tText || entry.sText) inputs.current.set(key, entry);
+    else inputs.current.delete(key);
+  };
+  const focusInput = (key, field) => inputs.current.get(key)?.[field]?.focus();
+
+  const lastKey = rows.length > 0 ? rows[rows.length - 1].key : null;
+  useEffect(() => {
+    if (!focusNewRow.current || !lastKey) return;
+    focusNewRow.current = false;
+    focusInput(lastKey, 'tText');
+  }, [lastKey]);
+
+  /** «Далее» в поле понижения: следующая строка или новая */
+  const submitValue = (index) => {
+    const row = rows[index];
+    const next = rows[index + 1];
+    if (next) {
+      focusInput(next.key, 'tText');
+      return;
+    }
+    // Пустых строк не плодим: недописанную сначала дописывают
+    if (!row.tText.trim()) {
+      focusInput(row.key, 'tText');
+      return;
+    }
+    if (!row.sText.trim()) return;
+    focusNewRow.current = true;
+    onAdd();
+  };
+
+  const cell = (index, field, value, key) => (
       <TextInput
+        ref={bindInput(key, field)}
         value={value}
         onChangeText={(text) => onChange(index, field, text)}
+        returnKeyType="next"
+        submitBehavior="submit"
+        onSubmitEditing={() =>
+          field === 'tText' ? focusInput(key, 'sText') : submitValue(index)
+        }
         keyboardType="decimal-pad"
         selectTextOnFocus
         placeholder="—"
@@ -56,8 +100,6 @@ export default function JournalTable({
           { color: theme.colors.text, borderColor: theme.colors.border },
         ]}
       />
-    ),
-    [onChange, theme]
   );
 
   return (
@@ -82,11 +124,12 @@ export default function JournalTable({
           key={row.key}
           style={[styles.row, { borderTopColor: theme.colors.border }]}
         >
-          {cell(index, 'tText', row.tText)}
-          {cell(index, 'sText', row.sText)}
+          {cell(index, 'tText', row.tText, row.key)}
+          {cell(index, 'sText', row.sText, row.key)}
           <Pressable
             onPress={() => onRemove(index)}
             style={styles.removeSlot}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
             accessibilityLabel={I18n.t('delete', { defaultValue: 'Удалить' })}
           >
             <MaterialIcons name="close" size={16} color={theme.colors.faint} />
@@ -94,8 +137,12 @@ export default function JournalTable({
         </View>
       ))}
 
+      {/* Добавленная строка сразу получает курсор */}
       <Pressable
-        onPress={onAdd}
+        onPress={() => {
+          focusNewRow.current = true;
+          onAdd();
+        }}
         style={[styles.add, { borderTopColor: theme.colors.border }]}
       >
         <MaterialIcons name="add" size={18} color={theme.colors.primaryAccent} />

@@ -38,7 +38,7 @@ import ChartCanvas from './ChartCanvas';
 import ChartToolbar from './ChartToolbar';
 import useChartViewport from './useChartViewport';
 import { FIT_MODES } from './fitModes';
-import { spacing, radius, type, fontFamily } from '../../theme';
+import { spacing, radius, type, fontFamily, brandHeader } from '../../theme';
 
 export { FIT_MODES };
 
@@ -627,6 +627,15 @@ export default function DrawdownChart({
         {canvas}
         {legendRow}
         {toolbar}
+        {/* Полоса под строкой состояния — бордовая, как шапка любого экрана.
+            Окно разворота заходит под строку состояния, а значки в ней белые:
+            на светлом полотне часы и батарея пропадали совсем. Менять цвет
+            значков на время разворота ненадёжно — окно Modal на Android
+            копирует его один раз, при показе */}
+        <View
+          pointerEvents="none"
+          style={[styles.statusStrip, { height: insets.top }]}
+        />
       </View>
     );
   }
@@ -714,6 +723,13 @@ const styles = StyleSheet.create({
   },
   fullscreenRoot: {
     flex: 1,
+  },
+  statusStrip: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: brandHeader,
   },
   legendFloating: {
     position: 'absolute',

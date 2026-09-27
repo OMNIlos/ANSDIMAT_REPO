@@ -106,3 +106,32 @@ test('без сохранённого выбора заставка идёт з�
     system === 'ru' ? 'полевой калькулятор гидрогеолога' : "hydrogeologist's field calculator"
   );
 });
+
+test('заставка уходит сама за 1,6 с и раньше — по касанию', async () => {
+  // Всё на заставке проявляется к первой секунде; держать её дольше, чем
+  // нужно прочитать имя релиза, незачем — приложение перезапускают часто
+  const { Pressable } = require('react-native');
+  const { SPLASH_DURATION } = require('../SplashScreen');
+  const onFinish = jest.fn();
+  jest.useFakeTimers();
+  try {
+    let tree;
+    await act(async () => {
+      tree = renderer.create(
+        <LanguageProvider>
+          <SplashScreen onFinish={onFinish} />
+        </LanguageProvider>
+      );
+    });
+
+    expect(SPLASH_DURATION).toBeLessThanOrEqual(1600);
+    act(() => tree.root.findByType(Pressable).props.onPress());
+    expect(onFinish).toHaveBeenCalledTimes(1);
+
+    act(() => jest.advanceTimersByTime(SPLASH_DURATION));
+    expect(onFinish).toHaveBeenCalledTimes(2);
+    act(() => tree.unmount());
+  } finally {
+    jest.useRealTimers();
+  }
+});

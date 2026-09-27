@@ -116,3 +116,27 @@ test('с «Создать откачку» экран остаётся на фо
 
   expect(scrollTo).not.toHaveBeenCalled();
 });
+
+test('у кнопок-значков в строке журнала есть подписи для диктора', async () => {
+  // «Звёздочка» была без подписи: диктор читал её просто «кнопка»
+  let tree;
+  await act(async () => {
+    tree = renderer.create(
+      <PaperProvider theme={lightTheme}>
+        <UnitsProvider>
+          <ProjectsScreen navigation={{ navigate: jest.fn(), setParams: jest.fn() }} route={{}} />
+        </UnitsProvider>
+      </PaperProvider>
+    );
+  });
+  mounted.push(tree);
+
+  const star = tree.root.find(
+    (node) =>
+      typeof node.props?.onPress === 'function' &&
+      'selected' in (node.props?.accessibilityState ?? {}) &&
+      node.props?.accessibilityRole === 'button'
+  );
+
+  expect(star.props.accessibilityLabel).toBe(I18n.t('favoriteProject'));
+});

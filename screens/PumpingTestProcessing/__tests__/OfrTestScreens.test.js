@@ -457,6 +457,23 @@ describe('Поинтервальное нагнетание', () => {
       { deep: true }
     )[0];
 
+  test('«Далее» ведёт по ступени: давление → первый отсчёт → второй', async () => {
+    // Отсчёты снимают один за другим через Δt — попадать пальцем в каждую
+    // клетку ряда не нужно
+    const tree = await mount(LugeonScreen);
+    const pressure = input(tree, 'lugeon-pressure-0');
+    const first = input(tree, 'lugeon-reading-0-0');
+    const second = input(tree, 'lugeon-reading-0-1');
+    // focus у мока поля общий на все поля; чьё поле получило фокус — по this
+    const focus = first.instance.focus;
+
+    await act(async () => pressure.props.onSubmitEditing());
+    expect(focus.mock.contexts.at(-1)).toBe(first.instance);
+
+    await act(async () => first.props.onSubmitEditing());
+    expect(focus.mock.contexts.at(-1)).toBe(second.instance);
+  });
+
   test('в давление ступени вводится значение меньше единицы', async () => {
     // Ноль в базе значит «не задано», и первый же символ «0,» обнулял поле:
     // значение меньше единицы было не набрать в принципе
@@ -569,6 +586,85 @@ describe('Экспресс-опробование', () => {
   test('журнал доходит до графика', async () => {
     const tree = await mount(SlugTestScreen);
     expect(countCircles(tree)).toBe(4);
+  });
+
+  describe('запись журнала', () => {
+    // Раньше каждый набранный знак сразу переписывал журнал в базе: записи
+    // накладывались, сбои глотались, и после выхода с экрана журнал
+    // оказывался пустым. У новой строки к тому же не было id — каждая
+    // запись заводила её в базе заново
+    const { TextInput } = require('react-native');
+    const cells = (tree) =>
+      tree.root.findAll(
+        (node) => node.type === TextInput && node.props.returnKeyType === 'next'
+      );
+    const pressAdd = async (tree) => {
+      const add = tree.root
+        .findAll(
+          (node) =>
+            typeof node.props?.onPress === 'function' &&
+            textOf(node).includes(I18n.t('addMeasurement')),
+          { deep: true }
+        )
+        .pop();
+      await act(async () => add.props.onPress());
+    };
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    test('правки уходят в базу одной записью, когда ввод затих', async () => {
+      const tree = await mount(SlugTestScreen);
+      jest.useFakeTimers();
+
+      act(() => {
+        cells(tree)[1].props.onChangeText('0');
+        cells(tree)[1].props.onChangeText('0.');
+        cells(tree)[1].props.onChangeText('0.2');
+      });
+      expect(replaceMeasurements).not.toHaveBeenCalled();
+
+      act(() => jest.advanceTimersByTime(400));
+      await act(async () => {});
+
+      expect(replaceMeasurements).toHaveBeenCalledTimes(1);
+      expect(replaceMeasurements.mock.calls[0][1][0]).toEqual({ id: 'm1', t: 1, s: 0.2 });
+    });
+
+    test('новая строка пишется под одним и тем же id', async () => {
+      const tree = await mount(SlugTestScreen);
+      await pressAdd(tree);
+      jest.useFakeTimers();
+
+      act(() => {
+        cells(tree)[8].props.onChangeText('5');
+        cells(tree)[9].props.onChangeText('0.4');
+      });
+      act(() => jest.advanceTimersByTime(400));
+      await act(async () => {});
+      const first = replaceMeasurements.mock.calls.at(-1)[1].at(-1);
+
+      act(() => cells(tree)[9].props.onChangeText('0.41'));
+      act(() => jest.advanceTimersByTime(400));
+      await act(async () => {});
+      const second = replaceMeasurements.mock.calls.at(-1)[1].at(-1);
+
+      expect(first.id).toEqual(expect.any(String));
+      expect(second).toEqual({ id: first.id, t: 5, s: 0.41 });
+    });
+
+    test('недописанное сохраняется при уходе с экрана', async () => {
+      const tree = await mount(SlugTestScreen);
+      jest.useFakeTimers();
+
+      act(() => cells(tree)[1].props.onChangeText('0.3'));
+      await act(async () => tree.unmount());
+      mounted = mounted.filter((item) => item !== tree);
+
+      expect(replaceMeasurements).toHaveBeenCalledTimes(1);
+      expect(replaceMeasurements.mock.calls[0][1][0]).toEqual({ id: 'm1', t: 1, s: 0.3 });
+    });
   });
 
   test('несовершенная скважина считается по A₁ и A₂', async () => {

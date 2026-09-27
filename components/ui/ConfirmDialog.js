@@ -35,7 +35,17 @@ export default function ConfirmDialog({
   const cardMotion = useDialogEntrance(visible);
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+    // Затемнение — на весь экран, под системные полосы. Приложение рисуется от
+    // края до края, а окно Modal без этих флагов на Android кончалось раньше:
+    // низ экрана оставался светлым, и диалог выглядел наклеенным на страницу
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      navigationBarTranslucent
+      onRequestClose={onCancel}
+    >
       {/* Нажатие мимо окна закрывает его — привычное поведение */}
       <Pressable style={styles.backdrop} onPress={onCancel}>
         <AnimatedPressable

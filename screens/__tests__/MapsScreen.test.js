@@ -17,6 +17,7 @@ jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 );
 jest.mock('../../components/AnsSurf', () => 'AnsSurf');
+jest.mock('../../components/ui/ConfirmDialog', () => 'ConfirmDialog');
 
 const mockSetMenuHidden = jest.fn();
 jest.mock('../../components/chromeVisibility', () => ({
@@ -38,16 +39,17 @@ const MapsScreen = require('../MapsScreen').default;
  * Отрисовывает экран с заданным системным отступом снизу
  *
  * @param {number} bottom - высота системной полосы, px
+ * @param {Object} [navigation] - навигация стека
  * @returns {Object} дерево отрисовки
  */
-function mount(bottom) {
+function mount(bottom, navigation) {
   let tree;
   act(() => {
     tree = renderer.create(
       <PaperProvider theme={lightTheme}>
         <SafeAreaInsetsContext.Provider value={{ top: 0, left: 0, right: 0, bottom }}>
           <LanguageContext.Provider value={{ locale: 'ru' }}>
-            <MapsScreen />
+            <MapsScreen navigation={navigation} />
           </LanguageContext.Provider>
         </SafeAreaInsetsContext.Provider>
       </PaperProvider>
@@ -79,4 +81,78 @@ test('без системной полосы остаётся небольшое
   const tree = mount(0);
 
   expect(tree.root.findByType('AnsSurf').props.menuInset).toBe(spacing.md);
+});
+
+/**
+ * Навигация стека: помнит подписчиков и отправленные действия
+ *
+ * @returns {Object} навигация для экрана
+ */
+function fakeNavigation() {
+  const listeners = {};
+  return {
+    listeners,
+    addListener: jest.fn((name, listener) => {
+      listeners[name] = listener;
+      return () => delete listeners[name];
+    }),
+    dispatch: jest.fn(),
+  };
+}
+
+/** Попытка уйти с экрана — стрелкой в шапке или системной кнопкой */
+function leave(navigation) {
+  const event = { preventDefault: jest.fn(), data: { action: { type: 'GO_BACK' } } };
+  act(() => navigation.listeners.beforeRemove(event));
+  return event;
+}
+
+const dialog = (tree) => tree.root.findByType('ConfirmDialog');
+
+test('с пустой карты уходят без вопросов', () => {
+  const navigation = fakeNavigation();
+  const tree = mount(0, navigation);
+
+  const event = leave(navigation);
+
+  expect(event.preventDefault).not.toHaveBeenCalled();
+  expect(dialog(tree).props.visible).toBe(false);
+});
+
+test('уход с карты, на которой есть работа, переспрашивается', () => {
+  // Построитель ничего не хранит: «Назад» стирал скважины и карту молча
+  const navigation = fakeNavigation();
+  const tree = mount(0, navigation);
+  act(() => tree.root.findByType('AnsSurf').props.onWorkChange(true));
+
+  const event = leave(navigation);
+
+  expect(event.preventDefault).toHaveBeenCalled();
+  expect(dialog(tree).props.visible).toBe(true);
+
+  act(() => dialog(tree).props.onConfirm());
+
+  expect(navigation.dispatch).toHaveBeenCalledWith({ type: 'GO_BACK' });
+  expect(dialog(tree).props.visible).toBe(false);
+});
+
+test('«Отмена» оставляет на карте', () => {
+  const navigation = fakeNavigation();
+  const tree = mount(0, navigation);
+  act(() => tree.root.findByType('AnsSurf').props.onWorkChange(true));
+  leave(navigation);
+
+  act(() => dialog(tree).props.onCancel());
+
+  expect(navigation.dispatch).not.toHaveBeenCalled();
+  expect(dialog(tree).props.visible).toBe(false);
+});
+
+test('работу убрали — уходят без вопросов', () => {
+  const navigation = fakeNavigation();
+  const tree = mount(0, navigation);
+  act(() => tree.root.findByType('AnsSurf').props.onWorkChange(true));
+  act(() => tree.root.findByType('AnsSurf').props.onWorkChange(false));
+
+  expect(leave(navigation).preventDefault).not.toHaveBeenCalled();
 });

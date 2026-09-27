@@ -251,10 +251,14 @@ export default function ImportProjectDialog() {
   };
 
   return (
+    // Затемнение на весь экран, как у ConfirmDialog: без флагов окно Modal
+    // при отрисовке от края до края не доходило до низа экрана
     <Modal
       visible
       transparent
       animationType="fade"
+      statusBarTranslucent
+      navigationBarTranslucent
       onRequestClose={isBlocking ? undefined : dismiss}
     >
       {/* Пока идёт чтение или запись, нажатие мимо окна ничего не делает:

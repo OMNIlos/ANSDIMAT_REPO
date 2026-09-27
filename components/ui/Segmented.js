@@ -93,23 +93,30 @@ function Segment({ label, active, onPress, activeColor, mono, size }) {
           fill,
         ]}
       />
-      <Text
-        numberOfLines={1}
-        style={[
-          styles.label,
-          size === 'sm' && styles.labelSmall,
-          {
-            color: textColor,
-            fontFamily: mono
-              ? fontFamily.monoSemibold
-              : active
-                ? fontFamily.bold
-                : fontFamily.semibold,
-          },
-        ]}
-      >
-        {label}
-      </Text>
+      {/* Подпись — отдельным слоем над таблеткой. На Android вид с elevation
+          рисуется поверх соседей без неё, в каком бы порядке они ни шли: тень
+          таблетки в светлой теме закрывала подпись выбранного варианта, и тот
+          выглядел пустой белой плашкой («Системная», «Подбор прямой»). Слой
+          прозрачный, поэтому своей тени не отбрасывает */}
+      <View pointerEvents="none" style={styles.labelLayer}>
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.label,
+            size === 'sm' && styles.labelSmall,
+            {
+              color: textColor,
+              fontFamily: mono
+                ? fontFamily.monoSemibold
+                : active
+                  ? fontFamily.bold
+                  : fontFamily.semibold,
+            },
+          ]}
+        >
+          {label}
+        </Text>
+      </View>
     </Pressable>
   );
 }
@@ -186,6 +193,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 6,
     elevation: 2,
+  },
+  // Выше таблетки с её elevation: 2 — см. разметку сегмента
+  labelLayer: {
+    elevation: 3,
+    maxWidth: '100%',
   },
   label: {
     fontSize: 13,

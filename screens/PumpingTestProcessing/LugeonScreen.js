@@ -134,6 +134,11 @@ function StageCard({
   conductivityOut,
 }) {
   const theme = useTheme();
+  // Поля ступени по порядку: давление, затем отсчёты. «Далее» на клавиатуре
+  // ведёт по ним подряд — отсчёты снимают один за другим через Δt, и
+  // попадать пальцем в каждую клетку ряда не нужно
+  const readingRefs = useRef([]);
+  const lastReading = stage.readings.length - 1;
 
   return (
     <View
@@ -163,6 +168,9 @@ function StageCard({
           testID={`lugeon-pressure-${index}`}
           value={pressureText}
           onChangeText={onPressure}
+          returnKeyType="next"
+          submitBehavior="submit"
+          onSubmitEditing={() => readingRefs.current[0]?.focus()}
           keyboardType="decimal-pad"
           selectTextOnFocus
           placeholder="—"
@@ -197,8 +205,14 @@ function StageCard({
             </Text>
             <TextInput
               testID={`lugeon-reading-${index}-${position}`}
+              ref={(element) => {
+                readingRefs.current[position] = element;
+              }}
               value={readingText(position)}
               onChangeText={onReading(position)}
+              returnKeyType={position < lastReading ? 'next' : 'done'}
+              submitBehavior={position < lastReading ? 'submit' : 'blurAndSubmit'}
+              onSubmitEditing={() => readingRefs.current[position + 1]?.focus()}
               keyboardType="decimal-pad"
               selectTextOnFocus
               placeholder="—"

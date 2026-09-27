@@ -37,6 +37,17 @@ import { spacing, type, fontFamily } from '../../theme';
  * @param {number} [props.topInset] - отступ сверху под вырез экрана
  * @param {Object} props.colors - цвета темы
  */
+/**
+ * Запас касания вокруг кнопок масштаба и ссылки «Сброс»
+ *
+ * Кнопки были 30×26 dp, а ссылка «Сброс» — строка в 18 dp высотой: по ним
+ * промахивались и попадали в полотно, сдвигая график. Вместе с запасом зона
+ * нажатия — около 48 dp, как у системных кнопок Android. По бокам запас
+ * меньше: между кнопками 8 dp, и зоны соседей не должны налезать друг на друга
+ */
+const ZOOM_HIT_SLOP = { top: 8, bottom: 8, left: 4, right: 4 };
+const LINK_HIT_SLOP = { top: 15, bottom: 15, left: 8, right: 8 };
+
 export default function ChartToolbar({
   caption,
   fitMode,
@@ -63,10 +74,10 @@ export default function ChartToolbar({
       ]}
       accessibilityRole="button"
       accessibilityLabel={label}
-      hitSlop={floating ? 10 : 6}
+      hitSlop={floating ? 10 : ZOOM_HIT_SLOP}
       {...extraProps}
     >
-      <MaterialIcons name={icon} size={floating ? 21 : 16} color={c.text} />
+      <MaterialIcons name={icon} size={floating ? 21 : 18} color={c.text} />
     </TouchableOpacity>
   );
 
@@ -89,13 +100,13 @@ export default function ChartToolbar({
           не там, где нужно. Кнопка ставит точки обратно на прямую по всем
           замерам */}
       {freedom && (
-        <TouchableOpacity onPress={onResetLine} accessibilityRole="button" hitSlop={8}>
+        <TouchableOpacity onPress={onResetLine} accessibilityRole="button" hitSlop={LINK_HIT_SLOP}>
           <Text style={[styles.resetLink, { color: c.primaryAccent }]}>
             {I18n.t('resetLine', { defaultValue: 'Прямую заново' })}
           </Text>
         </TouchableOpacity>
       )}
-      <TouchableOpacity onPress={onReset} accessibilityRole="button" hitSlop={8}>
+      <TouchableOpacity onPress={onReset} accessibilityRole="button" hitSlop={LINK_HIT_SLOP}>
         <Text style={[styles.resetLink, { color: c.primaryAccent }]}>
           {I18n.t('reset', { defaultValue: 'Сброс' })}
         </Text>
@@ -179,8 +190,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   zoomButton: {
-    width: 30,
-    height: 26,
+    width: 36,
+    height: 32,
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',

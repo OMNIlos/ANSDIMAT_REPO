@@ -53,4 +53,22 @@
     if (menu.offsetLeft > maxLeft) menu.style.left = Math.max(gap, maxLeft) + 'px';
     if (menu.offsetTop > maxTop) menu.style.top = Math.max(gap, maxTop) + 'px';
   };
+
+  /*
+   * Битая картинка не показывается.
+   *
+   * Картинки поставки сборка встраивает в страницу, но если какой-то в
+   * поставке не оказалось (плитки стартового экрана пришли без своих JPG),
+   * вместо неё WebView рисует значок сломанного файла. Пустое место читается
+   * лучше: подпись плитки остаётся, пропадает только испорченная картинка.
+   * Ошибка загрузки картинки не всплывает, поэтому ловим её на погружении.
+   */
+  document.addEventListener(
+    'error',
+    function (event) {
+      var target = event.target;
+      if (target && target.tagName === 'IMG') target.style.visibility = 'hidden';
+    },
+    true
+  );
 })();

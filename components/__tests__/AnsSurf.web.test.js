@@ -31,3 +31,40 @@ test('у iframe нет всплывающей подсказки, но есть 
   expect(frame.props.title).toBeUndefined();
   expect(frame.props['aria-label']).toBe('AnsSurf');
 });
+
+test('работа на карте читается из хранилища страницы, отписка при уходе', async () => {
+  // Моста в вебе нет: окно iframe того же происхождения, хранилище доступно
+  let state = { wells: [] };
+  const listeners = new Set();
+  const store = {
+    getState: () => state,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+  const onWorkChange = jest.fn();
+  let tree;
+  await act(async () => {
+    tree = renderer.create(
+      <PaperProvider theme={lightTheme}>
+        <AnsSurf locale="ru" dark={false} onWorkChange={onWorkChange} />
+      </PaperProvider>,
+      {
+        createNodeMock: (element) =>
+          element.type === 'iframe' ? { contentWindow: { __hydroZ: store } } : null,
+      }
+    );
+  });
+
+  act(() => tree.root.findByType('iframe').props.onLoad());
+  act(() => {
+    state = { wells: [{ name: 'СКВ-1' }] };
+    listeners.forEach((listener) => listener(state));
+  });
+
+  expect(onWorkChange.mock.calls).toEqual([[false], [true]]);
+
+  act(() => tree.unmount());
+  expect(listeners.size).toBe(0);
+});

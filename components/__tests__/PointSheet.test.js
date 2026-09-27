@@ -203,6 +203,7 @@ test('остановка отдаёт запись наружу с волной 
     uri: 'file:///cache/recording.m4a',
     durationMillis: 14_000,
     waveform: [0.2, 0.8],
+    pointId: 'p1',
   });
 });
 
@@ -352,4 +353,109 @@ test('удаление играющей заметки останавливае�
   });
 
   expect(mockPlayback.stop).toHaveBeenCalled();
+});
+
+test('закрытие шторки во время записи останавливает её и сохраняет заметку', async () => {
+  // Раньше закрытие глушило только проигрывание: микрофон писал дальше
+  // невидимо, и заметка выходила на пять минут вместо нескольких секунд
+  mockRecorder = { ...mockRecorder, isRecording: true, durationMillis: 3_000 };
+  const onAdd = jest.fn(async () => {});
+  const onClose = jest.fn();
+  const tree = mount({ onAdd, onClose });
+
+  await act(async () => {
+    tree.root.findByType(Modal).props.onRequestClose();
+  });
+
+  expect(stop).toHaveBeenCalled();
+  expect(onClose).toHaveBeenCalled();
+  expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ kind: 'audio', pointId: 'p1' }));
+});
+
+test('шторка, скрытая экраном, тоже останавливает запись', async () => {
+  mockRecorder = { ...mockRecorder, isRecording: true };
+  const onAdd = jest.fn(async () => {});
+  const tree = mount({ onAdd });
+
+  await act(async () => {
+    tree.update(
+      <PaperProvider theme={lightTheme}>
+        <PointSheet
+          point={POINT}
+          attachments={ATTACHMENTS}
+          visible={false}
+          onClose={() => {}}
+          onAdd={onAdd}
+          onDelete={async () => {}}
+        />
+      </PaperProvider>
+    );
+  });
+
+  expect(stop).toHaveBeenCalled();
+  expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ pointId: 'p1' }));
+});
+
+test('заметка ложится к точке, у которой её начали записывать', async () => {
+  // Шторку переключили на другую точку, не остановив запись
+  const onAdd = jest.fn(async () => {});
+  const sheet = (point) => (
+    <PaperProvider theme={lightTheme}>
+      <PointSheet
+        point={point}
+        attachments={[]}
+        visible
+        onClose={() => {}}
+        onAdd={onAdd}
+        onDelete={async () => {}}
+      />
+    </PaperProvider>
+  );
+  const tree = mount({ onAdd, attachments: [] });
+
+  await act(async () => {
+    button(tree, 'Запись').props.onPress();
+  });
+  mockRecorder = { ...mockRecorder, isRecording: true };
+  act(() => tree.update(sheet({ ...POINT, id: 'p2', title: 'Скважина 4' })));
+  await act(async () => {
+    button(tree, 'Остановить запись').props.onPress();
+  });
+
+  expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ pointId: 'p1' }));
+});
+
+/** Ссылка «Открыть настройки», если она есть */
+const settingsLinks = (tree) =>
+  tree.root.findAll(
+    (node) => node.props?.accessibilityRole === 'link' && typeof node.props?.onPress === 'function'
+  );
+
+test('отказ в доступе к микрофону ведёт в системные настройки', () => {
+  // После второго отказа Android больше не спрашивает: вернуть доступ можно
+  // только оттуда, а искать настройки самому приходилось наугад
+  mockRecorder = { ...mockRecorder, denied: true };
+  const { Linking } = require('react-native');
+  const open = jest.spyOn(Linking, 'openSettings').mockResolvedValue();
+  const tree = mount();
+
+  // В блоке, а не выражением: onPress возвращает промис, и act принял бы его
+  // за асинхронный — незакрытый act ломал дерево следующего теста
+  act(() => {
+    settingsLinks(tree)[0].props.onPress();
+  });
+
+  expect(open).toHaveBeenCalled();
+  open.mockRestore();
+});
+
+test('обычный сбой записи в настройки не отправляет', async () => {
+  start.mockRejectedValueOnce(new Error('busy'));
+  const tree = mount();
+
+  await act(async () => {
+    button(tree, 'Запись').props.onPress();
+  });
+
+  expect(settingsLinks(tree)).toHaveLength(0);
 });

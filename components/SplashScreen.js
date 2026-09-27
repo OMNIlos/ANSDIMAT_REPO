@@ -15,7 +15,7 @@
  * размера на том же фоне и прячется, когда этот экран уже отрисован. Раньше
  * пользователь видел две разные заставки подряд — системную и эту.
  *
- * @param {Function} onFinish - Вызывается по истечении таймера показа
+ * @param {Function} onFinish - Вызывается по истечении таймера показа или по касанию
  */
 
 import React, { useContext, useEffect, useMemo, useRef } from 'react';
@@ -28,6 +28,7 @@ import {
   Animated,
   Easing,
   AccessibilityInfo,
+  Pressable,
 } from 'react-native';
 import * as NativeSplash from 'expo-splash-screen';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -37,7 +38,15 @@ import DrawdownCurve from './DrawdownCurve';
 import { palette, spacing, type, fontFamily } from '../theme';
 import { RELEASE_NAME, RELEASE_VERSION } from '../lib/release';
 
-const SPLASH_DURATION = 2200;
+/**
+ * Сколько заставка держится, мс
+ *
+ * Всё на ней, включая имя релиза, проявляется к первой секунде; дальше экран
+ * просто стоял ещё 1,2 с — на каждом запуске, а в поле приложение
+ * перезапускают часто. Сейчас после проявления остаётся время прочитать имя
+ * релиза, и не больше. Нетерпеливый уходит раньше касанием.
+ */
+export const SPLASH_DURATION = 1600;
 
 export default function SplashScreen({ onFinish }) {
   const currentYear = new Date().getFullYear();
@@ -139,7 +148,9 @@ export default function SplashScreen({ onFinish }) {
   });
 
   return (
-    <View style={styles.container}>
+    // Касание пропускает заставку. Не кнопка для экранного диктора: заставка
+    // уходит сама, а лишняя «кнопка» только мешала бы прочитать имя релиза
+    <Pressable style={styles.container} onPress={onFinish} accessible={false}>
       <StatusBar backgroundColor={palette.wine} barStyle="light-content" />
 
       {/* Кривая понижения — фирменный фон, приглушённый до фактуры */}
@@ -197,7 +208,7 @@ export default function SplashScreen({ onFinish }) {
           © {currentYear} {strings.title}
         </Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 

@@ -461,7 +461,9 @@ export function Field({ label, value, onChange, unit, symbol, error, hint, divid
       accessibilityLabel={label}
     >
       <View style={styles.slotTop}>
-        <Text style={[styles.slotLabel, { color: theme.colors.text }]} numberOfLines={1}>
+        {/* Две строки, а не одна с многоточием: «От УГВ до середины фи…» на
+            телефоне теряло именно то, что нужно прочесть, чтобы ввести число */}
+        <Text style={[styles.slotLabel, { color: theme.colors.text }]} numberOfLines={2}>
           {shownLabel}
         </Text>
         <TextInput

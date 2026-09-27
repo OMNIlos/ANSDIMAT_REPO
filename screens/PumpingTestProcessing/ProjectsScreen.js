@@ -733,10 +733,15 @@ export default function ProjectsScreen({ navigation, route }) {
 
               <View style={styles.projectActions}>
 
+              {/* Подпись обязательна: кнопка — один значок, и без неё
+                  экранный диктор читал её как «кнопка» без названия */}
               <TouchableOpacity
                 style={styles.actionButton}
                 onPress={() => handleStar(project)}
                 accessibilityRole="button"
+                accessibilityLabel={I18n.t(
+                  project.starred ? "unfavoriteProject" : "favoriteProject",
+                )}
                 accessibilityState={{ selected: project.starred }}
               >
                 <MaterialIcons

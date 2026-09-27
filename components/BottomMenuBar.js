@@ -34,6 +34,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { CommonActions } from '@react-navigation/native';
 import I18n from '../Localization';
+import { LanguageContext } from '../LanguageContext';
 import { useAuth } from '../AuthContext';
 import ConfirmDialog from './ui/ConfirmDialog';
 import { navigationRef } from '../navigation/navigationRef';
@@ -152,6 +153,10 @@ function MenuItem({ item, active }) {
 
 export default function BottomMenuBar({ active = 'home' }) {
   const insets = useSafeAreaInsets();
+  // Подписка на язык: подписи пунктов читаются из I18n на каждой отрисовке,
+  // но меню само не перерисовывалось при смене языка — на экране настроек,
+  // где язык и меняют, оно оставалось русским до первого перехода
+  React.useContext(LanguageContext);
   // Экран с развёрнутым содержимым просит убрать меню совсем: там оно
   // закрывает низ и отнимает высоту у того, ради чего разворот и нажат
   const menuHidden = useMenuHidden();

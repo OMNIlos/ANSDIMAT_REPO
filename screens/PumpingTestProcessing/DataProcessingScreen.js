@@ -89,6 +89,7 @@ import {
   setWellPosition,
 } from "../../db/wells";
 import ConfirmDialog from "../../components/ui/ConfirmDialog";
+import SettingsLink from "../../components/ui/SettingsLink";
 import PremiumLock from "../../components/ui/PremiumLock";
 import { useEntitlements } from "../../billing/EntitlementsContext";
 import DiagonalHatch from "../../components/DiagonalHatch";
@@ -347,6 +348,46 @@ function MeasurementJournal({
   pointIndexes,
   onToggleSelect,
 }) {
+  // Поля строк по id. «Далее» на клавиатуре ведёт t → s → t следующей
+  // строки, а на заполненной последней заводит новую и ставит в неё курсор.
+  // Раньше на каждый замер уходило четыре касания — поле времени, поле
+  // уровня, «Добавить замер», новое поле, — и все мимо клавиатуры
+  const inputs = useRef(new Map());
+  const focusNewRow = useRef(false);
+  const bindInput = (id, field) => (element) => {
+    const entry = inputs.current.get(id) ?? {};
+    if (element) entry[field] = element;
+    else delete entry[field];
+    if (entry.t || entry.s) inputs.current.set(id, entry);
+    else inputs.current.delete(id);
+  };
+  const focusInput = (id, field) => inputs.current.get(id)?.[field]?.focus();
+
+  // Новая строка появляется не сразу — сначала её запись в базе
+  const lastRowId = rows.length > 0 ? rows[rows.length - 1].id : null;
+  useEffect(() => {
+    if (!focusNewRow.current || !lastRowId) return;
+    focusNewRow.current = false;
+    focusInput(lastRowId, "t");
+  }, [lastRowId]);
+
+  /** «Далее» в поле уровня: следующая строка или новая */
+  const submitValue = (row, rowIndex) => {
+    const next = rows[rowIndex + 1];
+    if (next) {
+      focusInput(next.id, "t");
+      return;
+    }
+    // Пустых строк не плодим: недописанную сначала дописывают
+    if (!row.tText.trim()) {
+      focusInput(row.id, "t");
+      return;
+    }
+    if (!row.sText.trim()) return;
+    focusNewRow.current = true;
+    onAdd();
+  };
+
   return (
     <View
       style={[
@@ -362,7 +403,14 @@ function MeasurementJournal({
         style={[styles.tableHead, { borderBottomColor: theme.colors.border }]}
       >
         {selectable && <View style={styles.pickCell} />}
+        {/* Переносы по слогам: «восстановление,» моноширинным шире узкой
+            колонки, и Android рвал слово где придётся, без дефиса
+            («восстано / вление»). Подгонять кегль бесполезно — при крупном
+            системном шрифте слово снова не влезет. Там, где у Android нет
+            своих правил переноса (русский в Android 9), место разрыва задаёт
+            мягкий перенос в самой подписи, см. columnRecovery */}
         <Text
+          android_hyphenationFrequency="normal"
           style={[
             styles.headCell,
             styles.cellDivider,
@@ -374,7 +422,10 @@ function MeasurementJournal({
         >
           {timeLabel}
         </Text>
-        <Text style={[styles.headCell, { color: theme.colors.textSecondary }]}>
+        <Text
+          android_hyphenationFrequency="normal"
+          style={[styles.headCell, { color: theme.colors.textSecondary }]}
+        >
           {valueLabel}
         </Text>
         <View style={styles.deleteCell} />
@@ -417,9 +468,13 @@ function MeasurementJournal({
             </TouchableOpacity>
           )}
           <TextInput
+            ref={bindInput(row.id, "t")}
             value={row.tText}
             onChangeText={(value) => onChange(row.id, "tText", value)}
             onBlur={onBlur}
+            returnKeyType="next"
+            submitBehavior="submit"
+            onSubmitEditing={() => focusInput(row.id, "s")}
             keyboardType="decimal-pad"
             placeholder="—"
             placeholderTextColor={theme.colors.textSecondary}
@@ -433,9 +488,13 @@ function MeasurementJournal({
             ]}
           />
           <TextInput
+            ref={bindInput(row.id, "s")}
             value={row.sText}
             onChangeText={(value) => onChange(row.id, "sText", value)}
             onBlur={onBlur}
+            returnKeyType="next"
+            submitBehavior="submit"
+            onSubmitEditing={() => submitValue(row, rowIndex)}
             keyboardType="decimal-pad"
             placeholder="—"
             placeholderTextColor={theme.colors.textSecondary}
@@ -457,9 +516,14 @@ function MeasurementJournal({
         );
       })}
 
+      {/* Добавленная строка сразу получает курсор: иначе после кнопки
+          приходилось ещё попадать пальцем в её поле */}
       <TouchableOpacity
         style={styles.addRow}
-        onPress={onAdd}
+        onPress={() => {
+          focusNewRow.current = true;
+          onAdd();
+        }}
         accessibilityRole="button"
       >
         <MaterialIcons
@@ -687,6 +751,15 @@ export default function DataProcessingScreen({ route, navigation }) {
     project?.ofrType === OFR_TYPES.CLUSTER;
 
   const clusterWells = project?.ofrType === OFR_TYPES.CLUSTER;
+
+  // На восстановлении журнал откачки свёрнут в строку. Для расчёта он нужен,
+  // но правят его на этом шаге редко, а целиком он стоял между переключателем
+  // фаз и журналом восстановления: до нужной таблицы листали через все замеры
+  const [pumpingShown, setPumpingShown] = useState(false);
+  const pumpingCollapsed = dualJournals && isRecovery && !pumpingShown;
+  const pumpingFilled = rows.filter(
+    (row) => row.tText.trim() !== "" && row.sText.trim() !== "",
+  ).length;
 
   // Карта куста закрыта подпиской. Права выдаёт сервер, поэтому без ответа и
   // без входа в аккаунт карта считается закрытой — иначе премиум открывался бы
@@ -1513,6 +1586,8 @@ export default function DataProcessingScreen({ route, navigation }) {
   // Alert.alert: на вебе тот не выводится вовсе, и отказ в доступе выглядел
   // бы как сломанная кнопка
   const [mapNotice, setMapNotice] = useState("");
+  // Сообщение — отказ в доступе к геопозиции: к нему идёт ссылка на настройки
+  const [mapNoticeDenied, setMapNoticeDenied] = useState(false);
   // Расстояния до опытной скважины в выбранной размерности: ключ — скважина
   const [distanceTexts, setDistanceTexts] = useState({});
 
@@ -2036,6 +2111,7 @@ export default function DataProcessingScreen({ route, navigation }) {
    */
   const placeAtMyLocation = async () => {
     setMapNotice("");
+    setMapNoticeDenied(false);
     setLocating(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -2046,6 +2122,7 @@ export default function DataProcessingScreen({ route, navigation }) {
               "Нет доступа к геопозиции. Разрешите его в настройках или расставьте скважины по карте.",
           }),
         );
+        setMapNoticeDenied(true);
         return;
       }
 
@@ -2320,6 +2397,9 @@ export default function DataProcessingScreen({ route, navigation }) {
             <Text style={[type.caption, { color: theme.colors.text }]}>
               {mapNotice}
             </Text>
+            {mapNoticeDenied && (
+              <SettingsLink color={theme.colors.primaryAccent} />
+            )}
           </View>
         )}
 
@@ -2767,6 +2847,9 @@ export default function DataProcessingScreen({ route, navigation }) {
                 <Text style={[type.caption, { color: theme.colors.text }]}>
                   {mapNotice}
                 </Text>
+                {mapNoticeDenied && (
+                  <SettingsLink color={theme.colors.primaryAccent} />
+                )}
               </View>
             )}
 
@@ -2999,6 +3082,39 @@ export default function DataProcessingScreen({ route, navigation }) {
             иначе t − длительность откачки выходит отрицательным и точка
             выпадает из расчёта. Пишем это прямо в шапке — догадаться
             из подписи «t, мин» невозможно */}
+        {pumpingCollapsed ? (
+          <TouchableOpacity
+            onPress={() => setPumpingShown(true)}
+            style={[
+              styles.table,
+              styles.collapsedJournal,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+              },
+            ]}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: false }}
+          >
+            <Text style={[styles.collapsedCount, { color: theme.colors.text }]}>
+              {pumpingFilled > 0
+                ? I18n.t("measurementsCount", { count: pumpingFilled })
+                : I18n.t("noMeasurements")}
+            </Text>
+            <View style={styles.collapsedAction}>
+              <Text
+                style={[styles.addRowText, { color: theme.colors.primaryAccent }]}
+              >
+                {I18n.t("journalShow")}
+              </Text>
+              <MaterialIcons
+                name="expand-more"
+                size={20}
+                color={theme.colors.primaryAccent}
+              />
+            </View>
+          </TouchableOpacity>
+        ) : (
         <MeasurementJournal
           theme={theme}
           rows={rows}
@@ -3027,6 +3143,27 @@ export default function DataProcessingScreen({ route, navigation }) {
                 onToggleSelect: handleToggleSelect,
               })}
         />
+        )}
+
+        {dualJournals && isRecovery && pumpingShown && (
+          <TouchableOpacity
+            onPress={() => setPumpingShown(false)}
+            style={styles.collapseLink}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: true }}
+          >
+            <MaterialIcons
+              name="expand-less"
+              size={20}
+              color={theme.colors.primaryAccent}
+            />
+            <Text
+              style={[styles.addRowText, { color: theme.colors.primaryAccent }]}
+            >
+              {I18n.t("journalHidePumping")}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {/* Журнал восстановления — второй таблицей под откачкой. Общей таблицы
             у них быть не может: время здесь идёт от остановки насоса, а ноль
@@ -3654,6 +3791,29 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.semibold,
     fontSize: 14,
     lineHeight: 19,
+  },
+  // Свёрнутый журнал откачки на восстановлении: строка-сводка вместо таблицы
+  collapsedJournal: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  collapsedCount: {
+    ...type.body,
+  },
+  collapsedAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  collapseLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: spacing.md,
   },
   // Чипов бывает пять — три оси времени и два прослеживания с расстоянием.
   // В одну строку на телефоне они не влезают, поэтому строка переносится.

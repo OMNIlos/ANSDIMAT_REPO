@@ -9,7 +9,7 @@
  * Нижнее меню (BottomMenuBar) живёт в App поверх навигатора — здесь его нет.
  */
 
-import React from 'react';
+import React, { useContext } from 'react';
 import { Easing, Platform } from 'react-native';
 import { createStackNavigator, TransitionPresets } from '@react-navigation/stack';
 
@@ -31,7 +31,9 @@ import SettingsScreen from '../screens/SettingsScreen';
 import AuthScreen from '../screens/AuthScreen';
 import AccountScreen from '../screens/AccountScreen';
 import TopBar from '../components/TopBar';
+import KeyboardInset from '../components/KeyboardInset';
 import I18n from '../Localization';
+import { LanguageContext } from '../LanguageContext';
 import { PREMIUM_ENABLED } from '../billing/config';
 
 const Stack = createStackNavigator();
@@ -87,9 +89,17 @@ const WEB_TRANSITION = {
 };
 
 export default function RootNavigator() {
+  // Заголовки экранов — в options, и считаются они при отрисовке навигатора.
+  // Без подписки на язык шапка открытого экрана оставалась на прежнем языке
+  // до первого перехода: «Настройки» над уже английскими настройками
+  useContext(LanguageContext);
+
   return (
     <Stack.Navigator
       initialRouteName="Home"
+      // Каждый экран отводит место под клавиатурой: при отрисовке от края до
+      // края Android сам окно под неё больше не ужимает, см. KeyboardInset
+      screenLayout={({ children }) => <KeyboardInset>{children}</KeyboardInset>}
       screenOptions={{
         header: (props) => <TopBar {...props} />,
         ...(IS_WEB ? WEB_TRANSITION : TransitionPresets.SlideFromRightIOS),

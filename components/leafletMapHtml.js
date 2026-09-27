@@ -21,7 +21,14 @@
  * `connect` рисует пунктир между точками: { color, fromId }. С `fromId`
  * получается звезда — лучи от одной точки ко всем остальным, что и отвечает
  * расстояниям «до опытной скважины». Без него точки соединяются цепочкой.
+ *
+ * Leaflet встроен в документ, а не подключается с CDN: в поле без сети
+ * ссылка на unpkg.com оставляла вместо карты серый прямоугольник. Теперь без
+ * сети пропадает только подложка OpenStreetMap — точки, перетаскивание и
+ * постановка нажатием работают. Файлы — tools/vendor-leaflet.js.
  */
+
+import { LEAFLET_CSS, LEAFLET_JS } from './leafletAssets';
 
 /** Центр по умолчанию — Санкт-Петербург, родина АНСДИМАТ */
 export const DEFAULT_CENTER = { lat: 59.9386, lon: 30.3141, zoom: 13 };
@@ -39,9 +46,7 @@ export function buildMapHtml({ center = DEFAULT_CENTER } = {}) {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H"
-      crossorigin="anonymous" />
+<style>${LEAFLET_CSS}</style>
 <style>
   html, body, #map { height: 100%; margin: 0; padding: 0; background: #EDE9EA; }
   .ans-pin {
@@ -53,7 +58,7 @@ export function buildMapHtml({ center = DEFAULT_CENTER } = {}) {
   /* Leaflet 1.9 подмешивает в подпись карты флаг Украины. Подпись
      остаётся (её требует лицензия OSM), эмблема — нет: приложение
      нейтрально. Флаг убран и из разметки, и стилем — на случай, если
-     CDN отдаст сборку с другой подписью */
+     встроенный Leaflet обновят до сборки с другой подписью */
   .leaflet-attribution-flag { display: none !important; }
   /* Подпись скважины: читается на карте без нажатия и не ловит касания,
      иначе она перехватывала бы перетаскивание маркера */
@@ -67,9 +72,7 @@ export function buildMapHtml({ center = DEFAULT_CENTER } = {}) {
 </head>
 <body>
 <div id="map"></div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH"
-        crossorigin="anonymous"></script>
+<script>${LEAFLET_JS}</script>
 <script>
   (function () {
     var map = L.map('map', { zoomControl: false, attributionControl: true })
@@ -107,6 +110,29 @@ export function buildMapHtml({ center = DEFAULT_CENTER } = {}) {
       send({ type: 'press', lat: e.latlng.lat, lon: e.latlng.lng });
     });
 
+    /** Есть ли у карты площадь */
+    function hasSize() {
+      var size = map.getSize();
+      return size.x > 0 && size.y > 0;
+    }
+
+    // Подгонка под контуры, отложенная до появления площади. Окно развёрнутой
+    // карты размечается позже, чем грузится страница, а fitBounds в
+    // контейнере нулевого размера уводит карту на предельный масштаб — вместо
+    // поясов на весь экран оказывался чей-то огород
+    var pendingFit = null;
+    function fitTo(bounds) {
+      if (!hasSize()) {
+        pendingFit = bounds;
+        return;
+      }
+      pendingFit = null;
+      map.fitBounds(bounds, { padding: [18, 18], animate: false });
+    }
+    map.on('resize', function () {
+      if (pendingFit && hasSize()) fitTo(pendingFit);
+    });
+
     /**
      * Перерисовывает залитые контуры — например, пояса зоны санитарной охраны
      *
@@ -132,9 +158,7 @@ export function buildMapHtml({ center = DEFAULT_CENTER } = {}) {
         bounds = bounds ? bounds.extend(shape.getBounds()) : shape.getBounds();
       });
 
-      if (fit && bounds && bounds.isValid()) {
-        map.fitBounds(bounds, { padding: [18, 18], animate: false });
-      }
+      if (fit && bounds && bounds.isValid()) fitTo(bounds);
     }
 
     /** Перерисовывает пунктир между точками по текущему положению маркеров */
@@ -222,7 +246,8 @@ export function buildMapHtml({ center = DEFAULT_CENTER } = {}) {
       if (data.type === 'resize') {
         var stayAt = map.getCenter();
         map.invalidateSize();
-        map.setView(stayAt, map.getZoom(), { animate: false });
+        if (pendingFit && hasSize()) fitTo(pendingFit);
+        else map.setView(stayAt, map.getZoom(), { animate: false });
       }
     }
 
@@ -230,7 +255,20 @@ export function buildMapHtml({ center = DEFAULT_CENTER } = {}) {
     document.addEventListener('message', function (e) { handle(e.data); });
     window.addEventListener('message', function (e) { handle(e.data); });
 
-    setTimeout(function () { map.invalidateSize(); send({ type: 'ready' }); }, 60);
+    // «Готово» — когда у карты появилась площадь. Встроенный Leaflet
+    // поднимается сразу при загрузке страницы, раньше разметки окна, и
+    // точки, пришедшие в карту нулевого размера, вставали мимо. Ждём не
+    // дольше двух секунд: карте без площади всё равно нечего показать
+    var announceTries = 0;
+    function announce() {
+      map.invalidateSize();
+      if (hasSize() || announceTries++ >= 40) {
+        send({ type: 'ready' });
+        return;
+      }
+      setTimeout(announce, 50);
+    }
+    setTimeout(announce, 60);
     setTimeout(function () { map.invalidateSize(); }, 400);
   })();
 </script>

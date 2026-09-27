@@ -35,6 +35,13 @@ const THEME_KEY = 'hydro-theme';
 export function beforeContentScript({ dark, native, menuInset = 0 }) {
   return `
 (function(){
+  // Мост ставится дважды: до загрузки страницы и после неё. На Android первый
+  // запуск react-native-webview выполняет ненадёжно — из onPageStarted, и он то
+  // и дело попадает в прежний, пустой документ. Второй запуск находит мост уже
+  // стоящим и только повторяет «готово»: заведённые первым ожидания ответов
+  // затирать нельзя, иначе ответ на выгрузку ушёл бы в пустоту
+  if (window.__ansdBridge) { window.__ansdBridge.ready(); return; }
+
   try { localStorage.setItem(${JSON.stringify(THEME_KEY)}, ${JSON.stringify(dark ? 'dark' : 'light')}); } catch (e) {}
 
   // Высота плавающего меню приложения: страница отводит под него место в
@@ -85,16 +92,114 @@ ${
       send({ type: 'save', id: id, name: String(name || 'anssurf'), files: filesJson });
     });
   };
+
+  // Подложку для расчётных модулей АНСДИМАТ скрипт поставки сохраняет своим
+  // путём — через hydroSaveAnsd (в настольной оболочке это electronAPI), а
+  // без обработчика скачивает четыре файла ссылками <a download>, которые в
+  // WebView не делают ничего. Здесь те же файлы уходят обычной выгрузкой:
+  // растр, .aprj — в cp1251, как его читает настольный АНСДИМАТ и как пишет
+  // его скрипт поставки, — и файлы привязки .jgw и .prj
+  function cp1251(text){
+    var out = [];
+    for (var i = 0; i < text.length; i++) {
+      var c = text.charCodeAt(i), b;
+      if (c < 128) b = c;
+      else if (c >= 0x0410 && c <= 0x044F) b = c - 0x0410 + 0xC0;
+      else if (c === 0x0401) b = 0xA8;
+      else if (c === 0x0451) b = 0xB8;
+      else if (c === 0x0404) b = 0xAA;
+      else if (c === 0x0454) b = 0xBA;
+      else if (c === 0x0406) b = 0xB2;
+      else if (c === 0x0456) b = 0xB3;
+      else if (c === 0x0407) b = 0xAF;
+      else if (c === 0x0457) b = 0xBF;
+      else if (c === 0x040E) b = 0xA1;
+      else if (c === 0x045E) b = 0xA2;
+      else if (c === 0x0490) b = 0xA5;
+      else if (c === 0x0491) b = 0xB4;
+      else if (c === 0x2116) b = 0xB9;
+      else if (c === 0x00A0) b = 0xA0;
+      else if (c === 0x00AB) b = 0xAB;
+      else if (c === 0x00BB) b = 0xBB;
+      else if (c === 0x2013) b = 0x96;
+      else if (c === 0x2014) b = 0x97;
+      else if (c === 0x2018 || c === 0x2019) b = 0x27;
+      else if (c === 0x201C || c === 0x201D) b = 0x22;
+      else b = 0x3F;
+      out.push(String.fromCharCode(b));
+    }
+    return out.join('');
+  }
+  function utf8(text){ return unescape(encodeURIComponent(String(text))); }
+
+  window.hydroSaveAnsd = function(name, jpgB64, aprj, jgw, prj){
+    var base = String(name || 'ansdimat');
+    var files = [{ name: base + '.jpg', b64: String(jpgB64 || '') }];
+    if (aprj) files.push({ name: base + '.aprj', b64: btoa(cp1251(String(aprj))) });
+    if (jgw) files.push({ name: base + '.jgw', b64: btoa(utf8(jgw)) });
+    if (prj) files.push({ name: base + '.prj', b64: btoa(utf8(prj)) });
+    return window.hydroSaveExport(base, JSON.stringify(files));
+  };
 `
     : ''
 }
 
-  function ready(){ send({ type: 'ready' }); }
+  // Есть ли на карте работа. Страница ничего не хранит, и уход с экрана
+  // стирал бы скважины и построенную карту без спроса — приложение
+  // переспрашивает, но только когда терять есть что. Хранилище страница
+  // открывает сама (window.__hydroZ); сообщение уходит при смене ответа.
+  // Условие то же, что в hasMapWork ниже в модуле — их сверяет тест
+  var workSent = null;
+  var watching = false;
+  function any(list){ return Array.isArray(list) && list.length > 0; }
+  function reportWork(state){
+    var has = !!state && (!!state.table || any(state.wells) || any(state.drawings) ||
+      any(state.faults) || any(state.clipPolygons) || any(state.rasters));
+    if (has === workSent) return;
+    workSent = has;
+    send({ type: 'work', has: has });
+  }
+  function watchWork(){
+    var store = window.__hydroZ;
+    if (watching || !store || typeof store.subscribe !== 'function') return;
+    watching = true;
+    reportWork(store.getState());
+    store.subscribe(reportWork);
+  }
+
+  function ready(){ watchWork(); send({ type: 'ready' }); }
+  window.__ansdBridge = { ready: ready };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready);
   else ready();
 })();
 true;
 `;
+}
+
+/**
+ * Есть ли на карте работа, которую жалко потерять
+ *
+ * Таблица уровней, скважины, чертёж, разломы, границы области и растры —
+ * всё, что человек загрузил или нарисовал сам. Построенные изолинии отдельно
+ * не проверяются: без скважин их не бывает.
+ *
+ * Веб-версия спрашивает хранилище страницы напрямую, на устройстве то же
+ * условие стоит в скрипте-мосте.
+ *
+ * @param {Object} state - состояние хранилища страницы (`__hydroZ.getState()`)
+ * @returns {boolean} есть ли работа
+ */
+export function hasMapWork(state) {
+  if (!state) return false;
+  const any = (list) => Array.isArray(list) && list.length > 0;
+  return (
+    !!state.table ||
+    any(state.wells) ||
+    any(state.drawings) ||
+    any(state.faults) ||
+    any(state.clipPolygons) ||
+    any(state.rasters)
+  );
 }
 
 /**

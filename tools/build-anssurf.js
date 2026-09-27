@@ -32,6 +32,16 @@
  * 7. Первым в `<head>` встаёт скрипт приложения `tools/anssurf-host.js`: то,
  *    что скин не умеет, — прокрутка к началу при смене шага и меню в
  *    пределах экрана.
+ * 8. Картинки из `img/` поставки встраиваются в страницу data-адресами: как
+ *    и со скриптом экспорта, соседней папки у файла в кэше WebView нет, и
+ *    ссылка на неё давала битую картинку. Картинки, которой нет в поставке,
+ *    сборка не роняет, а перечисляет — её надо попросить у разработчика.
+ * 9. Тегу `<html>` возвращается класс `hydro-desktop` — десктопная вёрстка
+ *    поставки. До поставки от 23.09 он стоял в разметке всегда, теперь
+ *    поставка ставит его сама только в Electron и по `?desktop=1`. Без него
+ *    в приложении появлялись шапка и подвал сайта, лента шагов не влезала в
+ *    экран, пропадали кнопка «Экспорт в АНСДИМАТ», рисование и слои, а скин
+ *    не срабатывал вовсе — все его правила под этим классом.
  *
  * Имена файлов сохраняются. Внутри сборки есть ссылки вида
  * `gidroizogipsy-en.html` и определение языка по `location.pathname` —
@@ -89,11 +99,20 @@ const lit = (text) => `\`${text}\``;
  * Подсказки поставки написаны для компьютера: «Правая кнопка мыши — добавить
  * скважину». На телефоне мыши нет, а в узком окне браузера с мышью подсказка
  * про касание была бы неверна — поэтому новые тексты верны для обоих: в
- * режиме «Добавить скважину на карте» скважину ставит обычное нажатие на
- * карту, и пальцем, и мышью.
+ * режиме «Поставить скважины на карте» скважину ставит обычное нажатие на
+ * карту, и пальцем, и мышью. (До поставки от 23.09 кнопка называлась
+ * «Добавить скважину на карте», а в режиме подсказывала «Click the map…» —
+ * теперь её подпись нейтральна и правки не требует.)
  *
  * Кнопка третьего шага звала «к печати», хотя четвёртый шаг уже называется
  * «Выгрузка» и печати в нём нет.
+ *
+ * Подсказка второго шага отсылала к кнопкам «справа в меню». Справа они
+ * только на широком экране; на телефоне панель встаёт под карту. Кнопки
+ * идут сразу под подсказкой при любой раскладке — так и сказано теперь.
+ *
+ * В английской странице метки колонок в предпросмотре таблицы остались
+ * русскими: «СКВ» у названия скважины и «ДОП» у вспомогательной колонки.
  *
  * Подсказка «156.3» в поле уровня выглядела как введённое число: человек
  * видел значение в поле и не понимал, почему «Добавить» не нажимается.
@@ -109,13 +128,17 @@ const PAGE_TEXT = {
     ],
     [
       lit('Правая кнопка мыши на карте — добавить скважину.'),
-      lit('Чтобы добавить скважину, нажмите «Добавить скважину на карте», а затем — на карту.'),
+      lit('Чтобы добавить скважину, нажмите «Поставить скважины на карте», а затем — на карту.'),
     ],
     [
       lit('Укажите положение скважины на карте (правая кнопка — добавить).'),
       lit('Нажмите на карту там, где стоит скважина.'),
     ],
     [lit('Подготовить карту к печати'), lit('Перейти к выгрузке')],
+    [
+      lit('Нажмите на одну из кнопок справа в меню, чтобы продолжить работу.'),
+      lit('Нажмите одну из кнопок ниже, чтобы продолжить работу.'),
+    ],
     [`placeholder:${lit('156.3')}`, `placeholder:${lit('напр. 156.3')}`],
   ],
   'gidroizogipsy-en.html': [
@@ -125,14 +148,18 @@ const PAGE_TEXT = {
     ],
     [
       lit('Right-click the map to add a well.'),
-      lit('To add a well, press “Add a well on the map”, then click or tap the map.'),
+      lit('To add a well, press “Place wells on the map”, then click or tap the map.'),
     ],
     [
       lit('Indicate the well location on the map (right-click to add).'),
       lit('Click or tap the map where the well is.'),
     ],
-    [lit('Click the map…'), lit('Pick a point on the map…')],
     [lit('Prepare the map for print'), lit('Go to export')],
+    [
+      lit('Click one of the buttons on the right to continue.'),
+      lit('Click or tap one of the buttons below to continue.'),
+    ],
+    [`n===t.name?${lit('скв')}:n===t.aux?${lit('доп')}`, `n===t.name?${lit('well')}:n===t.aux?${lit('aux')}`],
     [`placeholder:${lit('156.3')}`, `placeholder:${lit('e.g. 156.3')}`],
   ],
 };
@@ -145,11 +172,24 @@ const PAGE_TEXT = {
  * отрисовки сдвигает его внутрь карты (`__ansdClampMenu` из скрипта
  * приложения). Функция-стрелка, а не ссылка на готовую: новый ref на каждой
  * отрисовке заставляет React вызвать его и после того, как меню переехало.
+ *
+ * Хранилище страницы открывается наружу как `window.__hydroZ` — по нему
+ * скрипт экспорта в АНСДИМАТ берёт систему координат проекта, растры и
+ * видимость слоёв, а приложение узнаёт, есть ли на карте работа. Но в сборке
+ * поставки хранилище создаётся внутри ленивой инициализации модуля, а
+ * присваивание стоит снаружи и выполняется раньше неё: в `window` уходил
+ * `undefined`, и все эти ветки молча не работали (в Electron — тоже).
+ * Геттер отдаёт хранилище в момент обращения, когда оно уже создано.
+ * Исправят в поставке — правка перестанет находиться, и сборка скажет об этом.
  */
 const SOURCE_PATCHES = [
   [
     'style:{left:ctx.px,top:ctx.py}',
     'ref:e=>window.__ansdClampMenu&&window.__ansdClampMenu(e),style:{left:ctx.px,top:ctx.py}',
+  ],
+  [
+    'try{window.__hydroZ=Z;',
+    'try{Object.defineProperty(window,`__hydroZ`,{configurable:!0,enumerable:!0,get:()=>Z});',
   ],
 ];
 
@@ -194,10 +234,16 @@ function dropIcons(html) {
  * @returns {string} разметка со встроенным скриптом
  */
 function inlineExport(html, code) {
-  const tag = `<script src="${EXPORT_SCRIPT}"></script>`;
-  if (!html.includes(tag)) {
+  // С поставки от 23.09 адрес идёт с меткой версии против кэша браузера —
+  // `ansdimat-export.js?v=20260923c`; метка от сборки к сборке своя
+  const tag = new RegExp(
+    `<script src="${EXPORT_SCRIPT.replace('.', '\\.')}(?:\\?[^"]*)?"></script>`,
+    'g'
+  );
+  const found = html.match(tag);
+  if (!found || found.length !== 1) {
     throw new Error(
-      `Не найдено подключение ${EXPORT_SCRIPT}: поставка AnsSurf изменилась`
+      `Не найдено подключение ${EXPORT_SCRIPT} (или оно не одно): поставка AnsSurf изменилась`
     );
   }
   // Проверка обязательна: закрывающий тег внутри кода оборвал бы скрипт
@@ -205,7 +251,52 @@ function inlineExport(html, code) {
   if (/<\/script/i.test(code)) {
     throw new Error(`В ${EXPORT_SCRIPT} встретился </script> — встроить нельзя`);
   }
-  return html.replace(tag, `<script>\n${code}\n</script>`);
+  // Функция вместо строки замены: в коде скрипта `$&` и `$1` имели бы особый смысл
+  return html.replace(tag, () => `<script>\n${code}\n</script>`);
+}
+
+/** Тип картинки по расширению — для data-адреса */
+const IMAGE_MIME = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  svg: 'image/svg+xml',
+  webp: 'image/webp',
+};
+
+/**
+ * Ссылка на картинку поставки: относительный путь `img/…` сразу после
+ * кавычки, скобки или знака равенства. Хвост чужого адреса
+ * (`https://…/img/logo.png`) под это не подходит и не трогается
+ */
+const IMAGE_REF = /(?<=["'`(=])img\/[A-Za-z0-9_./-]+\.(?:png|jpe?g|gif|svg|webp)/g;
+
+/**
+ * Встраивает картинки поставки в страницу
+ *
+ * @param {string} html - разметка страницы
+ * @param {string} srcDir - каталог поставки
+ * @returns {{html: string, missing: Array<string>}} разметка и пути картинок,
+ *   которых в поставке нет
+ */
+function inlineImages(html, srcDir) {
+  const refs = [...new Set(html.match(IMAGE_REF) || [])];
+  const uris = {};
+  const missing = [];
+  for (const ref of refs) {
+    const file = path.join(srcDir, ref);
+    if (!fs.existsSync(file)) {
+      missing.push(ref);
+      continue;
+    }
+    const mime = IMAGE_MIME[path.extname(ref).slice(1).toLowerCase()];
+    uris[ref] = `data:${mime};base64,${fs.readFileSync(file).toString('base64')}`;
+  }
+  return {
+    html: html.replace(IMAGE_REF, (ref) => uris[ref] || ref),
+    missing,
+  };
 }
 
 /**
@@ -259,6 +350,33 @@ function replaceOnce(html, from, to) {
   }
   // Функция вместо строки замены: в строке `$&` и `$1` имели бы особый смысл
   return html.replace(from, () => to);
+}
+
+/**
+ * Включает десктопную вёрстку поставки
+ *
+ * Класс ставится прямо в разметку, а не адресом `?desktop=1`: тогда вёрстка
+ * одна и та же в WebView, в iframe веб-сборки и при открытии файла руками, а
+ * поставка не принимает приложение за Electron и не рисует рамку окна
+ * Windows (`hydro-winchrome` она ставит только вместе с адресом).
+ *
+ * @param {string} html - разметка страницы
+ * @returns {string} разметка с классом у <html>
+ */
+function desktopLayout(html) {
+  const tag = /<html\b([^>]*)>/g;
+  const found = html.match(tag);
+  if (!found || found.length !== 1) {
+    throw new Error(
+      `Тег <html> не найден или не один (${found ? found.length : 0}): поставка AnsSurf изменилась`
+    );
+  }
+  return html.replace(tag, (whole, attrs) => {
+    const cls = /\bclass="([^"]*)"/.exec(attrs);
+    if (!cls) return `<html${attrs} class="hydro-desktop">`;
+    if (/(?:^|\s)hydro-desktop(?:\s|$)/.test(cls[1])) return whole;
+    return `<html${attrs.replace(cls[0], `class="hydro-desktop ${cls[1]}"`)}>`;
+  });
 }
 
 /**
@@ -336,6 +454,14 @@ function buildPage(srcDir, name, exportCode, skin, host) {
   );
   html = dropIcons(html);
   html = inlineExport(html, exportCode);
+  const images = inlineImages(html, srcDir);
+  html = images.html;
+  if (images.missing.length) {
+    console.warn(
+      `${name}: в поставке нет картинок — попросите у разработчика: ${images.missing.join(', ')}`
+    );
+  }
+  html = desktopLayout(html);
   html = renameFourthStep(html, STEP_RENAME[name]);
   html = patchPage(html, name);
   html = addHostScript(html, host);
@@ -385,4 +511,13 @@ function main() {
 // отдельных шагов и собирать страницы при этом не должен
 if (require.main === module) main();
 
-module.exports = { PAGE_TEXT, SOURCE_PATCHES, replaceOnce, patchPage, addHostScript };
+module.exports = {
+  PAGE_TEXT,
+  SOURCE_PATCHES,
+  replaceOnce,
+  patchPage,
+  addHostScript,
+  desktopLayout,
+  inlineExport,
+  inlineImages,
+};

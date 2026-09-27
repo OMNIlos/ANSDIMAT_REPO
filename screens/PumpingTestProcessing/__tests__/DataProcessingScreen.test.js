@@ -241,3 +241,73 @@ test('на время разворота место графика в списк
   await pressLabel(tree, 'Свернуть график');
   expect(slot().props.style).toBeNull();
 });
+
+test('«Далее» на клавиатуре ведёт по журналу t → s → следующая строка', async () => {
+  // Раньше на каждый замер уходило четыре касания мимо клавиатуры
+  const { TextInput } = require('react-native');
+  const tree = await mount();
+  const fields = () =>
+    tree.root.findAll((node) => node.type === TextInput && node.props.returnKeyType === 'next');
+  // Журнал откачки идёт первым: t и s трёх замеров
+  const [t1, s1, t2] = fields();
+  // focus у мока поля общий на все поля; чьё поле получило фокус — по this
+  const focus = t1.instance.focus;
+
+  await act(async () => t1.props.onSubmitEditing());
+  expect(focus.mock.contexts.at(-1)).toBe(s1.instance);
+
+  await act(async () => s1.props.onSubmitEditing());
+  expect(focus.mock.contexts.at(-1)).toBe(t2.instance);
+});
+
+test('«Далее» на заполненной последней строке заводит новую и ставит в неё курсор', async () => {
+  const { TextInput } = require('react-native');
+  const { addMeasurement } = require('../../../db/projects');
+  const tree = await mount();
+  const fields = () =>
+    tree.root.findAll((node) => node.type === TextInput && node.props.returnKeyType === 'next');
+  const lastValue = fields()[5];
+  addMeasurement.mockClear();
+
+  await act(async () => lastValue.props.onSubmitEditing());
+
+  expect(addMeasurement).toHaveBeenCalledTimes(1);
+  const newTime = fields()[6];
+  expect(newTime.props.value).toBe('');
+  expect(newTime.instance.focus.mock.contexts.at(-1)).toBe(newTime.instance);
+});
+
+test('«Добавить замер» ставит курсор в новую строку', async () => {
+  const { TextInput } = require('react-native');
+  const tree = await mount();
+  const fields = () =>
+    tree.root.findAll((node) => node.type === TextInput && node.props.returnKeyType === 'next');
+
+  await press(tree, 'Добавить замер');
+
+  const newTime = fields()[6];
+  expect(newTime.props.value).toBe('');
+  expect(newTime.instance.focus.mock.contexts.at(-1)).toBe(newTime.instance);
+});
+
+test('на восстановлении журнал откачки свёрнут, а по «Показать» раскрывается', async () => {
+  // Целиком он стоял между переключателем фаз и журналом восстановления, и
+  // до нужной таблицы приходилось листать через все замеры откачки
+  const { TextInput } = require('react-native');
+  const tree = await mount();
+  const fields = () =>
+    tree.root.findAll((node) => node.type === TextInput && node.props.returnKeyType === 'next');
+  const values = () => fields().map((field) => field.props.value);
+  expect(values()).toContain('5');
+
+  await press(tree, 'Восстановление');
+  // Видна только таблица восстановления (s = 0.5 есть только в ней), откачка
+  // свёрнута в строку со счётчиком
+  expect(values()).toContain('0.5');
+  expect(values()).not.toContain('5');
+  expect(textOf(tree.toJSON())).toContain('3 замера');
+
+  await press(tree, 'Показать');
+  expect(values()).toEqual(expect.arrayContaining(['5', '0.5']));
+  expect(fields()).toHaveLength(12);
+});

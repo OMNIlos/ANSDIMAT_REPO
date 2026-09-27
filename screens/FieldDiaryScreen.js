@@ -30,6 +30,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FieldMap from '../components/FieldMap';
 import { MENU_BAR_HEIGHT } from '../components/BottomMenuBar';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import SettingsLink from '../components/ui/SettingsLink';
 import {
   listPoints,
   createPoint,
@@ -131,16 +132,21 @@ function countAttachments(items = []) {
  * по-разному, и «три вложения» не сказало бы, чего именно три.
  *
  * @param {Array} [items] - вложения точки
- * @returns {Object|undefined} значение для accessibilityValue
+ * @returns {Object} значение для accessibilityValue
  */
 function badgeValue(items) {
   const { photos, records } = countAttachments(items);
-  if (photos === 0 && records === 0) return undefined;
+  // Пустое значение передаётся явно: undefined на Android не сбрасывает
+  // прежнее, и после удаления последнего вложения диктор продолжал читать
+  // «1 запись»
+  if (photos === 0 && records === 0) {
+    return { text: I18n.t('noAttachments') };
+  }
+  // Форма слова — по числу: «1 запись», «2 снимка», «5 записей»
   return {
-    text: `${photos} ${I18n.t('photoCount', { defaultValue: 'снимков' })}, ${records} ${I18n.t(
-      'voiceNoteCount',
-      { defaultValue: 'записей' }
-    )}`,
+    text: `${I18n.t('photoCount', { count: photos })}, ${I18n.t('voiceNoteCount', {
+      count: records,
+    })}`,
   };
 }
 
@@ -213,6 +219,8 @@ export default function FieldDiaryScreen() {
   const [sheetPointId, setSheetPointId] = useState(null);
   // Сообщение о проблеме с геопозицией и признак ожидания координат
   const [notice, setNotice] = useState('');
+  // Сообщение — именно отказ в доступе: к нему идёт ссылка на настройки
+  const [noticeDenied, setNoticeDenied] = useState(false);
   const [locating, setLocating] = useState(false);
   // Развёрнута ли карта на весь экран
   const [mapFullscreen, setMapFullscreen] = useState(false);
@@ -346,6 +354,7 @@ export default function FieldDiaryScreen() {
    */
   const getMyCoords = async () => {
     setNotice('');
+    setNoticeDenied(false);
     setLocating(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -358,6 +367,7 @@ export default function FieldDiaryScreen() {
             defaultValue: 'Нет доступа к геопозиции. Разрешите его в настройках или отметьте точку тапом по карте.',
           })
         );
+        setNoticeDenied(true);
         return null;
       }
 
@@ -417,11 +427,15 @@ export default function FieldDiaryScreen() {
    * Список перечитывается целиком: без этого счётчик в карточке остался бы
    * прежним, и снятое выглядело бы потерянным.
    *
-   * @param {Object} attachment - {kind, uri, durationMillis?, waveform?}
+   * Голосовая заметка приходит со своей точкой: запись могли остановить уже
+   * после того, как шторку закрыли или переключили на другую точку.
+   *
+   * @param {Object} attachment - {kind, uri, durationMillis?, waveform?, pointId?}
    */
   const handleAddAttachment = async (attachment) => {
-    if (!sheetPointId) return;
-    await addAttachment({ pointId: sheetPointId, ...attachment });
+    const pointId = attachment.pointId ?? sheetPointId;
+    if (!pointId) return;
+    await addAttachment({ ...attachment, pointId });
     await load();
   };
 
@@ -676,6 +690,7 @@ export default function FieldDiaryScreen() {
               {notice}
             </Text>
           )}
+          {!!notice && noticeDenied && <SettingsLink color={theme.colors.error} />}
         </View>
 
         {/* Список точек */}

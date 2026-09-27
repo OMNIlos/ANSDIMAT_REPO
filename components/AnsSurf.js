@@ -19,6 +19,8 @@
  * @param {number} [menuInset] - отступ страницы снизу под системную полосу, px
  * @param {Function} [onSaved] - выгрузка удалась: ({saved, names})
  * @param {Function} [onError] - что-то не получилось: (текст)
+ * @param {Function} [onWorkChange] - на карте появилась или пропала работа,
+ *   которую жалко потерять: (есть ли)
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -35,9 +37,25 @@ import {
 } from './anssurfBridge';
 import { saveAnsSurfExport } from '../share/anssurfExport';
 
-export default function AnsSurf({ locale, dark, menuInset = 0, onSaved, onError }) {
+/**
+ * Через сколько после загрузки страницы заглушка снимается без сигнала, мс
+ *
+ * Страховка на случай, если мост не встал вовсе: пусть лучше мелькнёт не та
+ * тема, чем экран навсегда останется под кружком загрузки.
+ */
+const READY_FALLBACK_MS = 1500;
+
+export default function AnsSurf({
+  locale,
+  dark,
+  menuInset = 0,
+  onSaved,
+  onError,
+  onWorkChange,
+}) {
   const theme = useTheme();
   const webRef = useRef(null);
+  const fallbackRef = useRef(null);
 
   // Язык фиксируется на всё время жизни экрана, см. заголовок модуля
   const [page] = useState(locale === 'en' ? 'en' : 'ru');
@@ -58,6 +76,14 @@ export default function AnsSurf({ locale, dark, menuInset = 0, onSaved, onError 
     };
   }, [page, onError]);
 
+  useEffect(() => () => clearTimeout(fallbackRef.current), []);
+
+  /** Страница загрузилась — сигнала «готово» ждём не дольше READY_FALLBACK_MS */
+  const handleLoadEnd = useCallback(() => {
+    if (fallbackRef.current) return;
+    fallbackRef.current = setTimeout(() => setLoading(false), READY_FALLBACK_MS);
+  }, []);
+
   // Тема приезжает из настроек и меняется, пока карта открыта
   useEffect(() => {
     if (loading) return;
@@ -76,7 +102,14 @@ export default function AnsSurf({ locale, dark, menuInset = 0, onSaved, onError 
       const data = parseMessage(event?.nativeEvent?.data);
       if (!data) return;
 
+      if (data.type === 'work') {
+        onWorkChange?.(!!data.has);
+        return;
+      }
+
       if (data.type === 'ready') {
+        // Сигнал пришёл — страховочный таймер больше не нужен
+        clearTimeout(fallbackRef.current);
         setLoading(false);
         return;
       }
@@ -95,8 +128,10 @@ export default function AnsSurf({ locale, dark, menuInset = 0, onSaved, onError 
         }
       }
     },
-    [onSaved, onError]
+    [onSaved, onError, onWorkChange]
   );
+
+  const bridge = beforeContentScript({ dark, native: true, menuInset });
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -121,11 +156,15 @@ export default function AnsSurf({ locale, dark, menuInset = 0, onSaved, onError 
           // она замирает, и длинный расчёт выглядит зависшим
           androidLayerType="hardware"
           onMessage={handleMessage}
-          injectedJavaScriptBeforeContentLoaded={beforeContentScript({
-            dark,
-            native: true,
-            menuInset,
-          })}
+          injectedJavaScriptBeforeContentLoaded={bridge}
+          // Тот же мост — ещё раз, после загрузки. Скрипт «до загрузки»
+          // react-native-webview на Android выполняет из onPageStarted
+          // асинхронно, и тот попадал в прежний, пустой документ: сигнал
+          // готовности не приходил, и карта открывалась раз из десяти.
+          // После onPageFinished документ уже тот самый; повторный запуск
+          // моста только повторяет «готово» (см. anssurfBridge.js)
+          injectedJavaScript={bridge}
+          onLoadEnd={handleLoadEnd}
           onError={(event) =>
             onError?.(event?.nativeEvent?.description || 'WebView error')
           }
