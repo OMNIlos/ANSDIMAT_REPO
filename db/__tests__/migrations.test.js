@@ -198,3 +198,27 @@ describeDb('v13 — вложения точек', () => {
     ).toThrow();
   });
 });
+
+describeDb('v14 — серверная версия строки', () => {
+  test('у существующих строк базой становится местное время', () => {
+    const database = openAt(13);
+    database.exec(`
+      INSERT INTO projects (id, name, created_at, updated_at, dirty)
+      VALUES ('p1', 'Скв. 7Ц отк', 1000, 5000, 1);
+      INSERT INTO wells (id, project_id, name, updated_at, dirty)
+      VALUES ('w1', 'p1', 'p', 6000, 0);
+      INSERT INTO measurements (id, project_id, t, s, sort_order, updated_at, dirty)
+      VALUES ('m1', 'p1', 1, 0.5, 0, 7000, 0);
+      INSERT INTO observation_points (id, title, lat, lon, recorded_at, updated_at, dirty)
+      VALUES ('o1', 'Родник у дороги', 59.7, 30.4, 3000, 8000, 1);
+    `);
+
+    database.exec(MIGRATIONS[13]);
+
+    for (const table of ['projects', 'wells', 'measurements', 'observation_points']) {
+      const row = database.prepare(`SELECT updated_at, remote_updated_at FROM ${table}`).get();
+      expect(row.remote_updated_at).toBe(row.updated_at);
+    }
+    database.close();
+  });
+});
