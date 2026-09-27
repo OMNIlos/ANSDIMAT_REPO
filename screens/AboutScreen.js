@@ -41,7 +41,6 @@ export default function AboutScreen({ navigation }) {
   // «Адаптация под планшет» в настройках: колонка по центру или вся ширина
   const column = useContentMaxWidth(620);
   const contentMaxWidth = width >= 700 ? column : undefined;
-  const year = new Date().getFullYear();
 
   const rows = [
     {
@@ -111,7 +110,7 @@ export default function AboutScreen({ navigation }) {
               </View>
               <View style={[styles.versionPill, { backgroundColor: colors.surfaceSunken, borderColor: colors.border }]}>
                 <Text style={[styles.versionText, { color: colors.textSecondary }]}>
-                  {I18n.t('versionLabel', { defaultValue: 'версия' })} {RELEASE_VERSION} · 1993–{year}
+                  {I18n.t('versionLabel', { defaultValue: 'версия' })} {RELEASE_VERSION}
                 </Text>
               </View>
             </View>

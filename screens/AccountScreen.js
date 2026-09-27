@@ -63,6 +63,7 @@ export default function AccountScreen({ navigation }) {
   const [promo, setPromo] = useState('');
   const [promoNote, setPromoNote] = useState(null);
   const [askDelete, setAskDelete] = useState(false);
+  const [askSignOut, setAskSignOut] = useState(false);
   const [busy, setBusy] = useState(false);
 
   // «Адаптация под планшет» в настройках: колонка по центру или вся ширина
@@ -95,6 +96,15 @@ export default function AccountScreen({ navigation }) {
         ? { ok: true, text: I18n.t('promoApplied', { defaultValue: 'Промокод применён' }) }
         : { ok: false, text: res.error }
     );
+  };
+
+  // Выход — только отсюда: в нижнем меню он читался как выход из программы.
+  // Без аккаунта этому экрану показывать нечего — возвращаемся в настройки
+  const handleSignOut = async () => {
+    setAskSignOut(false);
+    await signOut();
+    if (navigation.canGoBack()) navigation.goBack();
+    else navigation.navigate('Settings');
   };
 
   const handleDelete = async () => {
@@ -292,7 +302,7 @@ export default function AccountScreen({ navigation }) {
             </Text>
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <TouchableOpacity
-                onPress={signOut}
+                onPress={() => setAskSignOut(true)}
                 style={[styles.ghostButton, { borderColor: colors.border }]}
                 accessibilityRole="button"
               >
@@ -320,6 +330,18 @@ export default function AccountScreen({ navigation }) {
           </AppearIn>
         </View>
       </ScrollView>
+
+      <ConfirmDialog
+        visible={askSignOut}
+        title={I18n.t('signOutTitle', { defaultValue: 'Выйти из аккаунта?' })}
+        message={I18n.t('signOutMessage', {
+          defaultValue: 'Журналы и точки останутся на устройстве. Синхронизация остановится до следующего входа.',
+        })}
+        confirmLabel={I18n.t('exit', { defaultValue: 'Выход' })}
+        destructive
+        onConfirm={handleSignOut}
+        onCancel={() => setAskSignOut(false)}
+      />
 
       <ConfirmDialog
         visible={askDelete}

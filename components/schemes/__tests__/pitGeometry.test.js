@@ -77,6 +77,22 @@ describe('pitGeometry', () => {
     expect(Number.isFinite(g.pitBottomY)).toBe(true);
   });
 
+  it('пока понижение вводится, разрез не меняет тип пласта', () => {
+    // Стёртое поле, ноль или s > h₀ дают ошибку расчёта, и разрез
+    // переключался на напорный пласт с серыми слоями глины: пока вводишь
+    // понижение, схема котлована через раз заливалась серым
+    for (const S of [undefined, 0, 25]) {
+      const typing = compute({ ...base, S, scheme: 'unconfined_unlimited', geom: 'area', F: 44000, rMethod: 'fromWall' });
+      expect(typing.ok).toBe(false);
+      expect(pitGeometry(typing).confined).toBe(false);
+    }
+
+    const riverTyping = compute({ ...base, S: undefined, scheme: 'unconfined_river', geom: 'area', F: 44000, rMethod: 'fromWall' });
+    const g = pitGeometry(riverTyping);
+    expect(g.river).toBe(true);
+    expect(g.confined).toBe(false);
+  });
+
   it('полотно не меняет пропорций', () => {
     expect(WIDTH / HEIGHT).toBeCloseTo(700 / 378, 9);
   });

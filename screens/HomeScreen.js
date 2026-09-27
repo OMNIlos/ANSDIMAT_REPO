@@ -1,15 +1,16 @@
 /**
  * Главная (home)
  *
- * Воссоздаёт экран из дизайн-прототипа один в один:
- * - надзаголовок «Основной сценарий»
- * - герой-карточка «Создать откачку» (бордовый градиент + кривая понижения)
- * - плитки: Калькулятор, Полевой дневник, Карты гидроизогипс, Архив откачек
+ * Воссоздаёт экран из дизайн-прототипа:
+ * - герой-карточка откачек (бордовый градиент + кривая понижения): сверху
+ *   «Создать откачку», под кривой — «Архив откачек»
+ * - плитки: Калькулятор, Полевой дневник, Карты гидроизогипс
  * - баннер десктоп-версии
  *
- * «Архив откачек» стоит на месте «Примеров и видео»: видеоуроки живут на
- * сайте, а вот где искать журнал, набитый на прошлой неделе, с главной было
- * непонятно — на ней была только кнопка «Создать».
+ * Где искать журнал, набитый на прошлой неделе, с главной было непонятно —
+ * на ней была только кнопка «Создать». Архив сначала встал плиткой на место
+ * «Примеров и видео», в конце списка; заказчик попросил не разносить
+ * создание и архив так далеко — теперь они в одной карточке.
  *
  * @param {Object} navigation - объект навигации React Navigation
  */
@@ -23,6 +24,7 @@ import {
   Image,
   StatusBar,
   Linking,
+  Pressable,
   useWindowDimensions,
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
@@ -67,6 +69,7 @@ export default function HomeScreen({ navigation }) {
   const archiveSubtitle = I18n.t('pumpingArchiveSub', {
     defaultValue: 'Ранее созданные журналы',
   });
+  const archiveTitle = I18n.t('pumpingArchive', { defaultValue: 'Архив откачек' });
 
   // На планшетах ограничиваем ширину контента — если в настройках включена
   // «Адаптация под планшет»; выключенная отдаёт содержимому всю ширину
@@ -101,17 +104,6 @@ export default function HomeScreen({ navigation }) {
       family: 'material',
       tone: c.secondary,
       onPress: () => navigation.navigate('Maps'),
-    },
-    {
-      id: 'archive',
-      title: I18n.t('pumpingArchive', { defaultValue: 'Архив откачек' }),
-      subtitle: archived === null ? archiveSubtitle : `${archiveSubtitle} · ${archived}`,
-      icon: 'inventory-2',
-      family: 'material',
-      tone: c.primary,
-      // Тот же экран, что у «Создать откачку», но сразу на списке журналов:
-      // форма нового журнала остаётся выше, до неё один жест
-      onPress: () => navigation.navigate('PumpingMain', { focus: 'archive' }),
     },
   ];
 
@@ -150,15 +142,11 @@ export default function HomeScreen({ navigation }) {
         contentContainerStyle={styles.scrollContent}
       >
         <View style={[styles.content, contentMaxWidth && { maxWidth: contentMaxWidth }]}>
-          {/* Герой «Создать откачку» */}
+          {/* Герой откачек: сверху «Создать откачку», под кривой — архив.
+              Части — соседние кнопки, а не вложенные: экранный диктор
+              находит каждую отдельно */}
           <AppearIn index={1}>
-          <PressableScale
-            scale={0.985}
-            onPress={() => navigation.navigate('PumpingMain')}
-            style={[styles.heroWrap, elevation.brandButton]}
-            accessibilityRole="button"
-            accessibilityLabel={I18n.t('createPumping', { defaultValue: 'Создать откачку' })}
-          >
+          <View style={[styles.heroWrap, elevation.brandButton]}>
             <LinearGradient
               colors={heroGradient.colors}
               locations={heroGradient.locations}
@@ -166,23 +154,51 @@ export default function HomeScreen({ navigation }) {
               end={heroGradient.end}
               style={styles.hero}
             >
-              <View style={styles.heroBody}>
-                <View style={styles.heroIcon}>
-                  <MaterialCommunityIcons name="water-pump" size={28} color="#FFFFFF" />
+              <Pressable
+                onPress={() => navigation.navigate('PumpingMain')}
+                style={({ pressed }) => pressed && styles.heroPressed}
+                accessibilityRole="button"
+                accessibilityLabel={I18n.t('createPumping', { defaultValue: 'Создать откачку' })}
+              >
+                <View style={styles.heroBody}>
+                  <View style={styles.heroIcon}>
+                    <MaterialCommunityIcons name="water-pump" size={28} color="#FFFFFF" />
+                  </View>
+                  <View style={styles.heroTextBox}>
+                    <Text style={styles.heroTitle}>
+                      {I18n.t('createPumping', { defaultValue: 'Создать откачку' })}
+                    </Text>
+                    <Text style={styles.heroSubtitle}>
+                      {I18n.t('createPumpingSub', { defaultValue: 'Журнал и обработка ОФР' })}
+                    </Text>
+                  </View>
+                  <MaterialIcons name="arrow-forward" size={26} color="#FFFFFF" />
+                </View>
+                <DrawdownWave height={58} />
+              </Pressable>
+
+              {/* Подложка архива — того же тона, что заливка под кривой:
+                  полоса продолжает её, и карточка читается одной. Тот же
+                  экран, что у «Создать откачку», но сразу на списке журналов */}
+              <Pressable
+                onPress={() => navigation.navigate('PumpingMain', { focus: 'archive' })}
+                style={({ pressed }) => [styles.heroArchive, pressed && styles.heroPressed]}
+                accessibilityRole="button"
+                accessibilityLabel={archiveTitle}
+              >
+                <View style={styles.heroArchiveIcon}>
+                  <MaterialIcons name="inventory-2" size={20} color="#FFFFFF" />
                 </View>
                 <View style={styles.heroTextBox}>
-                  <Text style={styles.heroTitle}>
-                    {I18n.t('createPumping', { defaultValue: 'Создать откачку' })}
-                  </Text>
-                  <Text style={styles.heroSubtitle}>
-                    {I18n.t('createPumpingSub', { defaultValue: 'Журнал и обработка ОФР' })}
+                  <Text style={styles.heroArchiveTitle}>{archiveTitle}</Text>
+                  <Text style={styles.heroArchiveSubtitle}>
+                    {archived === null ? archiveSubtitle : `${archiveSubtitle} · ${archived}`}
                   </Text>
                 </View>
-                <MaterialIcons name="arrow-forward" size={26} color="#FFFFFF" />
-              </View>
-              <DrawdownWave height={58} />
+                <MaterialIcons name="chevron-right" size={24} color="rgba(255,255,255,0.85)" />
+              </Pressable>
             </LinearGradient>
-          </PressableScale>
+          </View>
           </AppearIn>
 
           {/* Плитки разделов */}
@@ -272,6 +288,39 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: 'rgba(255,255,255,0.8)',
     marginTop: 3,
+  },
+  heroPressed: {
+    opacity: 0.82,
+  },
+  // Заливка та же, что под кривой в DrawdownWave: полоса архива её продолжает
+  heroArchive: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 22,
+    paddingTop: 6,
+    paddingBottom: 16,
+    backgroundColor: 'rgba(255,255,255,0.13)',
+  },
+  heroArchiveIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroArchiveTitle: {
+    fontFamily: fontFamily.bold,
+    fontSize: 15.5,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  heroArchiveSubtitle: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12.5,
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 1,
   },
 
   // Плитки

@@ -72,6 +72,14 @@ test('в справке указано имя релиза', () => {
   expect(screenText(tree)).toContain('Moonflower');
 });
 
+test('у версии нет периода лет', () => {
+  // «1993–2026» рядом с первой версией приложения читалось так, будто его
+  // делали тридцать лет: годы относятся к настольной программе
+  const tree = mount('ru');
+
+  expect(JSON.stringify(tree.toJSON())).not.toContain('1993');
+});
+
 test('видеоуроков в справке нет', () => {
   const tree = mount('ru');
 

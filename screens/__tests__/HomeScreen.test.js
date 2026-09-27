@@ -104,6 +104,25 @@ test('архив ведёт к списку журналов сразу на р�
   expect(navigation.navigate).toHaveBeenCalledWith('PumpingMain', { focus: 'archive' });
 });
 
+test('архив — в одной карточке с «Создать откачку», а не в конце списка', async () => {
+  // Заказчик: создание и архив откачек разнесены слишком далеко — архив
+  // стоял последней плиткой под калькулятором, дневником и картами
+  const { tree } = await mount('ru');
+
+  const byLabel = (label) =>
+    tree.root.find((node) => node.props.accessibilityLabel === label && typeof node.props.onPress === 'function');
+  const card = (node) => {
+    for (let parent = node.parent; parent; parent = parent.parent) {
+      if (parent.type === 'LinearGradient') return parent;
+    }
+    return null;
+  };
+
+  const heroCard = card(byLabel('Создать откачку'));
+  expect(heroCard).not.toBeNull();
+  expect(card(byLabel('Архив откачек'))).toBe(heroCard);
+});
+
 test('в подписи архива видно, сколько журналов сохранено', async () => {
   const { tree } = await mount('ru');
 

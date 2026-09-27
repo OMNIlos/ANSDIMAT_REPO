@@ -1,15 +1,15 @@
 /**
  * Нижнее меню приложения (по дизайн-прототипу)
  *
- * Плавающий бордовый бар: Главная / Настройки / Справка, а для вошедших —
- * ещё и Выход. Это единственная навигация между разделами — бокового меню
- * (drawer) в приложении нет.
+ * Плавающий бордовый бар: Главная / Настройки / Справка. Это единственная
+ * навигация между разделами — бокового меню (drawer) в приложении нет.
  *
- * - Главная / Настройки / Справка сбрасывают стек на выбранный экран,
- *   поэтому на них в топ-баре показывается логотип, а не стрелка «назад».
- * - Выход завершает сессию аккаунта. Пункт появляется только при активной
- *   сессии: гостю выходить неоткуда, а закрывать приложение кнопкой внутри
- *   интерфейса — не то, чего от неё ждут.
+ * Пункты сбрасывают стек на выбранный экран, поэтому на них в топ-баре
+ * показывается логотип, а не стрелка «назад».
+ *
+ * «Выхода» здесь нет: в меню он читался как выход из программы, хотя
+ * завершал сессию аккаунта синхронизации. Выход из аккаунта — в «Настройки →
+ * Аккаунт», там же и его подтверждение.
  *
  * @param {string} active - ключ активного пункта ('home' | 'settings' | 'help')
  */
@@ -30,8 +30,6 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { CommonActions } from '@react-navigation/native';
 import I18n from '../Localization';
 import { LanguageContext } from '../LanguageContext';
-import { useAuth } from '../AuthContext';
-import ConfirmDialog from './ui/ConfirmDialog';
 import { navigationRef } from '../navigation/navigationRef';
 import { useMenuHidden } from './chromeVisibility';
 import useReduceMotion from '../hooks/useReduceMotion';
@@ -77,9 +75,9 @@ const PRESS_SPRING = { damping: 18, stiffness: 320, mass: 0.5 };
  * Нативный драйвер анимаций — везде, кроме веба
  *
  * Анимации меню — на Animated из самого React Native, а не на Reanimated:
- * пружина нажатия на «Выход» шла, пока открывалось окно подтверждения, и на
- * Android (новая архитектура, Reanimated 3.17 из Expo SDK 53) прозрачное
- * окно Modal открывалось пустым и невидимым — см. components/ui/AppearIn.js
+ * меню стоит на каждом экране, а при блоках Reanimated на экране прозрачные
+ * окна Modal на Android (новая архитектура, Reanimated 3.17 из Expo SDK 53)
+ * открывались пустыми и невидимыми — см. components/ui/AppearIn.js
  */
 const NATIVE = Platform.OS !== 'web';
 
@@ -178,9 +176,7 @@ export default function BottomMenuBar({ active = 'home' }) {
   // Экран с развёрнутым содержимым просит убрать меню совсем: там оно
   // закрывает низ и отнимает высоту у того, ради чего разворот и нажат
   const menuHidden = useMenuHidden();
-  const { session, signOut } = useAuth();
   const [keyboardVisible, setKeyboardVisible] = React.useState(false);
-  const [signOutAsked, setSignOutAsked] = React.useState(false);
 
   // Скрываем бар при открытой клавиатуре, чтобы он не перекрывал поля ввода
   React.useEffect(() => {
@@ -194,35 +190,19 @@ export default function BottomMenuBar({ active = 'home' }) {
     };
   }, []);
 
-  const confirmSignOut = async () => {
-    setSignOutAsked(false);
-    await signOut();
-    resetTo('Home');
-  };
-
   const items = [
     { key: 'home', label: I18n.t('home', { defaultValue: 'Главная' }), icon: 'home', onPress: () => resetTo('Home') },
     { key: 'settings', label: I18n.t('settings', { defaultValue: 'Настройки' }), icon: 'settings', onPress: () => resetTo('Settings') },
     { key: 'help', label: I18n.t('help', { defaultValue: 'Справка' }), icon: 'help', onPress: () => resetTo('About') },
   ];
 
-  if (session) {
-    items.push({
-      key: 'exit',
-      label: I18n.t('exit', { defaultValue: 'Выход' }),
-      icon: 'logout',
-      onPress: () => setSignOutAsked(true),
-    });
-  }
-
   if (keyboardVisible || menuHidden) return null;
 
   return (
-    <>
-    {/* Минимум 26: на устройствах без системного отступа меню иначе
-        прижималось к краю и полоса жеста ложилась прямо на подписи.
-        Внешний слой во всю ширину только центрирует полосу и пропускает
-        касания мимо неё к содержимому */}
+    // Минимум 26: на устройствах без системного отступа меню иначе
+    // прижималось к краю и полоса жеста ложилась прямо на подписи.
+    // Внешний слой во всю ширину только центрирует полосу и пропускает
+    // касания мимо неё к содержимому
     <View
       pointerEvents="box-none"
       style={[styles.dock, { bottom: Math.max(insets.bottom, 26) }]}
@@ -233,19 +213,6 @@ export default function BottomMenuBar({ active = 'home' }) {
         ))}
       </View>
     </View>
-
-    <ConfirmDialog
-      visible={signOutAsked}
-      title={I18n.t('signOutTitle', { defaultValue: 'Выйти из аккаунта?' })}
-      message={I18n.t('signOutMessage', {
-        defaultValue: 'Журналы и точки останутся на устройстве. Синхронизация остановится до следующего входа.',
-      })}
-      confirmLabel={I18n.t('exit', { defaultValue: 'Выход' })}
-      destructive
-      onConfirm={confirmSignOut}
-      onCancel={() => setSignOutAsked(false)}
-    />
-    </>
   );
 }
 

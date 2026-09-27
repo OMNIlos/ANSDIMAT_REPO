@@ -55,8 +55,12 @@ const CONE_SAMPLES = 16;
  */
 export function pitGeometry(result) {
   const ok = Boolean(result && result.ok);
-  const confined = ok ? result.confined : true;
-  const river = ok ? result.river : false;
+  // Тип пласта и река известны и при неудавшемся расчёте — это выбранная
+  // схема. Пока вводится понижение, промежуточный ввод (пустое поле, ноль,
+  // s > h₀) давал ошибку, и разрез перескакивал на напорный пласт с серыми
+  // слоями глины: схема котлована через раз заливалась серым
+  const confined = typeof result?.confined === 'boolean' ? result.confined : true;
+  const river = typeof result?.river === 'boolean' ? result.river : false;
 
   const padRight = river ? 112 : 32;
   const x0 = 40;
