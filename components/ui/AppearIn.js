@@ -16,13 +16,21 @@
  * рисуется как положено. Диалоги с тех пор обходятся без окна Modal (см.
  * DialogLayer), но шторка точки в полевом дневнике — по-прежнему окно Modal.
  *
+ * Отыгравший блок стоит статично: анимированный стиль снимается, и дальше
+ * непрозрачность задаёт обычная отрисовка. С нативным драйвером значение в
+ * JS догоняет экран с опозданием: «уменьшить движение» приходит асинхронно,
+ * уже после старта, анимация останавливалась, значение ставилось в 1 — а
+ * следом нативная сторона присылала точку остановки, и следующая отрисовка
+ * закрепляла её на виде. Первый блок вкладки «Расчёт понижения» так через
+ * раз оставался полупрозрачным, серым.
+ *
  * @param {number} [index] - порядковый номер блока: задаёт задержку
  * @param {number} [delay] - собственная задержка, мс (перекрывает index)
  * @param {Object|Array} [style] - стиль контейнера
  * @param {React.ReactNode} children - содержимое
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Platform } from 'react-native';
 import useReduceMotion from '../../hooks/useReduceMotion';
 
@@ -38,10 +46,12 @@ const EASE_OUT = Easing.out(Easing.cubic);
 export default function AppearIn({ index = 0, delay, style, children, ...rest }) {
   const progress = useRef(new Animated.Value(0)).current;
   const reduceMotion = useReduceMotion();
+  const [settled, setSettled] = useState(false);
 
   useEffect(() => {
+    if (settled) return undefined;
     if (reduceMotion) {
-      progress.setValue(1);
+      setSettled(true);
       return undefined;
     }
     // Задержка — начальный участок кривой, а не параметр delay: тот ждёт на
@@ -59,19 +69,26 @@ export default function AppearIn({ index = 0, delay, style, children, ...rest })
       // На вебе нативного драйвера нет — там анимирует сам браузерный слой
       useNativeDriver: Platform.OS !== 'web',
     });
-    animation.start();
+    animation.start(({ finished }) => {
+      if (finished) setSettled(true);
+    });
     return () => animation.stop();
-  }, [index, delay, progress, reduceMotion]);
+  }, [index, delay, progress, reduceMotion, settled]);
 
-  const animatedStyle = {
-    opacity: progress,
-    transform: [
-      { translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) },
-    ],
-  };
+  // Один раз на блок: новая интерполяция на каждой отрисовке пересобирала
+  // анимированные свойства при каждом нажатии клавиши в полях вкладки
+  const animatedStyle = useMemo(
+    () => ({
+      opacity: progress,
+      transform: [
+        { translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) },
+      ],
+    }),
+    [progress]
+  );
 
   return (
-    <Animated.View style={[style, animatedStyle]} {...rest}>
+    <Animated.View style={[style, !settled && animatedStyle]} {...rest}>
       {children}
     </Animated.View>
   );
